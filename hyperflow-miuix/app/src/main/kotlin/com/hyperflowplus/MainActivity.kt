@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
@@ -34,10 +33,6 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
 import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.MessagesScreen
@@ -78,9 +73,10 @@ fun HyperFlowApp() {
             Tab("设置", Icons.Filled.Settings)
         )
 
-        // 柔光玻璃：壁纸 + 半透明白层 + 内容区模糊（miuix-blur，API33+）
-        val backdrop = rememberLayerBackdrop()
-        Box(modifier = Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+        // 玻璃（无模糊安全实现）：壁纸底 + 半透明白雾。
+        // 注：miuix-blur 的 layerBackdrop/textureBlur 在部分 libhwui 上会导致
+        // RenderNode 渲染树成环（SIGSEGV 栈溢出 512 帧），故弃用模糊，视觉接近。
+        Box(modifier = Modifier.fillMaxSize()) {
             if (state.glassOn) {
                 WallpaperLayer()
             } else {
@@ -110,11 +106,6 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .then(
-                        if (state.glassOn && isRuntimeShaderSupported())
-                            Modifier.textureBlur(backdrop = backdrop, shape = RoundedCornerShape(24.dp), blurRadius = 16f)
-                        else Modifier
-                    )
                 when (tab) {
                     0 -> HomeScreen(state, contentMod)
                     1 -> MessagesScreen(state, contentMod)
