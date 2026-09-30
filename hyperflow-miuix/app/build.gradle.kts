@@ -77,5 +77,5 @@ dependencies {
     // LSPosed libxposed API（仅编译期，运行时由框架提供；坐标源不稳定，内置 stub 模块）
     compileOnly(project(":libxposed-stub"))
 
-    implementation("org.json:json:20240212")
+    implementation("org.json:json:20240303")
 }
