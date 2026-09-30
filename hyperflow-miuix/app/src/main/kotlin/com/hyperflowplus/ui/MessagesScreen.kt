@@ -97,7 +97,8 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         val title = field(line, "content_title")
         val body = field(line, "content_description")
         val time = field(line, "content_time")
-        val device = field(line, "notification_ref")
+        // 机型优先 content_device_name（设备名），回退 notification_ref（服务商/应用名）
+        val device = field(line, "content_device_name").ifEmpty { field(line, "notification_ref") }
         if (title.isEmpty() && body.isEmpty()) continue
         val key = title + (if (device.isNotEmpty()) "｜来自" + device else "")
         groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body))

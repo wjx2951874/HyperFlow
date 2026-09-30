@@ -65,7 +65,11 @@ fun ConversationScreen(sender: String, rows: List<Array<String>>) {
                             style = MiuixTheme.textStyles.body1,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                                .background(
+                                    MiuixTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = if (HFState.glassOn) 0.45f else 0.65f
+                                    )
+                                )
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
                     }

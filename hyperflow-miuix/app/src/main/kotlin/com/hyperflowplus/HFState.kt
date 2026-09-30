@@ -26,6 +26,10 @@ object HFState {
     var ksuVersion by mutableStateOf("未检测")      // KernelSU 版本
     var showOnboarding by mutableStateOf(false)    // 引导页是否显示
 
+    /** 引导标记（App 私有存储，与 root 权限无关：关 root 也只会弹一次） */
+    private val prefs: android.content.SharedPreferences?
+        get() = ctx?.getSharedPreferences("hf_prefs", Context.MODE_PRIVATE)
+
     private val cacheFile: java.io.File?
         get() = ctx?.getFileDir("hf_cache.txt")
 
@@ -51,9 +55,12 @@ object HFState {
     }
 
     // ===== 引导页 =====
-    val firstRunDone: Boolean get() = cfg.optBoolean("first_run_done", false)
+    val firstRunDone: Boolean get() =
+        prefs?.getBoolean("first_run_done", cfg.optBoolean("first_run_done", false)) ?: cfg.optBoolean("first_run_done", false)
 
     fun markFirstRunDone() {
+        // 优先写入 App 私有存储（root 无关，保证只弹一次）
+        runCatching { prefs?.edit()?.putBoolean("first_run_done", true)?.apply() }
         cfg = cfg.let { it.put("first_run_done", true); it }
         saveCfgLater()
     }

@@ -73,9 +73,9 @@ fun HyperFlowApp() {
     MiuixTheme(controller = controller) {
         val state = HFState
         LaunchedEffect(Unit) { state.loadAll() }
-        // 引导判断：首次（配置无标记）显示引导页
+        // 引导判断：首次（App 私有标记，root 无关）显示引导页
         LaunchedEffect(state.cfg) {
-            state.showOnboarding = !state.cfg.optBoolean("first_run_done", false)
+            state.showOnboarding = !state.firstRunDone
         }
 
         var tab by remember { mutableIntStateOf(0) }
@@ -85,7 +85,9 @@ fun HyperFlowApp() {
         val conversation = state.currentConversation
         if (conversation != null) {
             BackHandler { state.currentConversation = null }
-            ConversationScreen(conversation.first, conversation.second)
+            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                ConversationScreen(conversation.first, conversation.second)
+            }
             return@MiuixTheme
         }
 
@@ -110,15 +112,17 @@ fun HyperFlowApp() {
                 modifier = if (state.glassOn)
                     Modifier.fillMaxSize().drawPlainBackdrop(
                         backdrop,
-                        shape = { RoundedCornerShape(24.dp) },
+                        shape = { RoundedCornerShape(0.dp) },
                         effects = { blur(16f) }
                     )
                 else
                     Modifier.fillMaxSize(),
+                containerColor = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
                 topBar = {
                     TopAppBar(
                         title = title,
                         subtitle = sub,
+                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
                         actions = {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
@@ -132,7 +136,9 @@ fun HyperFlowApp() {
                     )
                 },
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(
+                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface
+                    ) {
                         tabs.forEachIndexed { i, t ->
                             NavigationBarItem(
                                 selected = tab == i,
