@@ -34,6 +34,9 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  */
 public class HookCloneBypass {
 
+    /** 自定义标记：分身通知（供第二道兜底 hook 识别，防【分身】前缀在第一道链路丢失） */
+    private static final String HF_IS_CLONE = "hf_is_clone";
+
     public static void install(ClassLoader cl) {
         try {
             Class<?> handler = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationHandler", false, cl);
@@ -87,6 +90,45 @@ public class HookCloneBypass {
             MiflowLog.i("HookCloneBypass installed");
         } catch (Throwable t) {
             MiflowLog.e("HookCloneBypass install failed", t);
+        }
+
+        // 第二道兜底：发送端序列化前（buildPlainMessage）强制打【分身】前缀。
+        // 即使 isNotificationValid 里的 markCloneTitle 标记在链路中丢失，
+        // 只要 extras 里留有 hf_is_clone 标记，这里也能保证流转数据标题带前缀，
+        // 接收端 App 据此分组，主/分身同联系人消息互不重合。
+        try {
+            Class<?> builder = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationBuilder", false, cl);
+            for (Method m : builder.getDeclaredMethods()) {
+                if (!m.getName().equals("buildPlainMessage") || m.getParameterCount() != 5) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                Object arg0 = chain.getArg(0);
+                                if (arg0 instanceof StatusBarNotification) {
+                                    StatusBarNotification sbn = (StatusBarNotification) arg0;
+                                    Notification n = sbn.getNotification();
+                                    if (n != null && n.extras != null
+                                            && n.extras.getBoolean(HF_IS_CLONE, false)) {
+                                        CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+                                        if (title != null && !title.toString().startsWith("【分身】")) {
+                                            n.extras.putCharSequence(Notification.EXTRA_TITLE, "【分身】" + title);
+                                            MiflowLog.d("clone title guard applied: 【分身】" + title);
+                                        }
+                                    }
+                                }
+                                return chain.proceed();
+                            }
+                        });
+                MiflowLog.i("HookCloneBypass[guard] installed");
+                break;
+            }
+        } catch (Throwable t) {
+            MiflowLog.e("HookCloneBypass[guard] install failed", t);
         }
     }
 
@@ -158,9 +200,12 @@ public class HookCloneBypass {
             }
             String s = title.toString();
             if (s.startsWith("【分身】")) {
-                return; // 防同通知多次回调重复叠加
+                // 已加过前缀：仍写入自定义标记，供第二道兜底 hook 使用
+                n.extras.putBoolean(HF_IS_CLONE, true);
+                return;
             }
             n.extras.putCharSequence(Notification.EXTRA_TITLE, "【分身】" + s);
+            n.extras.putBoolean(HF_IS_CLONE, true);
             MiflowLog.d("clone title marked: 【分身】" + s);
         } catch (Throwable t) {
             MiflowLog.w("markCloneTitle failed: " + t.getMessage());
