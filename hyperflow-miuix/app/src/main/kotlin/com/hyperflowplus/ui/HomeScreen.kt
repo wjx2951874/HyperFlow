@@ -60,7 +60,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 SwitchPreference(
                     title = "短信持久化",
-                    summary = "所有带号码的流转短信写入本机收件箱",
+                    summary = "写入系统收件箱（默认关闭：会触发短信回环，建议用 App 内归档）",
                     checked = state.smsPersist,
                     onCheckedChange = { state.set("sms_persist", it) }
                 )

@@ -26,6 +26,30 @@ object HFState {
     var ksuVersion by mutableStateOf("未检测")      // KernelSU 版本
     var showOnboarding by mutableStateOf(false)    // 引导页是否显示
 
+    private var pollingStarted = false
+
+    /** 归档实时刷新：每 5 秒重读 flow provider，有变化立即更新消息页（流转到达即显示） */
+    fun startFlowPolling() {
+        if (pollingStarted) return
+        pollingStarted = true
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        handler.post(object : Runnable {
+            override fun run() {
+                Thread {
+                    val f = runCatching {
+                        RootExec.su("content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60")
+                    }.getOrNull()
+                    if (f != null && f.isNotBlank()) {
+                        handler.post {
+                            if (f != flow) flow = f
+                        }
+                    }
+                }.start()
+                handler.postDelayed(this, 5000)
+            }
+        })
+    }
+
     /** 引导标记（App 私有存储，与 root 权限无关：关 root 也只会弹一次） */
     private val prefs: android.content.SharedPreferences?
         get() = ctx?.getSharedPreferences("hf_prefs", Context.MODE_PRIVATE)
@@ -36,7 +60,7 @@ object HFState {
     // ===== 开关状态（与 Config.java 的 key 一致） =====
     val forceTransfer: Boolean get() = cfg.optBoolean("force_transfer", true)
     val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", true)
-    val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", true)
+    val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
     val glassOn: Boolean get() = cfg.optBoolean("glass_effect", false)
     /** 玻璃模糊强度：8=柔和 16=标准 24=强烈 */

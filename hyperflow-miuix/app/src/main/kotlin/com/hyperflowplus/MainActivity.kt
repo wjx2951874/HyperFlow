@@ -75,7 +75,10 @@ fun HyperFlowApp() {
     val controller = remember { ThemeController(ColorSchemeMode.System) }
     MiuixTheme(controller = controller) {
         val state = HFState
-        LaunchedEffect(Unit) { state.loadAll() }
+        LaunchedEffect(Unit) {
+            state.loadAll()
+            state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
+        }
         // 引导判断：首次（App 私有标记，root 无关）显示引导页
         LaunchedEffect(state.cfg) {
             state.showOnboarding = !state.firstRunDone

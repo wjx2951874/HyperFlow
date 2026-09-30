@@ -158,7 +158,9 @@ public final class Config {
     }
 
     public static boolean isSmsPersistEnabled() {
-        return getBool(KEY_SMS_PERSIST, true);
+        // V0.4.7：默认关闭 —— 写入系统短信会触发短信通知流转回环（发送端收到两次）。
+        // 建议使用 App 内「消息」页归档；如需写入可在设置中手动开启。
+        return getBool(KEY_SMS_PERSIST, false);
     }
 
     public static boolean isSmsNumericOnly() {
