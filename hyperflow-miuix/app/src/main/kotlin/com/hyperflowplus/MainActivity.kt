@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
@@ -110,7 +111,7 @@ fun HyperFlowApp() {
                     .padding(padding)
                     .then(
                         if (state.glassOn && isRuntimeShaderSupported())
-                            Modifier.textureBlur(backdrop, 16f)
+                            Modifier.textureBlur(backdrop = backdrop, shape = RoundedCornerShape(24.dp), blurRadius = 16f)
                         else Modifier
                     )
                 when (tab) {
