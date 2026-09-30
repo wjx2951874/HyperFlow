@@ -3,7 +3,6 @@ package com.hyperflowplus
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.drawable.BitmapDrawable
-import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -12,31 +11,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import top.yukonga.miuix.kmp.basic.BottomBar
-import top.yukonga.miuix.kmp.basic.BottomBarItem
+import top.yukonga.miuix.kmp.basic.NavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.shader.isRuntimeShaderSupported
+import com.hyperflowplus.ui.ConversationScreen
+import com.hyperflowplus.ui.HomeScreen
+import com.hyperflowplus.ui.MessagesScreen
+import com.hyperflowplus.ui.SettingsScreen
 
 /** HyperFlow V0.4.0 —— Miuix(Compose) 全量重写入口 */
 class MainActivity : ComponentActivity() {
@@ -48,7 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class Tab(val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+private data class Tab(val title: String, val icon: ImageVector)
 
 @Composable
 fun HyperFlowApp() {
@@ -69,7 +72,7 @@ fun HyperFlowApp() {
 
         val tabs = listOf(
             Tab("首页", Icons.Filled.Home),
-            Tab("消息", Icons.Filled.Info),
+            Tab("消息", Icons.Filled.Notifications),
             Tab("设置", Icons.Filled.Settings)
         )
 
@@ -85,24 +88,18 @@ fun HyperFlowApp() {
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text("HyperFlow") },
-                        subtitle = { Text(state.subtitle) }
+                        title = "HyperFlow",
+                        subtitle = state.subtitle
                     )
                 },
                 bottomBar = {
-                    BottomBar {
+                    NavigationBar {
                         tabs.forEachIndexed { i, t ->
-                            BottomBarItem(
+                            NavigationBarItem(
                                 selected = tab == i,
-                                title = t.title,
-                                icon = {
-                                    androidx.compose.material.icons.Icon(
-                                        imageVector = t.icon,
-                                        contentDescription = t.title,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                },
-                                onClick = { tab = i }
+                                onClick = { tab = i },
+                                icon = t.icon,
+                                label = t.title
                             )
                         }
                     }
@@ -113,11 +110,7 @@ fun HyperFlowApp() {
                     .padding(padding)
                     .then(
                         if (state.glassOn && isRuntimeShaderSupported())
-                            Modifier.textureBlur(
-                                backdrop = backdrop,
-                                shape = androidx.compose.foundation.shape.RectangleShape,
-                                blurRadius = 16f
-                            )
+                            Modifier.textureBlur(backdrop, 16f)
                         else Modifier
                     )
                 when (tab) {

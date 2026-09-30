@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -32,9 +33,9 @@ fun ConversationScreen(sender: String, rows: List<Array<String>>) {
         rows.sortedWith { a, b -> if (desc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
     }
     Column(Modifier.fillMaxSize()) {
-        top.yukonga.miuix.kmp.basic.TopAppBar(
-            title = { Text(sender) },
-            subtitle = { Text("共 ${sorted.size} 条") },
+        TopAppBar(
+            title = sender,
+            subtitle = "共 ${sorted.size} 条"
         )
         LazyColumn(
             modifier = Modifier

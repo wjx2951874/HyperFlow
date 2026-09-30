@@ -22,17 +22,14 @@ import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
-import top.yukonga.miuix.kmp.basic.OverlayDialog
-import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.preference.CategoryTitle
-import top.yukonga.miuix.kmp.preference.Preference
-import top.yukonga.miuix.kmp.preference.PreferenceGroup
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 /** 设置页：外观（玻璃）/ 排序 / 关于（作者、版本、更新） */
 @Composable
-fun SettingsScreen(state: HFState.Companion, modifier: Modifier = Modifier) {
+fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
 
     var showUpd by remember { mutableStateOf(false) }
@@ -46,83 +43,89 @@ fun SettingsScreen(state: HFState.Companion, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
-        CategoryTitle("外观")
+        GroupTitle("外观")
 
-        PreferenceGroup {
-            SwitchPreference(
-                title = "柔光玻璃",
-                subtitle = "壁纸磨砂 + 半透明玻璃卡片（miuix-blur）",
-                checked = state.glassOn,
-                onCheckedChange = { state.set("glass_effect", it) }
-            )
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                SwitchPreference(
+                    title = "柔光玻璃",
+                    summary = "壁纸磨砂 + 半透明玻璃卡片（miuix-blur）",
+                    checked = state.glassOn,
+                    onCheckedChange = { state.set("glass_effect", it) }
+                )
+            }
         }
 
-        CategoryTitle("排序")
+        GroupTitle("排序")
 
-        PreferenceGroup {
-            Preference(
-                title = "消息列表排序",
-                subtitle = if (state.archiveSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
-                onClick = {
-                    state.setSort(Config.KEY_ARCHIVE_SORT)
-                    Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
-                }
-            )
-            Preference(
-                title = "正文列表排序",
-                subtitle = if (state.detailSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
-                onClick = {
-                    state.setSort(Config.KEY_DETAIL_SORT)
-                    Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
-                }
-            )
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                ArrowPreference(
+                    title = "消息列表排序",
+                    summary = if (state.archiveSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
+                    onClick = {
+                        state.setSort(Config.KEY_ARCHIVE_SORT)
+                        Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                ArrowPreference(
+                    title = "正文列表排序",
+                    summary = if (state.detailSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
+                    onClick = {
+                        state.setSort(Config.KEY_DETAIL_SORT)
+                        Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
         }
 
-        CategoryTitle("关于")
+        GroupTitle("关于")
 
-        PreferenceGroup {
-            Preference(
-                title = "版本",
-                subtitle = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· Miuix UI"
-            )
-            Preference(
-                title = "作者",
-                subtitle = "酷安@翰德姆",
-                onClick = {
-                    runCatching {
-                        ctx.startActivity(
-                            android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://www.coolapk.com/u/4112338")
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                ArrowPreference(
+                    title = "版本",
+                    summary = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· Miuix UI"
+                )
+                ArrowPreference(
+                    title = "作者",
+                    summary = "酷安@翰德姆",
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://www.coolapk.com/u/4112338")
+                                )
                             )
+                        }
+                    }
+                )
+                ArrowPreference(
+                    title = "检查更新",
+                    summary = "查询 GitHub Release 最新版本",
+                    onClick = {
+                        checkUpdate(ctx,
+                            onNew = { ver, url, log ->
+                                updVer = ver; updUrl = url; updLog = log; showUpd = true
+                            },
+                            onNone = { Toast.makeText(ctx, "当前已是最新版本", Toast.LENGTH_SHORT).show() },
+                            onError = { Toast.makeText(ctx, "检查更新失败：$it", Toast.LENGTH_SHORT).show() }
                         )
                     }
-                }
-            )
-            Preference(
-                title = "检查更新",
-                subtitle = "查询 GitHub Release 最新版本",
-                onClick = {
-                    checkUpdate(ctx,
-                        onNew = { ver, url, log ->
-                            updVer = ver; updUrl = url; updLog = log; showUpd = true
-                        },
-                        onNone = { Toast.makeText(ctx, "当前已是最新版本", Toast.LENGTH_SHORT).show() },
-                        onError = { Toast.makeText(ctx, "检查更新失败：$it", Toast.LENGTH_SHORT).show() }
-                    )
-                }
-            )
-            Preference(
-                title = "重新授权 Root",
-                subtitle = "把 milink 与本模块加入 KSU 名单",
-                onClick = {
-                    Thread {
-                        RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
-                        RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
-                    }.start()
-                    Toast.makeText(ctx, "已执行", Toast.LENGTH_SHORT).show()
-                }
-            )
+                )
+                ArrowPreference(
+                    title = "重新授权 Root",
+                    summary = "把 milink 与本模块加入 KSU 名单",
+                    onClick = {
+                        Thread {
+                            RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
+                            RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
+                        }.start()
+                        Toast.makeText(ctx, "已执行", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
         }
     }
 

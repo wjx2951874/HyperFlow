@@ -21,15 +21,13 @@ import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.basic.Surface
-import top.yukonga.miuix.kmp.basic.Switch
 
 /**
  * 消息页：按发送人（含来源设备）分组的会话列表。
  * 会话头 = 发送人 + 最新正文预览（省略号） + 时间；点击进入会话详情。
  */
 @Composable
-fun MessagesScreen(state: HFState.Companion, modifier: Modifier = Modifier) {
+fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     val convos = remember(state.flow, state.archiveSort) {
         parseFlow(state.flow, state.archiveSort)
     }
