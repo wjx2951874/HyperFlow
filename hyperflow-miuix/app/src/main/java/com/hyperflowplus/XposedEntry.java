@@ -3,6 +3,7 @@ package com.hyperflowplus;
 import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCloneBypass;
+import com.hyperflowplus.hooks.HookCloneClick;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
@@ -52,6 +53,9 @@ public class XposedEntry extends XposedModule {
             });
             installSafely("HookCloneBypass", new Runnable() {
                 @Override public void run() { HookCloneBypass.install(cl); }
+            });
+            installSafely("HookCloneClick", new Runnable() {
+                @Override public void run() { HookCloneClick.install(cl); }
             });
             installSafely("HookSmsPersist", new Runnable() {
                 @Override public void run() { HookSmsPersist.install(cl); }

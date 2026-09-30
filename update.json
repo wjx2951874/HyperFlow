@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.6",
-  "versionCode": 41,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.6/HyperFlow-0.4.6-flashable.zip",
-  "changelog": "主/分身同联系人消息重合修复：分身标记双保险（isNotificationValid 打标 + buildPlainMessage 兜底强制【分身】前缀），接收端分组互不干扰；状态即时刷新；引导页 Miuix 重做+检测修复；设备信息直列；双排序；机型原样；玻璃全屏填充；libxposed 修复（亮屏流转/分身/短信/来电恢复）"
+  "version": "v0.4.7",
+  "versionCode": 42,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.7/HyperFlow-0.4.7-flashable.zip",
+  "changelog": "分身通知点击直达分身微信（HookCloneClick 剥除 hf_clone_ 前缀还原 key，命中分身原始 contentIntent）；引导页三步流程（协议勾选同意→诊断→互关）；主/分身重合双保险；消息按发送人合并+机型移时间后；玻璃顶栏/底栏局部模糊+强度调节；首页标题；root 授权阻断+循环检测"
 }

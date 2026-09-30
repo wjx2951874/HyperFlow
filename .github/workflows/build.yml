@@ -12,8 +12,8 @@ jobs:
     permissions:
       contents: write
     env:
-      VERSION_NAME: 0.4.6
-      VERSION_CODE: 41
+      VERSION_NAME: 0.4.7
+      VERSION_CODE: 42
     steps:
       - uses: actions/checkout@v4
 

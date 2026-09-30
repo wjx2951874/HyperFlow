@@ -37,6 +37,9 @@ public class HookCloneBypass {
     /** 自定义标记：分身通知（供第二道兜底 hook 识别，防【分身】前缀在第一道链路丢失） */
     private static final String HF_IS_CLONE = "hf_is_clone";
 
+    /** 分身通知 key 前缀（防与主应用同联系人通知 key 冲突；点击查询时由 HookCloneClick 剥除还原） */
+    public static final String HF_CLONE_PREFIX = "hf_clone_";
+
     public static void install(ClassLoader cl) {
         try {
             Class<?> handler = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationHandler", false, cl);
@@ -174,8 +177,8 @@ public class HookCloneBypass {
                 if (f.getType() == String.class && f.getName().toLowerCase().contains("key")) {
                     f.setAccessible(true);
                     Object v = f.get(sbn);
-                    if (v != null && !v.toString().startsWith("hf_clone_")) {
-                        f.set(sbn, "hf_clone_" + v);
+                    if (v != null && !v.toString().startsWith(HF_CLONE_PREFIX)) {
+                        f.set(sbn, HF_CLONE_PREFIX + v);
                         MiflowLog.d("clone key marked to avoid collision");
                         return;
                     }
