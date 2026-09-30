@@ -1,7 +1,7 @@
 id=hyperflow
 name=HyperFlow
-version=0.4.4
-versionCode=39
+version=0.4.5
+versionCode=40
 author=酷安@翰德姆
 description=小米澎湃互联Plus：亮屏流转/分身流转/短信持久化/来电全屏接听/Miuix UI
 detail=小米澎湃互联Plus：亮屏强制流转、微信/QQ分身通知流转、流转短信全量持久化、来电在线接听、Miuix 风格 UI 与柔光玻璃。作者：酷安@翰德姆

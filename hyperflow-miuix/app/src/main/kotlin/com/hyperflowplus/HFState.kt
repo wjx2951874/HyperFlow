@@ -43,13 +43,14 @@ object HFState {
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
 
     fun set(key: String, value: Boolean) {
-        cfg = cfg.let { it.put(key, value); it }
+        // 必须新建 JSONObject 实例：mutableStateOf 按引用比较，同实例 put 不触发重组
+        cfg = JSONObject(cfg.toString()).put(key, value)
         saveCfgLater()
     }
 
     fun setSort(key: String) {
         val cur = cfg.optString(key, "desc")
-        cfg = cfg.let { it.put(key, if (cur == "desc") "asc" else "desc"); it }
+        cfg = JSONObject(cfg.toString()).put(key, if (cur == "desc") "asc" else "desc")
         saveCfgLater()
         refreshArchive()
     }
@@ -61,7 +62,7 @@ object HFState {
     fun markFirstRunDone() {
         // 优先写入 App 私有存储（root 无关，保证只弹一次）
         runCatching { prefs?.edit()?.putBoolean("first_run_done", true)?.apply() }
-        cfg = cfg.let { it.put("first_run_done", true); it }
+        cfg = JSONObject(cfg.toString()).put("first_run_done", true)
         saveCfgLater()
     }
 

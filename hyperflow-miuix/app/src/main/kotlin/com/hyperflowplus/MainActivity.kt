@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,7 +88,7 @@ fun HyperFlowApp() {
         if (conversation != null) {
             BackHandler { state.currentConversation = null }
             Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-                ConversationScreen(conversation.first, conversation.second)
+                ConversationScreen(state, conversation.first, conversation.second)
             }
             return@MiuixTheme
         }
@@ -96,8 +98,9 @@ fun HyperFlowApp() {
             Tab("消息", Icons.Filled.Notifications),
             Tab("设置", Icons.Filled.Settings)
         )
-        val title = when (tab) { 1 -> "消息"; 2 -> "设置"; else -> "HyperFlow" }
-        val sub = if (tab == 0) state.subtitle else ""
+        // 软件名移到设置页：首页不放标题/副标题，消息/设置页只写页面名
+        val title = when (tab) { 1 -> "消息"; 2 -> "设置"; else -> "" }
+        val sub = ""
 
         // AndroidLiquidGlass：LayerBackdrop 捕获壁纸层 + drawPlainBackdrop 模糊玻璃
         val backdrop = rememberLayerBackdrop()
@@ -127,7 +130,7 @@ fun HyperFlowApp() {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
                                     top.yukonga.miuix.kmp.basic.Icon(
-                                        imageVector = Icons.Filled.List,
+                                        imageVector = Icons.Filled.SwapVert,
                                         contentDescription = "排序"
                                     )
                                 }
@@ -201,6 +204,7 @@ fun HyperFlowApp() {
 
 @Composable
 private fun SortRow(current: String, onClick: () -> Unit) {
+    val asc = current == "asc"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -208,8 +212,15 @@ private fun SortRow(current: String, onClick: () -> Unit) {
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Icon(
+            imageVector = if (asc) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+            contentDescription = null,
+            modifier = Modifier.width(20.dp).height(20.dp),
+            tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+        )
+        Spacer(Modifier.width(10.dp))
         Text(
-            if (current == "asc") "旧时间在前" else "新时间在前",
+            if (asc) "最早优先" else "最新优先",
             style = MiuixTheme.textStyles.body1,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f)

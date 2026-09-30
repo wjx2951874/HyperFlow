@@ -62,6 +62,11 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 ArrowPreference(
+                    title = "HyperFlow",
+                    summary = "澎湃OS 互联通知流转增强 · V${BuildConfig.VERSION_NAME}",
+                    onClick = {}
+                )
+                ArrowPreference(
                     title = "作者",
                     summary = "酷安@翰德姆",
                     onClick = {

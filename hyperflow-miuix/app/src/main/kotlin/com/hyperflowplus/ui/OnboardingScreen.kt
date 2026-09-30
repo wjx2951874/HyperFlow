@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -120,7 +121,7 @@ fun OnboardingScreen(state: HFState) {
                     state = if (checking) null else rootState,
                     text = when {
                         checking -> "正在检测 Root 权限…"
-                        rootState == true -> "Root 权限可用（KSU 已授权）"
+                        rootState == true -> "Root 权限可用（KSU 已授权 / 设备默认 root）"
                         rootState == false -> "Root 权限未授予（请在 KSU 授权本应用）"
                         else -> "Root 权限不可用"
                     }
@@ -130,16 +131,22 @@ fun OnboardingScreen(state: HFState) {
                     state = if (checking) null else lspState,
                     text = when {
                         checking -> "正在检测 LSPosed 模块…"
-                        lspState == true -> "LSPosed 模块已启用（作用域已注入）"
-                        lspState == false -> "LSPosed 模块未激活（请勾选作用域并重启）"
+                        lspState == true -> "LSPosed 已安装且模块已刷入"
+                        lspState == false -> "LSPosed 未安装或模块未刷入（请先刷入本模块）"
                         else -> "需 Root 权限才能检测模块状态"
                     }
                 )
                 Spacer(Modifier.height(18.dp))
 
                 Text(
-                    "功能：亮屏/锁屏通知流转 · 微信/QQ 分身流转 · 短信持久归档 · 来电在线接听\n\n" +
-                            "声明：本模块仅供个人设备调试，请遵守相关服务条款；流转数据仅在同一小米账号设备间传输。",
+                    "使用说明\n" +
+                            "① 需已安装 LSPosed 2.2+（KSU 内嵌 LSP 也可）\n" +
+                            "② 刷入本模块后重启，LSPosed 作用域勾选 miLINK\n" +
+                            "③ 亮屏流转：通知在亮屏时也会放行流转\n" +
+                            "④ 分身流转：微信/QQ 分身通知带【分身】流转\n" +
+                            "⑤ 短信：流转短信归档在本 App「消息」页查看\n" +
+                            "⑥ 来电：锁屏状态下可在线接听\n\n" +
+                            "责任声明：本模块仅供个人设备调试，请遵守相关服务条款；流转数据仅在同一小米账号设备间传输。",
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                 )
@@ -154,13 +161,14 @@ fun OnboardingScreen(state: HFState) {
             } else {
                 // —— 阶段2：互关酷安 ——
                 Text(
-                    "用酷安互换吧",
+                    "用酷安，\n和作者互关吧",
                     style = MiuixTheme.textStyles.title1,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "作者想和你互关酷安，反馈问题、吹水都方便。\n一起努力让产品更好。",
+                    "反馈问题、吹水都方便。\n一起努力让产品更好。",
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center
@@ -186,6 +194,7 @@ fun OnboardingScreen(state: HFState) {
                         .clickable {
                             state.markFirstRunDone()
                             state.showOnboarding = false
+                            Toast.makeText(ctx, "后期可从 App 内「关于」页找到作者反馈", Toast.LENGTH_SHORT).show()
                         }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
@@ -195,13 +204,6 @@ fun OnboardingScreen(state: HFState) {
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "后期遇到问题，关于页随时能找到作者反馈",
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
@@ -243,13 +245,14 @@ private fun checkRoot(): Boolean {
     }
 }
 
-/** LSPosed 模块启用检测：模块目录（id=hyperflow）存在 + App 已安装（需 root） */
+/** LSPosed 模块启用检测：框架（/data/adb/lspd 或 magisk 模块）存在 + 模块已刷入（兼容新旧模块 id） */
 private fun checkLsposed(): Boolean {
     return try {
-        val out = RootExec.su("ls /data/adb/modules/hyperflow 2>/dev/null | head -1; "
-                + "ls /data/adb/modules/hyperflowplus 2>/dev/null | head -1; "
-                + "pm path com.hyperflowplus 2>/dev/null | head -1")
-        !out.isNullOrBlank() && (out.contains("hyperflow") || out.contains("com.hyperflowplus"))
+        val out = RootExec.su("ls /data/adb/lspd 2>/dev/null | head -1; "
+                + "ls /data/adb/modules/hyperflow/module.prop 2>/dev/null | head -1; "
+                + "ls /data/adb/modules/hyperflowplus/module.prop 2>/dev/null | head -1")
+        !out.isNullOrBlank() &&
+                (out.contains("lspd") || out.contains("hyperflow") || out.contains("hyperflowplus"))
     } catch (t: Throwable) {
         false
     }

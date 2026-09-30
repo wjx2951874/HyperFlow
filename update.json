@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.4",
-  "versionCode": 39,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.4/HyperFlow-0.4.4-flashable.zip",
-  "changelog": "修复：更新通道改用 jsDelivr CDN（国内可访问，KSU/App 检测更新恢复）；libxposed 官方坐标修复全部 hook（亮屏流转/分身/短信持久化/来电接听）；消息解析与短信App样式；引导页+设备信息；AndroidLiquidGlass 柔光玻璃；消息页排序"
+  "version": "v0.4.5",
+  "versionCode": 40,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.5/HyperFlow-0.4.5-flashable.zip",
+  "changelog": "状态即时刷新修复（所有开关/排序点击即生效）；引导页 Miuix 弹窗重做+检测修复+详细说明；设备信息直列首页；消息页双排序+排序图标优化；机型原样显示；首页去软件名；玻璃全屏填充；更新通道 jsDelivr；libxposed 修复（亮屏流转/分身/短信/来电全部恢复）"
 }
