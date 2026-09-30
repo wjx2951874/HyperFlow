@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "0.3.4",
-  "downloadUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.3.4/HyperFlow-V0.3.4.-flashable.zip",
-  "changelog": "V0.3.4：接入 GitHub 自动更新源（作者 wjx2951874/HyperFlow）"
+  "version": "0.4.0",
+  "versionCode": 35,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.0/HyperFlow-0.4.0-flashable.zip",
+  "changelog": "UI 全面迁移 Miuix（Compose）；柔光玻璃（miuix-blur）；消息页会话列表+详情气泡；列表/正文独立排序；秒开缓存"
 }

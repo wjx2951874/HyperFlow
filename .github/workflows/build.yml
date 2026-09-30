@@ -1,0 +1,92 @@
+name: Build HyperFlow (Miuix)
+
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION_NAME: 0.4.0
+      VERSION_CODE: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Inject signing secrets (optional)
+        if: env.HF_KEYSTORE_B64 != ''
+        env:
+          HF_KEYSTORE_B64: ${{ secrets.HF_KEYSTORE_B64 }}
+        run: echo "$HF_KEYSTORE_B64" | base64 -d > keystore.jks
+
+      - name: Build APK
+        working-directory: hyperflow-miuix
+        run: gradle assembleRelease --no-daemon
+        env:
+          HF_KEYSTORE_B64: ${{ secrets.HF_KEYSTORE_B64 }}
+          HF_KEY_ALIAS: ${{ secrets.HF_KEY_ALIAS }}
+          HF_KEY_PASS: ${{ secrets.HF_KEY_PASS }}
+
+      - name: Assemble flashable zip
+        run: |
+          set -e
+          APK=hyperflow-miuix/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "APK not found"; exit 1; }
+          rm -rf flash && mkdir -p flash/system/priv-app/HyperFlowPlus
+          cp "$APK" flash/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk
+          cp "$APK" flash/HyperFlowPlus.apk
+          cp hyperflow-miuix/ksu-module/service.sh flash/service.sh
+          sed "s/^versionCode=.*/versionCode=${VERSION_CODE}/; s/^version=.*/version=${VERSION_NAME}/; s/^name=.*/name=HyperFlow V${VERSION_NAME}/" \
+            hyperflow-miuix/ksu-module/module.prop > flash/module.prop
+          cat > flash/README.txt <<'EOF'
+HyperFlow V0.4.0 (Miuix UI) · 作者 酷安@翰德姆
+澎湃OS 互联通知流转增强（KernelSU / Magisk 模块）
+
+【V0.4.0】
+- UI 全面迁移 Miuix（Compose）：首页/消息/设置三页签，HyperOS 原生质感
+- 柔光玻璃：miuix-blur 壁纸磨砂（设置-外观开启）
+- 消息页会话列表（正文预览+智能时间）+ 会话详情气泡页
+- 列表/正文独立排序，检查更新、作者主页跳转
+
+【刷入】
+1. KernelSU 移除旧模块 → 安装本 zip → 重启（App 自动安装）
+2. LSPosed 勾选 HyperFlow → 重启
+EOF
+          cd flash && zip -r -X ../HyperFlow-${VERSION_NAME}-flashable.zip . && cd ..
+          ls -la HyperFlow-${VERSION_NAME}-flashable.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HyperFlow-${VERSION_NAME}-flashable
+          path: HyperFlow-${VERSION_NAME}-flashable.zip
+
+      - name: Create GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          gh release create "$TAG" \
+            "HyperFlow-${VERSION_NAME}-flashable.zip" \
+            --title "HyperFlow V${VERSION_NAME}" \
+            --notes "Miuix UI 重构版 · 酷安@翰德姆" || true
