@@ -1,0 +1,6 @@
+{
+  "version": "0.4.0",
+  "versionCode": 35,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.0/HyperFlow-0.4.0-flashable.zip",
+  "changelog": "UI 全面迁移 Miuix（Compose）；柔光玻璃（miuix-blur）；消息页会话列表+详情气泡；列表/正文独立排序；秒开缓存"
+}
