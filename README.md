@@ -1,49 +1,61 @@
-# HyperFlow · 澎湃互联流转增强
+# HyperFlow
 
-> 澎湃OS（HyperOS）互联「通知流转」增强模块 —— 亮屏强制流转 / 分身通知流转 / 流转短信全量持久化
+**小米澎湃OS 互联通知流转增强模块**（KernelSU / APatch / Magisk + LSPosed）
 
-- 作者：[酷安@翰德姆](https://www.coolapk.com/u/4112338) · GitHub：`wjx2951874/HyperFlow`
-- 基于 KernelSU / Magisk + LSPosed（libxposed API 102），纯 Java 无第三方依赖，秒开、低内存
-- 界面：Miuix 行式设置页（参考 KernelSU Manager / LSPosed Miuix 主题）
+作者：酷安@[翰德姆](https://www.coolapk.com/u/4112338) · 测试版持续迭代中
 
-## 解决的问题
+---
 
-| 痛点 | 方案 |
-| --- | --- |
-| 官方通知流转仅**锁屏/灭屏**生效，亮屏不流转 | Hook 判定出口，亮屏时强制放行（等效模拟锁屏，互联侧显示"已锁屏/可流转"） |
-| 微信/QQ **分身**（user 999）通知被官方拒绝流转 | Hook 放行 + user 归一 + 标题加【分身】标记，主/次可辨 |
-| 流转短信只在通知短暂显示，无法回看 | 流转时**直取数据写入本机收件箱**（全量，不只验证码），App 内可查看归档（来源设备/时间） |
-| 重启后妙享桌面需输锁屏密码 | 自动输密码（P1，密码明文由使用者自行填写，文件权限 600） |
+## 功能
+
+- **亮屏流转**：亮屏状态下强制放行通知流转（模拟锁屏），解决官方"仅锁屏可流转"限制
+- **分身流转**：微信 / QQ 分身（999）通知也参与流转
+- **短信持久化**：流转短信按发送人归档到本机，可随时回看（不依赖系统短信 App）
+- **来电在线接听**：锁屏场景下转为 OS4 在线接听形态
+- **Miuix 风格 UI**：Compose 重写的设置/消息界面，AndroidLiquidGlass 柔光玻璃
+- **消息会话页**：短信 App 样式的会话列表 + 时间排序（列表/正文独立）
 
 ## 安装
 
-1. 卸载旧版/独立安装的 apk（如有）
-2. KernelSU 管理器 → 模块 → 从本地安装 → 选 `HyperFlow-Vx.x.x测试版-flashable.zip` → 重启
-3. LSPosed 管理器 → 模块 → 勾选 **HyperFlow**（作用域已内置 `com.milink.service`）→ 重启
-4. 点桌面蓝色 H 图标进入管理页
+1. 刷入 `HyperFlow-x.y.z-flashable.zip`（KernelSU 管理器 → 刷入模块）
+2. 安装配套 `HyperFlow.apk`（刷入时自动安装；未自动安装时手动安装一次）
+3. LSPosed 中启用 **HyperFlow** 模块，作用域勾选：
+   - `com.milink.service`（妙享桌面/互联服务）
+   - `com.hyperflowplus`（本模块 App）
+4. KernelSU 授权 `com.milink.service` 与 `com.hyperflowplus` Root 权限
+5. 打开 App 完成首次引导
 
-> 要求：KernelSU 超级用户白名单需包含 `com.milink.service`（模块的 service.sh 会在开机时自动添加，重启后生效）；Magisk 用户请在 Magisk 设置里授权该包。
+> 更新：KernelSU 模块列表内可直接检查并一键更新（走 GitHub Release 通道）；App 内"设置 → 版本与更新"亦可。
 
-## 自动更新
+## 设备支持
 
-App 内「设置 → 版本信息 → 检查更新」从本仓库 `update.json` 获取最新版本（GitHub raw），有新版本弹窗提示并跳转下载。发布新版本只需：
+- 已测试：Redmi Note 12 Turbo（marble）/ OS4 / Android 17 / KernelSU
+- 需要：澎湃 OS 2+（HyperOS 互联）、root 设备一台（接收端），发送端无需 root
+- 仅同一小米账号下的设备之间流转
 
-1. 上传 zip 到 **GitHub Releases**
-2. 更新根目录 `update.json`（见模板）
+## 责任声明
 
-## 界面
+- 本模块仅供个人设备调试学习使用，请遵守各软件服务条款
+- 流转数据仅在同一小米账号设备间传输，不经过第三方服务器
+- 使用过程中遇到问题，欢迎酷安反馈：[@翰德姆](https://www.coolapk.com/u/4112338)
 
-- 主页：服务开关（亮屏流转 / 分身流转 / 短信持久化 / 自动输密码）· 运行统计 · 短信归档 · 设备信息
-- 设置：版本信息（版本号 / LSPosed API / 酷安作者 / 机型 / 检查更新）· 外观（柔光玻璃）· 致谢 · 卸载
-- 柔光玻璃：淡蓝紫粉渐变 + 半透明白卡片 + 系统 blur-behind（Android 13+ 真磨砂，老系统视觉兜底）
+## 更新日志
 
-## 已知限制 / 计划
+### V0.4.3
+- 消息解析修复（正确切分键值对 / 来源设备读取 notification_ref / 时间紧凑格式兼容）
+- 消息页改为短信 App 会话样式（列表=发送人+预览+时间；详情=来源+圆角气泡+时间标签）
+- 消息页右上角排序图标（消息列表 / 正文列表独立排序）
+- 首次引导页（功能说明 + 状态检测 + 互关酷安）
+- 设备信息详情弹窗（机型 / 澎湃OS / Android / 内核 / Root / KSU）
+- AndroidLiquidGlass 柔光玻璃
+- 顶部标题随页面（消息页只显示"消息"）
+- KSU 模块标题去版本号；更新通道指向 GitHub Release
 
-- [ ] 自动输密码（P1）—— 开关与密码存储已就绪，自动输入逻辑开发中
-- [ ] 官方「跨设备通知」设置页显示"微信分身"选项（UI 层解锁，传输层已放行）
-- [ ] 短信归档支持按设备筛选、搜索
+### V0.4.2
+- 修复渲染崩溃（libhwui 渲染树成环 SIGSEGV）
 
-## 协议
+### V0.4.0
+- UI 全面迁移 Miuix（Compose）；消息归档；排序；秒开缓存
 
-仅供学习交流，请在符合小米用户协议与当地法律的范围内使用。
-# HyperFlow
+---
+*HyperFlow · 酷安@翰德姆 · 让澎湃互联更好用*
