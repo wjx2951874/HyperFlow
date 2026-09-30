@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -215,7 +215,7 @@ private fun CheckRow(state: Boolean?, text: String) {
     val (icon, tint) = when (state) {
         true -> Icons.Filled.CheckCircle to Color(0xFF4CAF50)
         false -> Icons.Filled.Warning to Color(0xFFFF9800)
-        null -> Icons.Filled.HelpOutline to Color(0xFF9E9E9E)
+        null -> Icons.Filled.Info to Color(0xFF9E9E9E)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
