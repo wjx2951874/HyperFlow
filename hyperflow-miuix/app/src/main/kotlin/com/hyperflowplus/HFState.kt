@@ -50,45 +50,47 @@ object HFState {
         }
     }
 
-    /** 一次 su 会话读全部数据 + 写缓存（App 秒开） */
+    /** 一次 su 会话读全部数据 + 写缓存（App 秒开）。
+     *  注意：Compose 状态只能在主线程赋值，后台线程只算数据，最后 post 回主线程。 */
     fun loadAll() {
         loading = true
         Thread {
-            // 先渲染本地缓存
-            val cache = readCache()
-            if (cache != null) {
-                val parts = cache.split("@@CFG|@@FLOW".toRegex())
-                if (parts.size > 1 && parts[1].trim().isNotEmpty()) {
-                    cfg = runCatching { JSONObject(parts[1].trim()) }.getOrDefault(JSONObject())
-                }
-                if (parts.size > 2) {
-                    flow = parts[2]
-                }
-            }
-            // KSU allowlist 兜底
+            var cfgText: String? = null
+            var flowText: String? = null
+            var rootRaw = "su 不可用"
             try {
-                RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
-                RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
+                // 先读本地缓存（渲染素材）
+                val cache = readCache()
+                if (cache != null) {
+                    val parts = cache.split("@@CFG|@@FLOW".toRegex())
+                    if (parts.size > 1 && parts[1].trim().isNotEmpty()) cfgText = parts[1].trim()
+                    if (parts.size > 2) flowText = parts[2]
+                }
+                // KSU allowlist 兜底
+                try { RootExec.exec("ksud", "allowlist", "add", "com.milink.service") } catch (t: Throwable) {}
+                try { RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus") } catch (t: Throwable) {}
+                val all = RootExec.su("echo @@CFG; cat " + Config.GLOBAL_CFG + " 2>/dev/null; echo @@FLOW; "
+                        + "content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60; "
+                        + "echo @@ROOT; id -u")
+                if (all != null) {
+                    val parts = all.split("@@CFG|@@FLOW|@@ROOT".toRegex())
+                    if (parts.size > 1) cfgText = parts[1].trim()
+                    if (parts.size > 2) flowText = parts[2].trim()
+                    if (parts.size > 3 && parts[3].trim() == "0") rootRaw = "su 可用"
+                }
             } catch (t: Throwable) {
             }
-            val all = RootExec.su("echo @@CFG; cat " + Config.GLOBAL_CFG + " 2>/dev/null; echo @@FLOW; "
-                    + "content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60; "
-                    + "echo @@ROOT; id -u")
-            var cfgRaw: String? = null
-            var flowRaw: String? = null
-            var rootRaw = "su 不可用"
-            if (all != null) {
-                val parts = all.split("@@CFG|@@FLOW|@@ROOT".toRegex())
-                if (parts.size > 1) cfgRaw = parts[1].trim()
-                if (parts.size > 2) flowRaw = parts[2].trim()
-                if (parts.size > 3 && parts[3].trim() == "0") rootRaw = "su 可用"
+            val finalCfg = cfgText
+            val finalFlow = flowText
+            val finalRoot = rootRaw
+            saveCache(finalCfg, finalFlow)   // 文件 IO 留在后台线程
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                cfg = runCatching { JSONObject(finalCfg ?: "") }.getOrDefault(JSONObject())
+                if (finalFlow != null) flow = finalFlow
+                rootInfo = finalRoot
+                subtitle = if (finalRoot.contains("可用")) "澎湃OS 互联通知流转增强" else "root 不可用，仅界面展示"
+                loading = false
             }
-            cfg = runCatching { JSONObject(cfgRaw ?: "") }.getOrDefault(JSONObject())
-            if (flowRaw != null) flow = flowRaw
-            rootInfo = rootRaw
-            subtitle = if (rootInfo.contains("可用")) "澎湃OS 互联通知流转增强" else "root 不可用，仅界面展示"
-            loading = false
-            saveCache(cfgRaw, flowRaw)
         }.start()
     }
 
