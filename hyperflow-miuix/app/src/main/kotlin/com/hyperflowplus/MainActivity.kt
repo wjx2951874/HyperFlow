@@ -18,13 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -137,7 +138,7 @@ fun HyperFlowApp() {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
                                     top.yukonga.miuix.kmp.basic.Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowDown,
+                                        imageVector = Icons.Filled.Sort,
                                         contentDescription = "排序"
                                     )
                                 }
@@ -172,32 +173,58 @@ fun HyperFlowApp() {
             }
         }
 
-        // 排序弹窗（消息页右上角）
+        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮）
         if (showSort) {
             OverlayDialog(
-                title = "消息排序",
+                title = "排序",
                 show = showSort,
                 onDismissRequest = { showSort = false }
             ) {
                 Column(Modifier.padding(horizontal = 8.dp)) {
                     Text(
-                        "消息列表",
+                        "消息列表排序",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                     )
-                    SortRow(
-                        current = state.archiveSort,
-                        onClick = { state.setSort(Config.KEY_ARCHIVE_SORT); showSort = false }
+                    Spacer(Modifier.height(4.dp))
+                    SortOptionRow(
+                        label = "接收时间前",
+                        selected = state.archiveSort == "asc",
+                        onClick = {
+                            if (state.archiveSort != "asc") state.setSort(Config.KEY_ARCHIVE_SORT)
+                            showSort = false
+                        }
                     )
-                    Spacer(Modifier.height(12.dp))
+                    SortOptionRow(
+                        label = "接收时间后",
+                        selected = state.archiveSort != "asc",
+                        onClick = {
+                            if (state.archiveSort == "asc") state.setSort(Config.KEY_ARCHIVE_SORT)
+                            showSort = false
+                        }
+                    )
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        "正文列表",
+                        "正文排序",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                     )
-                    SortRow(
-                        current = state.detailSort,
-                        onClick = { state.setSort(Config.KEY_DETAIL_SORT); showSort = false }
+                    Spacer(Modifier.height(4.dp))
+                    SortOptionRow(
+                        label = "接收时间前",
+                        selected = state.detailSort == "asc",
+                        onClick = {
+                            if (state.detailSort != "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                            showSort = false
+                        }
+                    )
+                    SortOptionRow(
+                        label = "接收时间后",
+                        selected = state.detailSort != "asc",
+                        onClick = {
+                            if (state.detailSort == "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                            showSort = false
+                        }
                     )
                 }
             }
@@ -211,33 +238,31 @@ fun HyperFlowApp() {
 }
 
 @Composable
-private fun SortRow(current: String, onClick: () -> Unit) {
-    val asc = current == "asc"
+private fun SortOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = if (asc) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-            contentDescription = null,
-            modifier = Modifier.width(20.dp).height(20.dp),
-            tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Spacer(Modifier.width(10.dp))
         Text(
-            if (asc) "最早优先" else "最新优先",
+            label,
             style = MiuixTheme.textStyles.body1,
-            fontWeight = FontWeight.Medium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) MiuixTheme.colorScheme.primary
+            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f),
             modifier = Modifier.weight(1f)
         )
-        Text(
-            "点击切换",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-        )
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.width(20.dp).height(20.dp),
+                tint = MiuixTheme.colorScheme.primary
+            )
+        }
     }
 }
 
