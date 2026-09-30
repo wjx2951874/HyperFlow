@@ -20,9 +20,9 @@ android {
         if (hfKeystore.exists()) {
             create("release") {
                 storeFile = hfKeystore
-                storePassword = System.getenv("HF_KEY_PASS") ?: "hyperflowplus"
-                keyAlias = System.getenv("HF_KEY_ALIAS") ?: "hyperflowplus"
-                keyPassword = System.getenv("HF_KEY_PASS") ?: "hyperflowplus"
+                storePassword = System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
+                keyAlias = System.getenv("HF_KEY_ALIAS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
+                keyPassword = System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
             }
         }
     }
