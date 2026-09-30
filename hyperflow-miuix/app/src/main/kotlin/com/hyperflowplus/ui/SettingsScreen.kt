@@ -145,12 +145,21 @@ private fun checkUpdate(
     onError: (String) -> Unit
 ) {
     Thread {
+        val urls = listOf(Config.UPDATE_JSON, Config.UPDATE_JSON_FALLBACK)
         try {
-            val conn = java.net.URL(Config.UPDATE_JSON).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            conn.instanceFollowRedirects = true
-            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            var lastErr: Throwable? = null
+            var text = ""
+            for (u in urls) {
+                try {
+                    val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.instanceFollowRedirects = true
+                    text = conn.inputStream.bufferedReader().use { it.readText() }
+                    break
+                } catch (t: Throwable) { lastErr = t }
+            }
+            if (text.isEmpty()) throw lastErr ?: RuntimeException("更新通道不可达")
             val json = org.json.JSONObject(text)
             val ver = json.optString("version", "")
             val vc = json.optInt("versionCode", 0)
