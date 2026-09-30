@@ -95,7 +95,7 @@ fun HyperFlowApp() {
             Tab("设置", Icons.Filled.Settings)
         )
         val title = when (tab) { 1 -> "消息"; 2 -> "设置"; else -> "HyperFlow" }
-        val subtitle = if (tab == 0) state.subtitle else null
+        val sub = if (tab == 0) state.subtitle else ""
 
         // AndroidLiquidGlass：LayerBackdrop 捕获壁纸层 + drawPlainBackdrop 模糊玻璃
         val backdrop = rememberLayerBackdrop()
@@ -108,14 +108,17 @@ fun HyperFlowApp() {
 
             Scaffold(
                 modifier = if (state.glassOn)
-                    Modifier.fillMaxSize()
-                        .drawPlainBackdrop(backdrop, shape = { RoundedCornerShape(24.dp) }) { blur(16f) }
+                    Modifier.fillMaxSize().drawPlainBackdrop(
+                        backdrop,
+                        shape = { RoundedCornerShape(24.dp) },
+                        effects = { blur(16f) }
+                    )
                 else
                     Modifier.fillMaxSize(),
                 topBar = {
                     TopAppBar(
                         title = title,
-                        subtitle = subtitle,
+                        subtitle = sub,
                         actions = {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
