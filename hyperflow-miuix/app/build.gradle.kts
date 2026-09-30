@@ -15,12 +15,11 @@ android {
         versionName = "0.4.0"
     }
 
+    val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
     signingConfigs {
-        create("release") {
-            // keystore 由 CI 注入（workflow 解码写入 hyperflow-miuix/keystore.jks），本地无文件则回退 debug 签名
-            val kf = File("${rootProject.projectDir}/keystore.jks")
-            if (kf.exists()) {
-                storeFile = kf
+        if (hfKeystore.exists()) {
+            create("release") {
+                storeFile = hfKeystore
                 storePassword = System.getenv("HF_KEY_PASS") ?: "hyperflowplus"
                 keyAlias = System.getenv("HF_KEY_ALIAS") ?: "hyperflowplus"
                 keyPassword = System.getenv("HF_KEY_PASS") ?: "hyperflowplus"
@@ -31,8 +30,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.findByName("release")
-                ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
