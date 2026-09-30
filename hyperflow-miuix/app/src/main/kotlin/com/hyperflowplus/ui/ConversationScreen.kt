@@ -14,9 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +56,7 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
             actions = {
                 IconButton(onClick = { showSort = true }) {
                     Icon(
-                        imageVector = Icons.Filled.SwapVert,
+                        imageVector = Icons.Filled.KeyboardArrowDown,
                         contentDescription = "正文排序"
                     )
                 }
@@ -131,7 +130,7 @@ private fun DetailSortRow(current: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (asc) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+            imageVector = if (asc) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
             contentDescription = null,
             modifier = Modifier.width(20.dp).height(20.dp),
             tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)

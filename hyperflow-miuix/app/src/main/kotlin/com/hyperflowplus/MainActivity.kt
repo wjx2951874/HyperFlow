@@ -17,12 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -130,7 +129,7 @@ fun HyperFlowApp() {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
                                     top.yukonga.miuix.kmp.basic.Icon(
-                                        imageVector = Icons.Filled.SwapVert,
+                                        imageVector = Icons.Filled.KeyboardArrowDown,
                                         contentDescription = "排序"
                                     )
                                 }
@@ -213,7 +212,7 @@ private fun SortRow(current: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (asc) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+            imageVector = if (asc) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
             contentDescription = null,
             modifier = Modifier.width(20.dp).height(20.dp),
             tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
