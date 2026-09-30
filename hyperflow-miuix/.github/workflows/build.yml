@@ -69,8 +69,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HyperFlow-${{ env.VERSION_NAME }}-flashable
-          path: HyperFlow-${VERSION_NAME}-flashable.zip
+          name: HyperFlow-flashable
+          path: HyperFlow-flashable.zip
 
       - name: Create GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
