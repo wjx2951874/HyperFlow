@@ -99,8 +99,8 @@ fun HyperFlowApp() {
             Tab("消息", Icons.Filled.Notifications),
             Tab("设置", Icons.Filled.Settings)
         )
-        // 软件名移到设置页：首页不放标题/副标题，消息/设置页只写页面名
-        val title = when (tab) { 1 -> "消息"; 2 -> "设置"; else -> "" }
+        // 首页/消息/设置各显示页面名（软件名移到设置页关于区）
+        val title = when (tab) { 0 -> "首页"; 1 -> "消息"; 2 -> "设置"; else -> "" }
         val sub = ""
 
         // 柔光玻璃（AndroidLiquidGlass 局部模糊：仅顶栏/底栏区域做真实毛玻璃，
