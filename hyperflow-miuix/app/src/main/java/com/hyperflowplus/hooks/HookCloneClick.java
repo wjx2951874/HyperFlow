@@ -45,8 +45,9 @@ public class HookCloneClick {
                                 String key = (String) arg;
                                 if (key.startsWith(HookCloneBypass.HF_CLONE_PREFIX)) {
                                     String orig = key.substring(HookCloneBypass.HF_CLONE_PREFIX.length());
-                                    chain.setArg(0, orig);
                                     MiflowLog.d("clone click: strip prefix -> " + orig);
+                                    // 以还原后的原始 key 调用原方法（命中发送端分身微信 user999 通知）
+                                    return chain.callOriginalMethod(new Object[]{orig});
                                 }
                             }
                             return chain.proceed();
