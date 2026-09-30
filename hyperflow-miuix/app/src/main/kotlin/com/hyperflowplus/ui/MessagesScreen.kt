@@ -65,7 +65,9 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            fmtTime(latest[0]),
+                            // 机型放在时间后边（1:18｜来自Xiaomi15），发送人名保持原样
+                            fmtTime(latest[0]) +
+                                if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
                             style = MiuixTheme.textStyles.body2,
                             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                         )
@@ -100,8 +102,9 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         // 机型：只取 provider 的 content_device_name 原样显示（英文机型名），不做任何转换/回退
         val device = field(line, "content_device_name")
         if (title.isEmpty() && body.isEmpty()) continue
-        val key = title + (if (device.isNotEmpty()) "｜来自" + device else "")
-        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body))
+        // 只按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
+        // 分身微信因标题带【分身】前缀天然分开
+        groups.getOrPut(title) { mutableListOf() }.add(arrayOf(time, device, body))
     }
     val list = groups.map { it.key to it.value }.toMutableList()
     for ((_, rows) in list) {

@@ -53,7 +53,7 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = sender,
-            subtitle = if (device.isNotEmpty()) "来自 $device" else "",
+            subtitle = "",
             actions = {
                 IconButton(onClick = { showSort = true }) {
                     Icon(
@@ -73,9 +73,10 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                 val time = row.getOrElse(0) { "" }
                 val body = row.getOrElse(2) { "" }
                 Column(Modifier.fillMaxWidth()) {
-                    // 时间标签
+                    // 时间标签：时间 + 机型（1:18｜来自Xiaomi15）
+                    val rowDevice = row.getOrElse(1) { "" }
                     Text(
-                        fmtTime(time),
+                        fmtTime(time) + if (rowDevice.isNotEmpty()) "｜来自" + rowDevice else "",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
                     )
