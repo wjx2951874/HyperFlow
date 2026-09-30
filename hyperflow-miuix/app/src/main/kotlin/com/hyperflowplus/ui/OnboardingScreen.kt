@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CheckBox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -154,7 +153,7 @@ private fun StageAgreement(
     )
     Spacer(Modifier.height(16.dp))
 
-    // 我已同意（点整行切换）
+    // 我已同意（点整行切换；勾选框自绘，零依赖）
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -163,10 +162,31 @@ private fun StageAgreement(
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CheckBox(
-            checked = agreed,
-            onCheckedChange = onAgree
-        )
+        Box(
+            modifier = Modifier
+                .width(22.dp)
+                .height(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(
+                    if (agreed) MiuixTheme.colorScheme.primary else Color.Transparent
+                )
+                .border(
+                    1.5.dp,
+                    if (agreed) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                    RoundedCornerShape(6.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (agreed) {
+                Text(
+                    "✓",
+                    style = MiuixTheme.textStyles.body2,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
         Spacer(Modifier.width(8.dp))
         Text(
             "我已阅读并同意以上说明",

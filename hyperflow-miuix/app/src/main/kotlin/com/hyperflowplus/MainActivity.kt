@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
@@ -138,7 +138,7 @@ fun HyperFlowApp() {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
                                     top.yukonga.miuix.kmp.basic.Icon(
-                                        imageVector = Icons.Filled.Sort,
+                                        imageVector = Icons.Filled.KeyboardArrowDown,
                                         contentDescription = "排序"
                                     )
                                 }
