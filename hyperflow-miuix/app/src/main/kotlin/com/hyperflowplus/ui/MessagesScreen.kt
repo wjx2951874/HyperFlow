@@ -6,26 +6,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
-import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 消息页：按发送人（含来源设备）分组的会话列表。
- * 会话头 = 发送人 + 最新正文预览（省略号） + 时间；点击进入会话详情。
+ * 消息页：短信 App 风格的会话列表。
+ * 每条 = 发送人（加粗） + 最新正文预览 + 右侧时间；点击进入会话详情。
  */
 @Composable
 fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
@@ -33,10 +29,16 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         parseFlow(state.flow, state.archiveSort)
     }
     if (convos.isEmpty()) {
-        Column(modifier.fillMaxSize().padding(24.dp)) {
-            Text("暂无流转消息", color = MiuixTheme.colorScheme.onBackground)
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("暂无流转消息", style = MiuixTheme.textStyles.body1)
             Text(
                 "短信/通知流转到本机后在这里归档显示",
+                style = MiuixTheme.textStyles.body2,
                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             )
         }
@@ -52,17 +54,12 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Notifications,
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.width(40.dp)
-                )
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             sender,
                             style = MiuixTheme.textStyles.body1,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -86,27 +83,21 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     }
 }
 
-/** 解析 flow provider 输出 → 会话分组（desc=新在前 / asc=旧在前，按设置） */
+/**
+ * 解析 flow provider 输出。
+ * 每行是 ", " 分隔的键值对：content_notification_ui_id=.., content_title=.., content_description=..,
+ * content_time=20260930T155344, time_stamp=.., notification_ref=xiaomi15
+ * 正文可能含逗号，用"下一个已知字段"做边界。
+ */
 fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>> {
     val desc = sort != "asc"
     val groups = LinkedHashMap<String, MutableList<Array<String>>>()
     for (line in raw.lines()) {
-        val idx = line.indexOf("content_title=")
-        val bodyIdx = line.indexOf("content_description=")
-        val timeIdx = line.indexOf("content_time=")
-        val deviceIdx = line.indexOf("content_device_name=")
-        if (idx < 0 || bodyIdx < 0) continue
-        val title = line.substring(idx + "content_title=".length, if (bodyIdx > idx) bodyIdx else line.length)
-            .trim()
-        val body = if (bodyIdx >= 0)
-            line.substring(bodyIdx + "content_description=".length,
-                if (timeIdx > bodyIdx) timeIdx else line.length).trim()
-            else ""
-        val time = if (timeIdx >= 0)
-            line.substring(timeIdx + "content_time=".length,
-                if (deviceIdx > timeIdx) deviceIdx else line.length).trim()
-            else ""
-        val device = if (deviceIdx >= 0) line.substring(deviceIdx + "content_device_name=".length).trim() else ""
+        if (line.isBlank()) continue
+        val title = field(line, "content_title")
+        val body = field(line, "content_description")
+        val time = field(line, "content_time")
+        val device = field(line, "notification_ref")
         if (title.isEmpty() && body.isEmpty()) continue
         val key = title + (if (device.isNotEmpty()) "｜来自" + device else "")
         groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body))
@@ -123,11 +114,37 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
     return list
 }
 
-/** 时间格式：今天 HH:mm / 昨天 HH:mm / 一周内 周X HH:mm / 一年内 MM-dd HH:mm / 跨年 yyyy-MM-dd HH:mm */
+/** 取键值对中某字段值；结束边界 = 下一个已知字段（含 ", " 前缀），避免正文内逗号干扰 */
+private fun field(line: String, key: String): String {
+    val start = line.indexOf("$key=")
+    if (start < 0) return ""
+    val vStart = start + key.length + 1
+    var end = line.length
+    for (next in arrayOf(
+        ", content_title=", ", content_description=", ", content_time=",
+        ", time_stamp=", ", notification_ref=", ", content_device_name="
+    )) {
+        val i = line.indexOf(next, vStart)
+        if (i >= 0 && i < end) end = i
+    }
+    return line.substring(vStart, end).trim().removePrefix(",").trim()
+}
+
+/**
+ * 时间格式：content_time=20260930T155344（紧凑）或 yyyy-MM-dd HH:mm。
+ * 层级：今天 HH:mm / 昨天 昨天 HH:mm / 一周内 周X HH:mm / 一年内 MM-dd HH:mm / 跨年 yyyy-MM-dd HH:mm
+ */
 fun fmtTime(raw: String): String {
     if (raw.isBlank()) return ""
     val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
-    val t = runCatching { sdf.parse(raw) }.getOrNull() ?: return raw
+    val t: java.util.Date? = if (raw.contains("T")) {
+        runCatching {
+            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw)
+        }.getOrNull()
+    } else {
+        runCatching { sdf.parse(raw) }.getOrNull()
+    }
+    if (t == null) return raw
     val hm = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(t)
     fun startOfDay(c: java.util.Calendar): Long {
         val x = c.clone() as java.util.Calendar

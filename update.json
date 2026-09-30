@@ -1,6 +1,0 @@
-{
-  "version": "0.4.3",
-  "versionCode": 38,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.3/HyperFlow-0.4.3-flashable.zip",
-  "changelog": "消息解析修复（键值对正确切分/来源设备 notification_ref/时间紧凑格式）；短信App会话样式；消息页右上角排序；引导页+状态检测；设备信息详情；AndroidLiquidGlass 柔光玻璃；标题随页面；KSU 标题去版本号；更新通道指向 GitHub Release"
-}

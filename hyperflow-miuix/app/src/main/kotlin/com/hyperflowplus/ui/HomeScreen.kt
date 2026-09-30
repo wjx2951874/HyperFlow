@@ -1,17 +1,30 @@
 package com.hyperflowplus.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
+import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -30,6 +43,9 @@ fun GroupTitle(text: String) {
 /** 首页：服务开关 + 设备信息（Miuix Card 分组） */
 @Composable
 fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    var showDev by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -58,12 +74,6 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                     checked = state.smsPersist,
                     onCheckedChange = { state.set("sms_persist", it) }
                 )
-                SwitchPreference(
-                    title = "自动输密码",
-                    summary = "重启后自动输入锁屏密码（P1 开发中）",
-                    checked = state.autoUnlock,
-                    onCheckedChange = { state.set("auto_unlock", it) }
-                )
             }
         }
 
@@ -72,20 +82,39 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 ArrowPreference(
-                    title = "机型",
-                    summary = android.os.Build.MODEL + " (" + android.os.Build.MANUFACTURER + ")"
+                    title = "设备信息",
+                    summary = android.os.Build.MODEL + " · 点击查看详情",
+                    onClick = { showDev = true }
                 )
                 ArrowPreference(
-                    title = "系统",
-                    summary = android.os.Build.VERSION.RELEASE + " / " + android.os.Build.DISPLAY
+                    title = "重新授权 Root",
+                    summary = "把 milink 与本模块加入 KSU 名单",
+                    onClick = {
+                        Thread {
+                            runCatching {
+                                RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
+                                RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
+                            }
+                        }.start()
+                        Toast.makeText(ctx, "已执行授权", Toast.LENGTH_SHORT).show()
+                    }
                 )
-                ArrowPreference(
-                    title = "Root",
-                    summary = state.rootInfo
-                )
-                ArrowPreference(
-                    title = "配置",
-                    summary = com.hyperflowplus.Config.GLOBAL_CFG
+            }
+        }
+    }
+
+    if (showDev) {
+        OverlayDialog(
+            title = "设备信息",
+            summary = state.deviceInfo,
+            show = showDev,
+            onDismissRequest = { showDev = false }
+        ) {
+            Row(Modifier.fillMaxWidth()) {
+                TextButton(
+                    text = "关闭",
+                    onClick = { showDev = false },
+                    modifier = Modifier.weight(1f)
                 )
             }
         }

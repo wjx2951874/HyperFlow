@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "HyperFlow"
 include(":app")
-include(":libxposed-stub")

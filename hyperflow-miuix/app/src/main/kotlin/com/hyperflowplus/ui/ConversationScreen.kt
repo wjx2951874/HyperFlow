@@ -22,9 +22,9 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 会话详情：独立覆盖页（系统返回手势/返回键返回）。
- * 每条消息 = 时间+来源（上） + 左对齐圆角气泡（短信原文）。
- * 排序按 detailSort 设置（desc 新在前 / asc 旧在前）。
+ * 会话详情（短信 App 样式）：标题 = 发送人（大字）+ 来源（小字），
+ * 每条消息 = 时间标签（上方小字） + 左对齐圆角气泡（正文原文）。
+ * 排序按 detailSort（desc 新在前 / asc 旧在前）。
  */
 @Composable
 fun ConversationScreen(sender: String, rows: List<Array<String>>) {
@@ -32,35 +32,40 @@ fun ConversationScreen(sender: String, rows: List<Array<String>>) {
     val sorted = remember(rows, desc) {
         rows.sortedWith { a, b -> if (desc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
     }
+    // 标题副文案：取首条记录的来源设备
+    val device = remember(rows) { rows.firstOrNull()?.getOrElse(1) { "" } ?: "" }
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = sender,
-            subtitle = "共 ${sorted.size} 条"
+            subtitle = if (device.isNotEmpty()) "来自 $device" else ""
         )
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(sorted) { row ->
                 val time = row.getOrElse(0) { "" }
-                val device = row.getOrElse(1) { "" }
                 val body = row.getOrElse(2) { "" }
                 Column(Modifier.fillMaxWidth()) {
+                    // 时间标签
                     Text(
-                        (fmtTime(time).ifEmpty { "" } + if (device.isNotEmpty()) " ｜ 来自 $device" else "")
-                            .trim(),
+                        fmtTime(time),
                         style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Text(
                             body.ifEmpty { "(无正文)" },
                             style = MiuixTheme.textStyles.body1,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
                     }

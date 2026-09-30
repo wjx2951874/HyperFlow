@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 public final class Config {
     private static final String PREFS = "hyperflowplus_cfg";
     public static final String GLOBAL_CFG = "/data/adb/hyperflowplus/config.json";
-    public static final String UPDATE_JSON = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/master/update.json";
+    public static final String UPDATE_JSON = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
 
     // 功能开关（全局配置 key）
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转

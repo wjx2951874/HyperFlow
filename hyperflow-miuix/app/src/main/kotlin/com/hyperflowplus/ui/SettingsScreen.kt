@@ -21,14 +21,13 @@ import androidx.compose.ui.unit.dp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
-import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
-/** 设置页：外观（玻璃）/ 排序 / 关于（作者、版本、更新） */
+/** 设置页：外观（玻璃）/ 关于（作者、版本与更新、引导） */
 @Composable
 fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
@@ -50,32 +49,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "柔光玻璃",
-                    summary = "壁纸磨砂 + 半透明玻璃卡片（miuix-blur）",
+                    summary = "AndroidLiquidGlass 磨砂玻璃（跟随壁纸模糊）",
                     checked = state.glassOn,
                     onCheckedChange = { state.set("glass_effect", it) }
-                )
-            }
-        }
-
-        GroupTitle("排序")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                ArrowPreference(
-                    title = "消息列表排序",
-                    summary = if (state.archiveSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
-                    onClick = {
-                        state.setSort(Config.KEY_ARCHIVE_SORT)
-                        Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
-                    }
-                )
-                ArrowPreference(
-                    title = "正文列表排序",
-                    summary = if (state.detailSort == "asc") "旧时间在前（点击切换）" else "新时间在前（点击切换）",
-                    onClick = {
-                        state.setSort(Config.KEY_DETAIL_SORT)
-                        Toast.makeText(ctx, "已切换", Toast.LENGTH_SHORT).show()
-                    }
                 )
             }
         }
@@ -84,10 +60,6 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                ArrowPreference(
-                    title = "版本",
-                    summary = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· Miuix UI"
-                )
                 ArrowPreference(
                     title = "作者",
                     summary = "酷安@翰德姆",
@@ -103,8 +75,8 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     }
                 )
                 ArrowPreference(
-                    title = "检查更新",
-                    summary = "查询 GitHub Release 最新版本",
+                    title = "版本与更新",
+                    summary = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· 点击检查更新",
                     onClick = {
                         checkUpdate(ctx,
                             onNew = { ver, url, log ->
@@ -116,15 +88,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     }
                 )
                 ArrowPreference(
-                    title = "重新授权 Root",
-                    summary = "把 milink 与本模块加入 KSU 名单",
-                    onClick = {
-                        Thread {
-                            RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
-                            RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
-                        }.start()
-                        Toast.makeText(ctx, "已执行", Toast.LENGTH_SHORT).show()
-                    }
+                    title = "重新查看引导",
+                    summary = "查看功能说明与状态检测",
+                    onClick = { state.showOnboarding = true }
                 )
             }
         }
