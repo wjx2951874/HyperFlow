@@ -73,8 +73,8 @@ dependencies {
     // AndroidLiquidGlass（Kyant0 backdrop）——柔光玻璃
     implementation("io.github.kyant0:backdrop:2.0.1")
 
-    // LSPosed libxposed API（仅编译期，运行时由框架提供；坐标源不稳定，内置 stub 模块）
-    compileOnly(project(":libxposed-stub"))
+    // LSPosed libxposed API（compileOnly；官方 Maven 坐标，与 LSPosed 2.2.x 运行时混淆签名一致）
+    compileOnly("io.github.libxposed:api:102.0.0")
 
     implementation("org.json:json:20240303")
 }
