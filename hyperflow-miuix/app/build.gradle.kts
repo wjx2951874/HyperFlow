@@ -18,10 +18,9 @@ android {
 
     signingConfigs {
         create("release") {
-            val b64 = System.getenv("HF_KEYSTORE_B64")
-            if (!b64.isNullOrEmpty()) {
-                val kf = File("${rootProject.projectDir}/keystore.jks")
-                kf.writeBytes(java.util.Base64.getDecoder().decode(b64))
+            // keystore 由 CI 注入（workflow 解码写入 hyperflow-miuix/keystore.jks），本地无文件则回退 debug 签名
+            val kf = File("${rootProject.projectDir}/keystore.jks")
+            if (kf.exists()) {
                 storeFile = kf
                 storePassword = System.getenv("HF_KEY_PASS") ?: "hyperflowplus"
                 keyAlias = System.getenv("HF_KEY_ALIAS") ?: "hyperflowplus"

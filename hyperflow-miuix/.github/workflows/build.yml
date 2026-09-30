@@ -36,7 +36,7 @@ jobs:
           HF_KEYSTORE_B64: ${{ secrets.HF_KEYSTORE_B64 }}
         run: |
           if [ -n "$HF_KEYSTORE_B64" ]; then
-            echo "$HF_KEYSTORE_B64" | base64 -d > keystore.jks
+            echo "$HF_KEYSTORE_B64" | base64 -d > hyperflow-miuix/keystore.jks
             echo "keystore injected"
           else
             echo "no keystore secret, will use debug signing"
