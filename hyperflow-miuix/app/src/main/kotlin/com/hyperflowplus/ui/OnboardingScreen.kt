@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,10 +73,12 @@ fun OnboardingScreen(state: HFState) {
         }
     }
 
-    // 状态检测：后台线程真实检测，主线程回写
-    LaunchedEffect(Unit) {
+    // 状态检测：后台线程真实检测，主线程回写。
+    // 未授予 root 时每 1.5s 重测，授权后自动放行（无需重进引导页）
+    LaunchedEffect(stage) {
+        if (stage != 1) return@LaunchedEffect
         checking = true
-        Thread {
+        while (true) {
             val root = checkRoot()
             val lsp = if (root) checkLsposed() else null
             Handler(Looper.getMainLooper()).post {
@@ -83,7 +86,9 @@ fun OnboardingScreen(state: HFState) {
                 lspState = lsp
                 checking = false
             }
-        }.start()
+            if (root) break
+            kotlinx.coroutines.delay(1500)
+        }
     }
 
     Box(
@@ -97,7 +102,12 @@ fun OnboardingScreen(state: HFState) {
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(MiuixTheme.colorScheme.surfaceVariant)
+                .background(MiuixTheme.colorScheme.surface)
+                .border(
+                    0.5.dp,
+                    MiuixTheme.colorScheme.onBackground.copy(alpha = 0.08f),
+                    RoundedCornerShape(24.dp)
+                )
                 .padding(horizontal = 22.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -150,13 +160,52 @@ fun OnboardingScreen(state: HFState) {
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(12.dp))
+                // 酷安入口（显眼位置：说明下方、确认按钮上方）
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            runCatching {
+                                val i = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://www.coolapk.com/u/4112338")
+                                )
+                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                ctx.startActivity(i)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "作者：酷安@翰德姆",
+                        style = MiuixTheme.textStyles.body2,
+                        fontWeight = FontWeight.Medium,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
 
                 Button(
-                    enabled = confirmed,
+                    enabled = confirmed && rootState == true,
                     onClick = { stage = 2 }
                 ) {
-                    Text(if (confirmed) "确认并开始使用" else "请稍候（$countdown）")
+                    Text(
+                        when {
+                            rootState == false -> "请先授予 Root 权限"
+                            confirmed -> "确认并开始使用"
+                            else -> "请稍候（$countdown）"
+                        }
+                    )
+                }
+                if (rootState == false) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "请在 KSU/Shamiko 中授权 HyperFlow 后自动继续",
+                        style = MiuixTheme.textStyles.body2,
+                        color = Color(0xFFE53935)
+                    )
                 }
             } else {
                 // —— 阶段2：互关酷安 ——
