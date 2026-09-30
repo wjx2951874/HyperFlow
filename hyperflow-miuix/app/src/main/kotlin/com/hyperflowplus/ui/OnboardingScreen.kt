@@ -54,17 +54,17 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun OnboardingScreen(state: HFState) {
     val ctx = LocalContext.current
     var stage by remember { mutableIntStateOf(1) }
-    var countdown by remember { mutableIntStateOf(5) }
+    var countdown by remember { mutableIntStateOf(3) }
     var confirmed by remember { mutableStateOf(false) }
     // 三态检测：null=检测中/需Root，true=通过，false=未通过
     var lspState by remember { mutableStateOf<Boolean?>(null) }
     var rootState by remember { mutableStateOf<Boolean?>(null) }
     var checking by remember { mutableStateOf(true) }
 
-    // 倒计时（阶段1 确认前）
+    // 倒计时（阶段1 确认前；倒计时仅解锁按钮，必须手动点击确认才进入阶段2）
     LaunchedEffect(stage) {
         if (stage == 1 && !confirmed) {
-            for (i in 5 downTo 1) {
+            for (i in 3 downTo 1) {
                 countdown = i
                 kotlinx.coroutines.delay(1000)
             }

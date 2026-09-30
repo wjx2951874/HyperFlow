@@ -37,6 +37,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawPlainBackdrop
 import com.kyant.backdrop.effects.blur
@@ -102,8 +103,18 @@ fun HyperFlowApp() {
         val title = when (tab) { 1 -> "消息"; 2 -> "设置"; else -> "" }
         val sub = ""
 
-        // AndroidLiquidGlass：LayerBackdrop 捕获壁纸层 + drawPlainBackdrop 模糊玻璃
+        // 柔光玻璃（AndroidLiquidGlass 局部模糊：仅顶栏/底栏区域做真实毛玻璃，
+        // 内容区保持主题色，避免全屏渲染树在部分机型黑屏/白屏）
         val backdrop = rememberLayerBackdrop()
+        val glassBarMod = if (state.glassOn)
+            Modifier.drawPlainBackdrop(
+                backdrop,
+                shape = { RoundedCornerShape(0.dp) },
+                effects = { blur(state.glassBlur.toFloat()) }
+            )
+        else
+            Modifier
+
         Box(modifier = Modifier.fillMaxSize()) {
             if (state.glassOn) {
                 Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) { WallpaperLayer() }
@@ -112,20 +123,13 @@ fun HyperFlowApp() {
             }
 
             Scaffold(
-                modifier = if (state.glassOn)
-                    Modifier.fillMaxSize().drawPlainBackdrop(
-                        backdrop,
-                        shape = { RoundedCornerShape(0.dp) },
-                        effects = { blur(16f) }
-                    )
-                else
-                    Modifier.fillMaxSize(),
                 containerColor = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
                 topBar = {
                     TopAppBar(
                         title = title,
                         subtitle = sub,
                         color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
+                        modifier = glassBarMod,
                         actions = {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
@@ -140,7 +144,8 @@ fun HyperFlowApp() {
                 },
                 bottomBar = {
                     NavigationBar(
-                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface
+                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
+                        modifier = glassBarMod
                     ) {
                         tabs.forEachIndexed { i, t ->
                             NavigationBarItem(

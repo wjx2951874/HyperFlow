@@ -39,11 +39,18 @@ object HFState {
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", true)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
     val glassOn: Boolean get() = cfg.optBoolean("glass_effect", false)
+    /** 玻璃模糊强度：8=柔和 16=标准 24=强烈 */
+    val glassBlur: Int get() = cfg.optInt("glass_blur", 16)
     val archiveSort: String get() = cfg.optString("archive_sort", "desc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
 
     fun set(key: String, value: Boolean) {
         // 必须新建 JSONObject 实例：mutableStateOf 按引用比较，同实例 put 不触发重组
+        cfg = JSONObject(cfg.toString()).put(key, value)
+        saveCfgLater()
+    }
+
+    fun setInt(key: String, value: Int) {
         cfg = JSONObject(cfg.toString()).put(key, value)
         saveCfgLater()
     }

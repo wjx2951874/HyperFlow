@@ -1,6 +1,7 @@
 package com.hyperflowplus.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,16 +18,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 设置页：外观（玻璃）/ 关于（作者、版本与更新、引导） */
 @Composable
@@ -50,10 +55,38 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "柔光玻璃",
-                    summary = "AndroidLiquidGlass 磨砂玻璃（跟随壁纸模糊）",
+                    summary = "AndroidLiquidGlass 磨砂玻璃（顶栏/底栏跟随壁纸模糊）",
                     checked = state.glassOn,
                     onCheckedChange = { state.set("glass_effect", it) }
                 )
+                if (state.glassOn) {
+                    // 模糊强度三档（8 柔和 / 16 标准 / 24 强烈），点击即时生效，选中高亮
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        listOf(
+                            "柔和" to 8,
+                            "标准" to 16,
+                            "强烈" to 24
+                        ).forEach { (label, v) ->
+                            val sel = state.glassBlur == v
+                            Text(
+                                label,
+                                style = MiuixTheme.textStyles.body2,
+                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                color = if (sel) MiuixTheme.colorScheme.primary
+                                else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { state.setInt("glass_blur", v) }
+                                    .padding(vertical = 10.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
         }
 
