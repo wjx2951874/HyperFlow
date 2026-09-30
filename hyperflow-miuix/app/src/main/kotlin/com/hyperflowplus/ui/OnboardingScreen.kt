@@ -2,9 +2,12 @@ package com.hyperflowplus.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
@@ -39,10 +44,10 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 引导页：首次启动全屏覆盖。
- * 阶段1 = 功能说明 + 责任声明，5 秒倒计时后可确认；
+ * 引导弹窗：首次启动居中卡片浮层（Miuix 风格）。
+ * 阶段1 = 状态检测 + 功能说明 + 责任声明，5 秒倒计时后可确认；
  * 阶段2 = 互关酷安（"我去酷安看看" + 小"算了"）。
- * 确认一次后（本地标记）不再提示。
+ * 确认一次后（本地标记）不再弹出。
  */
 @Composable
 fun OnboardingScreen(state: HFState) {
@@ -50,8 +55,12 @@ fun OnboardingScreen(state: HFState) {
     var stage by remember { mutableIntStateOf(1) }
     var countdown by remember { mutableIntStateOf(5) }
     var confirmed by remember { mutableStateOf(false) }
-    val moduleEnabled = remember { checkLsposed() }
+    // 三态检测：null=检测中/需Root，true=通过，false=未通过
+    var lspState by remember { mutableStateOf<Boolean?>(null) }
+    var rootState by remember { mutableStateOf<Boolean?>(null) }
+    var checking by remember { mutableStateOf(true) }
 
+    // 倒计时（阶段1 确认前）
     LaunchedEffect(stage) {
         if (stage == 1 && !confirmed) {
             for (i in 5 downTo 1) {
@@ -62,111 +71,159 @@ fun OnboardingScreen(state: HFState) {
         }
     }
 
-    Column(
+    // 状态检测：后台线程真实检测，主线程回写
+    LaunchedEffect(Unit) {
+        checking = true
+        Thread {
+            val root = checkRoot()
+            val lsp = if (root) checkLsposed() else null
+            Handler(Looper.getMainLooper()).post {
+                rootState = root
+                lspState = lsp
+                checking = false
+            }
+        }.start()
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.background)
-            .padding(horizontal = 28.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(Color.Black.copy(alpha = 0.45f)),
+        contentAlignment = Alignment.Center
     ) {
-        if (stage == 1) {
-            Text(
-                "HyperFlow",
-                style = MiuixTheme.textStyles.title1,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "澎湃OS 互联通知流转增强",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
-            Spacer(Modifier.height(28.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 22.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (stage == 1) {
+                // —— 阶段1：检测 + 功能说明 ——
+                Text(
+                    "欢迎使用 HyperFlow",
+                    style = MiuixTheme.textStyles.title1,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "澎湃OS 互联通知流转增强",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                )
+                Spacer(Modifier.height(22.dp))
 
-            // 状态检测：模块/作用域/su
-            CheckRow(ok = moduleEnabled, text = "LSPosed 模块已启用（作用域勾选 miLINK 与 HyperFlow）")
-            Spacer(Modifier.height(10.dp))
-            CheckRow(ok = state.rootInfo.contains("可用"), text = "Root 权限可用（KSU 已授权本应用）")
-            Spacer(Modifier.height(28.dp))
-
-            Text(
-                "功能说明：亮屏/锁屏通知流转增强 · 微信/QQ 分身流转 · 短信持久归档\n\n" +
-                        "责任声明：本模块仅供本人设备调试使用，请遵守相关服务条款；" +
-                        "流转数据仅在同一小米账号设备间传输。",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-            )
-            Spacer(Modifier.height(32.dp))
-
-            Button(
-                enabled = confirmed,
-                onClick = { stage = 2 }
-            ) {
-                Text(if (confirmed) "确认并开始使用" else "请稍候（$countdown）")
-            }
-        } else {
-            // 阶段2：互关酷安
-            Text(
-                "用酷安互换吧",
-                style = MiuixTheme.textStyles.title1,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "作者想和你互关酷安，反馈问题、吹水都方便。\n一起努力让产品更好。",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-            Spacer(Modifier.height(28.dp))
-            Button(
-                onClick = {
-                    runCatching {
-                        val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.coolapk.com/u/4112338"))
-                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        ctx.startActivity(i)
+                // 状态检测区
+                CheckRow(
+                    state = if (checking) null else rootState,
+                    text = when {
+                        checking -> "正在检测 Root 权限…"
+                        rootState == true -> "Root 权限可用（KSU 已授权）"
+                        rootState == false -> "Root 权限未授予（请在 KSU 授权本应用）"
+                        else -> "Root 权限不可用"
                     }
-                    state.markFirstRunDone()
-                    state.showOnboarding = false
+                )
+                Spacer(Modifier.height(10.dp))
+                CheckRow(
+                    state = if (checking) null else lspState,
+                    text = when {
+                        checking -> "正在检测 LSPosed 模块…"
+                        lspState == true -> "LSPosed 模块已启用（作用域已注入）"
+                        lspState == false -> "LSPosed 模块未激活（请勾选作用域并重启）"
+                        else -> "需 Root 权限才能检测模块状态"
+                    }
+                )
+                Spacer(Modifier.height(18.dp))
+
+                Text(
+                    "功能：亮屏/锁屏通知流转 · 微信/QQ 分身流转 · 短信持久归档 · 来电在线接听\n\n" +
+                            "声明：本模块仅供个人设备调试，请遵守相关服务条款；流转数据仅在同一小米账号设备间传输。",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                )
+                Spacer(Modifier.height(24.dp))
+
+                Button(
+                    enabled = confirmed,
+                    onClick = { stage = 2 }
+                ) {
+                    Text(if (confirmed) "确认并开始使用" else "请稍候（$countdown）")
                 }
-            ) {
-                Text("我去酷安看看")
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable {
+            } else {
+                // —— 阶段2：互关酷安 ——
+                Text(
+                    "用酷安互换吧",
+                    style = MiuixTheme.textStyles.title1,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "作者想和你互关酷安，反馈问题、吹水都方便。\n一起努力让产品更好。",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        runCatching {
+                            val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.coolapk.com/u/4112338"))
+                            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            ctx.startActivity(i)
+                        }
                         state.markFirstRunDone()
                         state.showOnboarding = false
                     }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
+                ) {
+                    Text("我去酷安看看")
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            state.markFirstRunDone()
+                            state.showOnboarding = false
+                        }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "算了",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "算了",
+                    "后期遇到问题，关于页随时能找到作者反馈",
                     style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                    textAlign = TextAlign.Center
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "后期遇到问题，关于页随时能找到作者反馈",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-            )
         }
     }
 }
 
+/** 三态检测行：true=绿勾，false=橙叹号，null=灰问号（检测中/需Root） */
 @Composable
-private fun CheckRow(ok: Boolean, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun CheckRow(state: Boolean?, text: String) {
+    val (icon, tint) = when (state) {
+        true -> Icons.Filled.CheckCircle to Color(0xFF4CAF50)
+        false -> Icons.Filled.Warning to Color(0xFFFF9800)
+        null -> Icons.Filled.HelpOutline to Color(0xFF9E9E9E)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Icon(
-            if (ok) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+            icon,
             contentDescription = null,
             modifier = Modifier.width(20.dp).height(20.dp),
-            tint = if (ok) Color(0xFF4CAF50) else Color(0xFFFF9800)
+            tint = tint
         )
         Spacer(Modifier.width(10.dp))
         Text(
@@ -177,12 +234,22 @@ private fun CheckRow(ok: Boolean, text: String) {
     }
 }
 
-/** LSPosed 模块启用状态粗检（su + 模块包可见性） */
+/** Root 实时检测：su 取 uid == 0 */
+private fun checkRoot(): Boolean {
+    return try {
+        RootExec.su("id -u 2>/dev/null | tr -d ' \\n'") == "0"
+    } catch (t: Throwable) {
+        false
+    }
+}
+
+/** LSPosed 模块启用检测：模块目录（id=hyperflow）存在 + App 已安装（需 root） */
 private fun checkLsposed(): Boolean {
     return try {
-        val out = RootExec.su("ls /data/adb/modules/hyperflowplus 2>/dev/null | head -1; "
+        val out = RootExec.su("ls /data/adb/modules/hyperflow 2>/dev/null | head -1; "
+                + "ls /data/adb/modules/hyperflowplus 2>/dev/null | head -1; "
                 + "pm path com.hyperflowplus 2>/dev/null | head -1")
-        !out.isNullOrBlank() && out.contains("hyperflowplus")
+        !out.isNullOrBlank() && (out.contains("hyperflow") || out.contains("com.hyperflowplus"))
     } catch (t: Throwable) {
         false
     }
