@@ -38,7 +38,6 @@ public class HookCloneBypass {
     private static final String HF_IS_CLONE = "hf_is_clone";
 
     /** 分身通知 key 前缀（防与主应用同联系人通知 key 冲突；点击查询时由 HookCloneClick 剥除还原） */
-    public static final String HF_CLONE_PREFIX = "hf_clone_";
 
     public static void install(ClassLoader cl) {
         try {
@@ -73,11 +72,10 @@ public class HookCloneBypass {
                             if (sbn.getUser() != null && sbn.getUser().hashCode() == 999) {
                                 // V0.2.4：user 999 → 主用户(0)，让接收端按普通通知展示（否则有声无影）
                                 normalizeUser(sbn);
-                                // V0.3.15：key 加前缀 —— 主/分身同联系人通知的 key 原本相同，
-                                // 分身后到会覆盖主微信已流转的消息（用户实测复现），加前缀后互不干扰
-                                markCloneKey(sbn);
                                 // V0.2.5：标题加【分身】前缀，接收端可区分主/次（只改回调对象，
                                 // 影响后续流转序列化；发送端已显示的通知由 systemui 持有，不受影响）
+                                // V0.4.7：不加 key 前缀 —— 点击流转通知时发送端按原始 key 查询，
+                                // 前缀会导致查不到；主/分身区分完全靠【分身】标题分组 + extras 双保险
                                 markCloneTitle(sbn);
                                 Config.bump(Config.CNT_CLONE);
                                 MiflowLog.d("clone notification released: " + sbn.getPackageName());
@@ -167,26 +165,6 @@ public class HookCloneBypass {
             MiflowLog.d("clone user normalized to main user");
         } catch (Throwable t) {
             MiflowLog.w("normalizeUser failed: " + t.getMessage());
-        }
-    }
-
-    /** 分身通知 key 加前缀，与主应用同联系人通知的 key 区分开（防覆盖） */
-    private static void markCloneKey(StatusBarNotification sbn) {
-        try {
-            for (Field f : sbn.getClass().getDeclaredFields()) {
-                if (f.getType() == String.class && f.getName().toLowerCase().contains("key")) {
-                    f.setAccessible(true);
-                    Object v = f.get(sbn);
-                    if (v != null && !v.toString().startsWith(HF_CLONE_PREFIX)) {
-                        f.set(sbn, HF_CLONE_PREFIX + v);
-                        MiflowLog.d("clone key marked to avoid collision");
-                        return;
-                    }
-                }
-            }
-            MiflowLog.w("markCloneKey: no string key field found");
-        } catch (Throwable t) {
-            MiflowLog.w("markCloneKey failed: " + t.getMessage());
         }
     }
 
