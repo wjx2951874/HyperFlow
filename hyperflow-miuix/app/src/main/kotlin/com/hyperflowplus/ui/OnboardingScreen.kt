@@ -142,13 +142,14 @@ fun OnboardingScreen(state: HFState) {
     }
 }
 
-/** 阶段1：协议说明（说明弹窗 + Miuix Checkbox 勾选 + 继续） */
+/** 阶段1：协议说明（说明弹窗 + Miuix Checkbox 勾选 + 退出/继续） */
 @Composable
 private fun StageAgreement(
     ctx: android.content.Context,
     agreed: Boolean,
     onAgree: (Boolean) -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onExit: () -> Unit
 ) {
     Text(
         "欢迎使用 HyperFlow",
