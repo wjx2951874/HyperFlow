@@ -46,11 +46,10 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 引导弹窗（Miuix 风格，三步流程）：
+ * 引导弹窗（Miuix 风格，两步流程）：
  * 阶段1 = 协议说明：列出所需权限与责任声明，勾选「我已同意」→ 下一步；
  * 阶段2 = 诊断页：root/LSPosed 检测，权限不足停在诊断页（循环检测直到授权）；
- *          附酷安入口；诊断通过 → 开始使用；
- * 阶段3 = 互关页：幽默文案，「去酷安看看」/「下次一定」。
+ *          附酷安互关入口；诊断通过 → 开始使用。
  * 确认一次后（本地标记）不再弹出。
  */
 @Composable
@@ -112,9 +111,11 @@ fun OnboardingScreen(state: HFState) {
                     checking = checking,
                     rootState = rootState,
                     lspState = lspState,
-                    onStart = { stage = 3 }
+                    onStart = {
+                        state.markFirstRunDone()
+                        state.showOnboarding = false
+                    }
                 )
-                else -> StageFollow(ctx, state)
             }
         }
     }
@@ -271,7 +272,7 @@ private fun StageDiagnosis(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "作者：酷安@翰德姆",
+            "作者：酷安@翰德姆 · 点我互关，作者会回关",
             style = MiuixTheme.textStyles.body2,
             fontWeight = FontWeight.Medium,
             color = MiuixTheme.colorScheme.primary
@@ -293,54 +294,6 @@ private fun StageDiagnosis(
     }
 }
 
-/** 阶段3：互关页（幽默文案） */
-@Composable
-private fun StageFollow(ctx: android.content.Context, state: HFState) {
-    Text(
-        "等一下！\n白嫖可不行",
-        style = MiuixTheme.textStyles.title1,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center
-    )
-    Spacer(Modifier.height(12.dp))
-    Text(
-        "点个关注再走，作者才有动力继续爆肝。\n出了 bug 也能顺着酷安找到我，\n吹水也欢迎。",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-        textAlign = TextAlign.Center
-    )
-    Spacer(Modifier.height(24.dp))
-    Button(
-        onClick = {
-            runCatching {
-                val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.coolapk.com/u/4112338"))
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(i)
-            }
-            state.markFirstRunDone()
-            state.showOnboarding = false
-        }
-    ) {
-        Text("去酷安抱一下大腿")
-    }
-    Spacer(Modifier.height(10.dp))
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable {
-                state.markFirstRunDone()
-                state.showOnboarding = false
-                Toast.makeText(ctx, "后期可从 App 内「关于」页找到作者反馈", Toast.LENGTH_SHORT).show()
-            }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Text(
-            "下次一定",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-        )
-    }
-}
 
 /** 三态检测行：true=绿勾，false=橙叹号，null=灰问号（检测中/需Root） */
 @Composable

@@ -44,6 +44,11 @@ object HFState {
                             if (f != flow) flow = f
                         }
                     }
+                    // 顺带刷新 root 状态（用户后授权也能即时反映，设备信息不用重进 App）
+                    val uid = runCatching { RootExec.su("id -u") }.getOrNull()?.trim()
+                    if (uid == "0" && !rootInfo.contains("可用")) {
+                        handler.post { rootInfo = "su 可用" }
+                    }
                 }.start()
                 handler.postDelayed(this, 5000)
             }
@@ -65,7 +70,8 @@ object HFState {
     val glassOn: Boolean get() = cfg.optBoolean("glass_effect", false)
     /** 玻璃模糊强度：8=柔和 16=标准 24=强烈 */
     val glassBlur: Int get() = cfg.optInt("glass_blur", 16)
-    val archiveSort: String get() = cfg.optString("archive_sort", "desc")
+    // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
+    val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
 
     fun set(key: String, value: Boolean) {
@@ -82,6 +88,13 @@ object HFState {
     fun setSort(key: String) {
         val cur = cfg.optString(key, "desc")
         cfg = JSONObject(cfg.toString()).put(key, if (cur == "desc") "asc" else "desc")
+        saveCfgLater()
+        refreshArchive()
+    }
+
+    /** 直接设置排序值（列表排序菜单：name_asc/name_desc/time_asc/time_desc） */
+    fun setSortValue(key: String, value: String) {
+        cfg = JSONObject(cfg.toString()).put(key, value)
         saveCfgLater()
         refreshArchive()
     }

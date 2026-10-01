@@ -90,30 +90,41 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
  * 每行是 ", " 分隔的键值对：content_notification_ui_id=.., content_title=.., content_description=..,
  * content_time=20260930T155344, time_stamp=.., notification_ref=xiaomi15
  * 正文可能含逗号，用"下一个已知字段"做边界。
+ * 列表排序：name_asc/name_desc（按发送人名称）、time_asc/time_desc（按最近接收时间，兼容 asc/desc）
  */
 fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>> {
-    val desc = sort != "asc"
     val groups = LinkedHashMap<String, MutableList<Array<String>>>()
     for (line in raw.lines()) {
         if (line.isBlank()) continue
         val title = field(line, "content_title")
         val body = field(line, "content_description")
         val time = field(line, "content_time")
-        // 机型：只取 provider 的 content_device_name 原样显示（英文机型名），不做任何转换/回退
+        // 机型：只取 provider 的 content_device_name 原样显示（英文机型名），
+        // 截断到第一个逗号并清除不可见/替换字符，避免解析把后续字段拼进来
         val device = field(line, "content_device_name")
+            .substringBefore(",")
+            .replace(Regex("[\\uFFFD\\u0000-\\u001F]"), "")
+            .trim()
         if (title.isEmpty() && body.isEmpty()) continue
         // 只按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
         // 分身微信因标题带【分身】前缀天然分开
         groups.getOrPut(title) { mutableListOf() }.add(arrayOf(time, device, body))
     }
     val list = groups.map { it.key to it.value }.toMutableList()
+    val timeDesc = sort == "time_desc" || sort == "desc"
+    val nameDesc = sort == "name_desc"
+    val byName = sort.startsWith("name")
     for ((_, rows) in list) {
-        rows.sortWith { a, b -> if (desc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
+        rows.sortWith { a, b -> if (timeDesc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
     }
     list.sortWith { a, b ->
-        val ta = a.second.firstOrNull()?.get(0) ?: ""
-        val tb = b.second.firstOrNull()?.get(0) ?: ""
-        if (desc) tb.compareTo(ta) else ta.compareTo(tb)
+        if (byName) {
+            if (nameDesc) b.first.compareTo(a.first) else a.first.compareTo(b.first)
+        } else {
+            val ta = a.second.firstOrNull()?.get(0) ?: ""
+            val tb = b.second.firstOrNull()?.get(0) ?: ""
+            if (timeDesc) tb.compareTo(ta) else ta.compareTo(tb)
+        }
     }
     return list
 }

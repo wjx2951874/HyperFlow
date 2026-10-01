@@ -9,6 +9,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +29,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,18 +43,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawPlainBackdrop
-import com.kyant.backdrop.effects.blur
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -105,23 +105,14 @@ fun HyperFlowApp() {
         )
         // 首页/消息/设置各显示页面名（软件名移到设置页关于区）
         val title = when (tab) { 0 -> "首页"; 1 -> "消息"; 2 -> "设置"; else -> "" }
-        val sub = ""
 
-        // 柔光玻璃（AndroidLiquidGlass 局部模糊：仅顶栏/底栏区域做真实毛玻璃，
-        // 内容区保持主题色，避免全屏渲染树在部分机型黑屏/白屏）
-        val backdrop = rememberLayerBackdrop()
-        val glassBarMod = if (state.glassOn)
-            Modifier.drawPlainBackdrop(
-                backdrop,
-                shape = { RoundedCornerShape(0.dp) },
-                effects = { blur(state.glassBlur.toFloat()) }
-            )
-        else
-            Modifier
+        // 柔光玻璃（纯位图 + Compose RenderEffect 模糊：仅顶栏/底栏区域磨砂，
+        // 内容区保持主题色不透明，避免全屏渲染树在部分机型黑屏/白屏）
+        val glassTint = MiuixTheme.colorScheme.surface
 
         Box(modifier = Modifier.fillMaxSize()) {
             if (state.glassOn) {
-                Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) { WallpaperLayer() }
+                WallpaperLayer()
             } else {
                 Box(Modifier.fillMaxSize().background(Color(0xFFF3F5F7)))
             }
@@ -129,12 +120,28 @@ fun HyperFlowApp() {
             Scaffold(
                 containerColor = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
                 topBar = {
-                    TopAppBar(
-                        title = title,
-                        subtitle = sub,
-                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
-                        modifier = glassBarMod,
-                        actions = {
+                    if (state.glassOn) {
+                        Box {
+                            GlassBar(state.glassBlur, glassTint, Modifier.matchParentSize())
+                            CustomTopBar(
+                                title = title,
+                                modifier = Modifier.background(Color.Transparent)
+                            ) {
+                                if (tab == 1) {
+                                    IconButton(onClick = { showSort = true }) {
+                                        top.yukonga.miuix.kmp.basic.Icon(
+                                            imageVector = Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = "排序"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        CustomTopBar(
+                            title = title,
+                            modifier = Modifier.background(MiuixTheme.colorScheme.surface)
+                        ) {
                             if (tab == 1) {
                                 IconButton(onClick = { showSort = true }) {
                                     top.yukonga.miuix.kmp.basic.Icon(
@@ -144,20 +151,33 @@ fun HyperFlowApp() {
                                 }
                             }
                         }
-                    )
+                    }
                 },
                 bottomBar = {
-                    NavigationBar(
-                        color = if (state.glassOn) Color.Transparent else MiuixTheme.colorScheme.surface,
-                        modifier = glassBarMod
-                    ) {
-                        tabs.forEachIndexed { i, t ->
-                            NavigationBarItem(
-                                selected = tab == i,
-                                onClick = { tab = i },
-                                icon = t.icon,
-                                label = t.title
-                            )
+                    if (state.glassOn) {
+                        Box {
+                            GlassBar(state.glassBlur, glassTint, Modifier.matchParentSize())
+                            NavigationBar(color = Color.Transparent) {
+                                tabs.forEachIndexed { i, t ->
+                                    NavigationBarItem(
+                                        selected = tab == i,
+                                        onClick = { tab = i },
+                                        icon = t.icon,
+                                        label = t.title
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        NavigationBar {
+                            tabs.forEachIndexed { i, t ->
+                                NavigationBarItem(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    icon = t.icon,
+                                    label = t.title
+                                )
+                            }
                         }
                     }
                 }
@@ -165,10 +185,13 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                when (tab) {
-                    0 -> HomeScreen(state, contentMod)
-                    1 -> MessagesScreen(state, contentMod)
-                    else -> SettingsScreen(state, contentMod)
+                // 内容区保持主题色不透明（玻璃只作用于顶栏/底栏）
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                    when (tab) {
+                        0 -> HomeScreen(state, contentMod)
+                        1 -> MessagesScreen(state, contentMod)
+                        else -> SettingsScreen(state, contentMod)
+                    }
                 }
             }
         }
@@ -188,18 +211,34 @@ fun HyperFlowApp() {
                     )
                     Spacer(Modifier.height(4.dp))
                     SortOptionRow(
-                        label = "接收时间前",
-                        selected = state.archiveSort == "asc",
+                        label = "发送人 A→Z",
+                        selected = state.archiveSort == "name_asc",
                         onClick = {
-                            if (state.archiveSort != "asc") state.setSort(Config.KEY_ARCHIVE_SORT)
+                            if (state.archiveSort != "name_asc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_asc")
                             showSort = false
                         }
                     )
                     SortOptionRow(
-                        label = "接收时间后",
-                        selected = state.archiveSort != "asc",
+                        label = "发送人 Z→A",
+                        selected = state.archiveSort == "name_desc",
                         onClick = {
-                            if (state.archiveSort == "asc") state.setSort(Config.KEY_ARCHIVE_SORT)
+                            if (state.archiveSort != "name_desc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_desc")
+                            showSort = false
+                        }
+                    )
+                    SortOptionRow(
+                        label = "最近接收在前",
+                        selected = state.archiveSort == "time_desc" || state.archiveSort == "desc",
+                        onClick = {
+                            if (state.archiveSort != "time_desc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_desc")
+                            showSort = false
+                        }
+                    )
+                    SortOptionRow(
+                        label = "最早接收在前",
+                        selected = state.archiveSort == "time_asc" || state.archiveSort == "asc",
+                        onClick = {
+                            if (state.archiveSort != "time_asc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_asc")
                             showSort = false
                         }
                     )
@@ -211,18 +250,18 @@ fun HyperFlowApp() {
                     )
                     Spacer(Modifier.height(4.dp))
                     SortOptionRow(
-                        label = "接收时间前",
-                        selected = state.detailSort == "asc",
+                        label = "最新在前",
+                        selected = state.detailSort != "asc",
                         onClick = {
-                            if (state.detailSort != "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                            if (state.detailSort != "desc") state.setSort(Config.KEY_DETAIL_SORT)
                             showSort = false
                         }
                     )
                     SortOptionRow(
-                        label = "接收时间后",
-                        selected = state.detailSort != "asc",
+                        label = "最早在前",
+                        selected = state.detailSort == "asc",
                         onClick = {
-                            if (state.detailSort == "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                            if (state.detailSort == "desc") state.setSort(Config.KEY_DETAIL_SORT)
                             showSort = false
                         }
                     )
@@ -266,16 +305,70 @@ private fun SortOptionRow(label: String, selected: Boolean, onClick: () -> Unit)
     }
 }
 
-/** 壁纸层（玻璃开启时被 backdrop 捕获） */
+/** 壁纸位图（懒加载，缓存一次） */
 @Composable
-private fun WallpaperLayer() {
+private fun rememberWallpaperBitmap(): ImageBitmap? {
     val ctx = LocalContext.current
-    val bmp = remember(ctx) {
+    return remember(ctx) {
         runCatching {
             val d = WallpaperManager.getInstance(ctx).drawable
             if (d is BitmapDrawable) d.bitmap.asImageBitmap() else null
         }.getOrNull()
     }
+}
+
+/** 自定义顶栏：左对齐大标题（往上走、醒目），右侧放操作按钮 */
+@Composable
+private fun CustomTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MiuixTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        actions()
+    }
+}
+
+/** 毛玻璃栏背景：模糊壁纸 + 半透明主题色覆盖（纯位图+RenderEffect，安全不黑屏） */
+@Composable
+private fun GlassBar(blurRadius: Int, tint: Color, modifier: Modifier = Modifier) {
+    val bmp = rememberWallpaperBitmap()
+    Box(modifier.clipToBounds()) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur((blurRadius.coerceAtLeast(4) * 2f).dp),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(Modifier.fillMaxSize().background(Color(0xFFF3F5F7)))
+        }
+        Box(Modifier.fillMaxSize().background(tint.copy(alpha = 0.55f)))
+    }
+}
+
+/** 壁纸层（玻璃开启时全屏背景 = 原壁纸） */
+@Composable
+private fun WallpaperLayer() {
+    val bmp = rememberWallpaperBitmap()
     Box(Modifier.fillMaxSize()) {
         if (bmp != null) {
             Image(bitmap = bmp, contentDescription = null,

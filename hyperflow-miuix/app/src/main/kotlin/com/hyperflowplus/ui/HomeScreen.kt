@@ -72,8 +72,14 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 // 设备信息直接展示（多行文本，不弹窗——弹窗在部分设备上会闪退）
+                // Root 行动态拼接 state.rootInfo：轮询授权后即时更新，不用重进 App
                 Text(
-                    state.deviceInfo.ifEmpty { "加载中…" },
+                    buildString {
+                        append(state.deviceInfo.substringBefore("Root：").trimEnd().ifEmpty { "加载中…" })
+                        if (state.deviceInfo.isNotEmpty()) {
+                            append("\nRoot：").append(state.rootInfo).append(" / KSU ").append(state.ksuVersion)
+                        }
+                    },
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
                     modifier = Modifier
