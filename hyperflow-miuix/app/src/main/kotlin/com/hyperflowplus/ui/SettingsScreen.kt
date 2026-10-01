@@ -46,6 +46,25 @@ fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
+        GroupTitle("短信存储")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                SwitchPreference(
+                    title = "App 内消息",
+                    summary = if (state.archiveApp) "流转短信显示在消息页" else "关闭后消息页不显示流转短信",
+                    checked = state.archiveApp,
+                    onCheckedChange = { state.set(Config.KEY_ARCHIVE_APP, it) }
+                )
+                SwitchPreference(
+                    title = "写入系统短信",
+                    summary = "写入系统收件箱（默认关闭：可能回环/被拦截，建议用 App 内消息）",
+                    checked = state.smsPersist,
+                    onCheckedChange = { state.set(Config.KEY_SMS_PERSIST, it) }
+                )
+            }
+        }
+
         GroupTitle("关于")
 
         Card(Modifier.fillMaxWidth()) {
