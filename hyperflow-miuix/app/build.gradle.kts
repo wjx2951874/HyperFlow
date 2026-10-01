@@ -11,8 +11,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 46
-        versionName = "0.4.11"
+        versionCode = 47
+        versionName = "0.4.12"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -70,8 +70,6 @@ dependencies {
     // Miuix 模糊（柔光玻璃，minSdk 33）
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
 
-    // AndroidLiquidGlass（Kyant0 backdrop）——柔光玻璃
-    implementation("io.github.kyant0:backdrop:2.0.1")
 
     // LSPosed libxposed API（compileOnly；官方 Maven 坐标，与 LSPosed 2.2.x 运行时混淆签名一致）
     compileOnly("io.github.libxposed:api:102.0.0")

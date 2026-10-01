@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +46,45 @@ fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
+        GroupTitle("外观")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                Text(
+                    "配色风格（跟随壁纸 Monet 取色）",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 2.dp)
+                )
+                val options = listOf(
+                    "标准" to "tonal_spot",
+                    "中性" to "neutral",
+                    "鲜艳" to "vibrant",
+                    "表现力" to "expressive",
+                    "水果沙拉" to "fruit_salad",
+                    "单色" to "monochrome"
+                )
+                options.chunked(3).forEach { rowOpts ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        rowOpts.forEach { (label, key) ->
+                            val sel = state.paletteStyle == key
+                            Text(
+                                label,
+                                style = MiuixTheme.textStyles.body2,
+                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                color = if (sel) MiuixTheme.colorScheme.primary
+                                else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { state.setString("palette_style", key) }
+                                    .padding(vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         GroupTitle("关于")
 
         Card(Modifier.fillMaxWidth()) {

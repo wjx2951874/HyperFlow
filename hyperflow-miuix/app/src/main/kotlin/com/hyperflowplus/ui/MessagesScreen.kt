@@ -25,6 +25,23 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
+    // App 内消息归档关闭：消息页直接隐藏内容
+    if (!state.archiveApp) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("App 内消息已关闭", style = MiuixTheme.textStyles.body1)
+            Text(
+                "在 首页 → 短信持久化 → App 内消息 中重新开启",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            )
+        }
+        return
+    }
     val convos = remember(state.flow, state.archiveSort, state.sortVersion) {
         parseFlow(state.flow, state.archiveSort)
     }

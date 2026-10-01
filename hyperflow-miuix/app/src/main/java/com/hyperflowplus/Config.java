@@ -29,6 +29,7 @@ public final class Config {
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转
     public static final String KEY_CLONE_TRANSFER = "clone_transfer";       // 功能② 分身通知流转
     public static final String KEY_SMS_PERSIST = "sms_persist";             // 功能③ 短信持久化
+    public static final String KEY_ARCHIVE_APP = "archive_app";                // ③ App 内消息归档开关（关=消息页不显示）
     public static final String KEY_SMS_NUMERIC_ONLY = "sms_numeric_only";   // ③ 仅纯数字号码写入收件箱
     public static final String KEY_AUTO_UNLOCK = "auto_unlock";             // 功能⑤（P1）自动输锁屏密码开关
     public static final String KEY_AUTO_UNLOCK_PASSWORD = "auto_unlock_pwd"; // 功能⑤（P1）明文密码，用户自行填写

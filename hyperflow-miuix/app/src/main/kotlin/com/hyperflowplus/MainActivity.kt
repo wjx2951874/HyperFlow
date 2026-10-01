@@ -28,7 +28,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.isSystemInDarkTheme
+import android.app.WallpaperManager
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.ui.graphics.Colorimport androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -74,7 +77,24 @@ private data class Tab(val title: String, val icon: ImageVector)
 
 @Composable
 fun HyperFlowApp() {
-    val controller = remember { ThemeController(ColorSchemeMode.System) }
+    val ctx = LocalContext.current
+    val keyColor = remember(ctx) { wallpaperKeyColor(ctx) }   // 壁纸主色（Monet 种子）
+    val palette = when (HFState.paletteStyle) {
+        "neutral" -> ThemePaletteStyle.Neutral
+        "vibrant" -> ThemePaletteStyle.Vibrant
+        "expressive" -> ThemePaletteStyle.Expressive
+        "fruit_salad" -> ThemePaletteStyle.FruitSalad
+        "monochrome" -> ThemePaletteStyle.Monochrome
+        else -> ThemePaletteStyle.TonalSpot
+    }
+    val controller = remember(keyColor, palette) {
+        ThemeController(
+            colorSchemeMode = ColorSchemeMode.MonetSystem,   // 壁纸动态取色（MaterialKolor）
+            keyColor = keyColor,
+            paletteStyle = palette,
+            colorSpec = ThemeColorSpec.Spec2025
+        )
+    }
     MiuixTheme(controller = controller) {
         val state = HFState
         val ctx = LocalContext.current
@@ -398,4 +418,21 @@ private fun CustomTopBar(
     }
 }
 
-
+/** 从系统壁纸提取主色（平均色）作为 Monet 动态配色种子 */
+private fun wallpaperKeyColor(ctx: android.content.Context): Color {
+    return runCatching {
+        val d = WallpaperManager.getInstance(ctx).drawable
+        val bmp = (d as? BitmapDrawable)?.bitmap ?: return Color(0xFF0A84FF)
+        val sm = Bitmap.createScaledBitmap(bmp, 8, 8, true)
+        var r = 0L; var g = 0L; var b = 0L; var n = 0
+        for (x in 0 until 8) for (y in 0 until 8) {
+            val c = sm.getPixel(x, y)
+            r += android.graphics.Color.red(c)
+            g += android.graphics.Color.green(c)
+            b += android.graphics.Color.blue(c)
+            n++
+        }
+        sm.recycle()
+        Color(r / n, g / n, b / n)
+    }.getOrElse { Color(0xFF0A84FF) }
+}
