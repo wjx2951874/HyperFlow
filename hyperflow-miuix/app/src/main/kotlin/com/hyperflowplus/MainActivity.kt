@@ -615,23 +615,20 @@ private fun checkUpdate(
     }
     Thread {
         try {
-            // 多通道并行检测：谁先成功用谁，避免串行等待（国内网络 raw 常超时，jsDelivr 兜底）
+            // 多通道并行检测：收集所有通道结果，取 versionCode 最大者（防镜像缓存旧版导致误判"已是最新"）
             val urls = Config.updateJsonUrls()
-            val latch = java.util.concurrent.CountDownLatch(1)
-            val holder = java.util.concurrent.atomic.AtomicReference<String?>()
-            val done = java.util.concurrent.atomic.AtomicBoolean(false)
+            val results = java.util.concurrent.ConcurrentHashMap<String, String>()  // url -> body
             val threads = urls.map { u ->
                 Thread {
                     try {
                         val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                        conn.connectTimeout = 3000
-                        conn.readTimeout = 4000
+                        conn.connectTimeout = 4000
+                        conn.readTimeout = 6000
                         conn.instanceFollowRedirects = true
                         conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (body.isNotEmpty() && done.compareAndSet(false, true)) {
-                            holder.set(body)
-                            latch.countDown()
+                        if (body.isNotEmpty() && body.contains("versionCode")) {
+                            results[u] = body
                         }
                     } catch (_: Throwable) {
                         // 单个通道失败不影响其他通道
@@ -639,26 +636,37 @@ private fun checkUpdate(
                 }
             }
             threads.forEach { it.start() }
-            // 全部等最多 5 秒；谁先返回就用谁
-            val got = latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
-            threads.forEach { t ->
-                try { t.interrupt() } catch (_: Throwable) {}
+            // 等待全部通道返回（最多 8 秒）
+            val deadline = System.currentTimeMillis() + 8000
+            while (System.currentTimeMillis() < deadline && results.size < urls.size) {
+                Thread.sleep(80)
             }
-            val text = if (got) holder.get() else null
-            if (text == null) {
+            if (results.isEmpty()) {
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     onError("所有更新通道不可达（网络超时），请检查网络后重试")
                 }
                 return@Thread
             }
-            val json = org.json.JSONObject(text)
+            // 取 versionCode 最大者（镜像缓存旧版也无害，只认最新）
+            var best: String? = null
+            var bestVc = -1
+            for ((u, body) in results) {
+                runCatching {
+                    val vc = org.json.JSONObject(body).optInt("versionCode", 0)
+                    if (vc > bestVc) { bestVc = vc; best = body }
+                }
+            }
+            val json = org.json.JSONObject(best ?: "")
             val ver = json.optString("version", "")
             val vc = json.optInt("versionCode", 0)
             val zipUrl = json.optString("zipUrl", "")
+            val channel = best?.let { b ->
+                results.entries.firstOrNull { it.value == b }?.key
+            }?.let { u -> runCatching { java.net.URI(u).host }.getOrNull() } ?: "多通道"
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 // 结果必弹：无论成功/最新/异常都通知用户
                 if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：已并行检测）").trim())
+                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：$channel）").trim())
                 } else {
                     onNone()
                 }
