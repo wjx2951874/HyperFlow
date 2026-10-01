@@ -31,7 +31,8 @@ import androidx.compose.runtime.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.app.WallpaperManager
 import android.graphics.drawable.BitmapDrawable
-import androidx.compose.ui.graphics.Colorimport androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -57,6 +58,8 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.theme.ThemeColorSpec
+import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.MessagesScreen
