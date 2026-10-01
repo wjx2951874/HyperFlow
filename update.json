@@ -1,6 +1,6 @@
 {
-  "version": "0.4.14",
-  "versionCode": 49,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.14/HyperFlow-0.4.14-flashable.zip",
-  "changelog": "v0.4.14：修复闪退（主题取色全链路兜底，失败自动退回系统默认）+ 更新链路 jsDelivr 首选"
+  "version": "0.4.15",
+  "versionCode": 50,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.15/HyperFlow-0.4.15-flashable.zip",
+  "changelog": "v0.4.15：全局崩溃捕获（闪退自动记录，重启 App 自动弹出崩溃原因，无需终端日志）"
 }
