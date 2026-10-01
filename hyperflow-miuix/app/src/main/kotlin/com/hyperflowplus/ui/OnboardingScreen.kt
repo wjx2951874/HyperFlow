@@ -7,6 +7,8 @@ import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,7 +94,7 @@ fun OnboardingScreen(state: HFState) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 48.dp)
+                .padding(bottom = 64.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MiuixTheme.colorScheme.surface)
                 .border(
@@ -164,80 +166,88 @@ private fun StageAgreement(
     )
     Spacer(Modifier.height(18.dp))
 
-    SectionTitle("使用前需要")
-    Text(
-        "· Root 权限（在 KernelSU 中允许本应用获取超级用户权限）\n" +
-                "· LSPosed 2.2+ 框架（KernelSU 内嵌 LSPosed 亦可）\n" +
-                "· 在 LSPosed 中启用本模块（模块已自动刷入，本应用会自动勾选推荐作用域）",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-    )
-    Spacer(Modifier.height(14.dp))
-
-    SectionTitle("当前功能")
-    Text(
-        "· 通知流转——亮屏/锁屏强制放行通知流转（含来电在线接听）\n" +
-                "· 分身流转——微信/QQ 分身通知独立流转\n" +
-                "· 短信流转——App 内消息归档，可选写入系统短信\n" +
-                "· 在线更新——App 内一键检测更新",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-    )
-    Spacer(Modifier.height(14.dp))
-
-    SectionTitle("责任声明")
-    Text(
-        "· 本模块仅供个人设备调试，请遵守相关服务条款\n" +
-                "· 流转数据仅在同一小米账号的设备间传输\n" +
-                "· 本项目由 AI 辅助开发与调试，并经人工验证；并非完全由 AI 生成\n" +
-                "· 使用中有任何问题，点击跳转酷安向作者反馈",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-    )
-    Spacer(Modifier.height(16.dp))
-
-    // 更新渠道（酷安）
-    Row(
+    // 说明内容区：内容较长时可滚动（按钮与勾选固定底部）
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            .clickable { openCoolapk(ctx) }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            Icons.Filled.Info,
-            contentDescription = null,
-            modifier = Modifier.width(18.dp).height(18.dp),
-            tint = MiuixTheme.colorScheme.primary
+        SectionTitle("使用前需要")
+        Text(
+            "· Root 权限（在 KernelSU 中允许本应用获取超级用户权限）\n" +
+                    "· LSPosed 2.2+ 框架（KernelSU 内嵌 LSPosed 亦可）\n" +
+                    "· 在 LSPosed 中启用本模块（模块已自动刷入，本应用会自动勾选推荐作用域）",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
         )
-        Spacer(Modifier.width(8.dp))
-        Column {
-            Text(
-                "更新 / 反馈",
-                style = MiuixTheme.textStyles.body2,
-                fontWeight = FontWeight.Medium,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-            )
-            Text(
-                "酷安 @翰德姆（点击前往，问题反馈 / 关注）",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.primary
-            )
-        }
-    }
-    Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
 
-    // 致谢
-    Text(
-        "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth()
-    )
-    Spacer(Modifier.height(14.dp))
+        SectionTitle("当前功能")
+        Text(
+            "· 通知流转——亮屏/锁屏强制放行通知流转（含来电在线接听）\n" +
+                    "· 分身流转——微信/QQ 分身通知独立流转\n" +
+                    "· 短信流转——App 内消息归档，可选写入系统短信\n" +
+                    "· 在线更新——App 内一键检测更新",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+        )
+        Spacer(Modifier.height(14.dp))
+
+        SectionTitle("责任声明")
+        Text(
+            "· 本模块仅供个人设备调试，请遵守相关服务条款\n" +
+                    "· 流转数据仅在同一小米账号的设备间传输\n" +
+                    "· 本项目由 AI 辅助开发与调试，并经人工验证；并非完全由 AI 生成\n" +
+                    "· 使用中有任何问题，点击跳转酷安向作者反馈",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+        )
+        Spacer(Modifier.height(16.dp))
+
+        // 更新渠道（酷安）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                .clickable { openCoolapk(ctx) }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.Info,
+                contentDescription = null,
+                modifier = Modifier.width(18.dp).height(18.dp),
+                tint = MiuixTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(
+                    "更新 / 反馈",
+                    style = MiuixTheme.textStyles.body2,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                )
+                Text(
+                    "酷安 @翰德姆（点击前往，问题反馈 / 关注）",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.primary
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // 致谢
+        Text(
+            "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(14.dp))
+    }
 
     // Miuix Checkbox + 勾选文案（小米风格勾选框）
     Row(
