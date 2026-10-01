@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.43",
-  "versionCode": 78,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.43/HyperFlow-0.4.43-flashable.zip",
-  "changelog": "·分身流转回退「只放行」：主空间不再重复显示分身通知\n·点击分身通知→直接拉起999空间微信/QQ（需勾选android作用域）\n·悬浮导航栏改用InstallerX原版FloatingBottomBar（液态玻璃/模糊/普通三态），修复悬浮空白与闪退\n·首页检测三态：全绿圆环对勾/部分未授权黄色叹号（查看更多→红标+去解决步骤）/无Root仅红色授权卡\n·LSP检测补运行态双保险：模块实际加载才算启用，框架关闭/去作用域不再误判\n·澎湃OS版本串补全（含完整版本标识）+检测图标换Rounded圆环"
+  "version": "v0.5.0",
+  "versionCode": 80,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.0/HyperFlow-0.5.0-flashable.zip",
+  "changelog": "·修复启动白屏闪退：自建圆环图标解析器在material路径格式下崩溃，改用官方path DSL手写节点（S/s平滑反射点已折算）\n·分身流转回退「只放行」：主空间不再重复显示分身通知\n·点击分身通知→直接拉起999空间微信/QQ（需勾选android作用域）\n·悬浮导航栏改用InstallerX原版FloatingBottomBar（液态玻璃/模糊/普通三态）\n·首页检测三态（全绿对勾/部分黄叹号查看更多/无Root红色授权卡）+LSP运行态双保险\n·澎湃OS版本串补全"
 }
