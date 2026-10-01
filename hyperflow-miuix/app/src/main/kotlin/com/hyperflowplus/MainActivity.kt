@@ -379,7 +379,7 @@ private fun LiquidGlassBar(blurRadius: Int, top: Boolean, modifier: Modifier = M
                 bmp,
                 srcOffset = IntOffset(((sw - srcW) / 2f).toInt(), ((sh - srcH) / 2f).toInt()),
                 srcSize = IntSize(srcW.toInt(), srcH.toInt()),
-                dstOffset = Offset.Zero,
+                dstOffset = IntOffset.Zero,
                 dstSize = IntSize(area.width.toInt(), area.height.toInt()),
                 filterQuality = FilterQuality.Medium
             )
