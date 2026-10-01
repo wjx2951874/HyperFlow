@@ -7,6 +7,7 @@ import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -355,22 +356,28 @@ private fun StageCoolapk(
     )
     Spacer(Modifier.height(26.dp))
 
-    // 蓝色主按钮：点完跳酷安，回来直接完成引导（不再停留）
-    Button(
-        onClick = {
-            openCoolapk(ctx)
-            onDone()
-        },
-        colors = ButtonDefaults.buttonColorsPrimary()
+    // 按钮左右排布：左白（跳过）/ 右蓝（去酷安），与参考弹窗一致
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("去酷安看看")
-    }
-    Spacer(Modifier.height(8.dp))
-    // 白色次按钮：默认浅色，保持一蓝一白
-    Button(
-        onClick = onDone
-    ) {
-        Text("算了，先跳过")
+        Button(
+            onClick = onDone,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors()
+        ) {
+            Text("算了，先跳过")
+        }
+        Button(
+            onClick = {
+                openCoolapk(ctx)
+                onDone()
+            },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColorsPrimary()
+        ) {
+            Text("去酷安看看")
+        }
     }
 }
 
