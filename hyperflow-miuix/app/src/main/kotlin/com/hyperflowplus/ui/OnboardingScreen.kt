@@ -48,6 +48,7 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 /**
  * 引导弹窗（Miuix 风格，三步流程）：
@@ -304,6 +305,8 @@ private fun StageDiagnosis(
     onStart: () -> Unit,
     onRetry: () -> Unit
 ) {
+    var showAuthHelp by remember { mutableStateOf(false) }
+
     Text(
         "环境诊断",
         style = MiuixTheme.textStyles.title1,
@@ -327,11 +330,11 @@ private fun StageDiagnosis(
         },
         subtitle = when {
             rootState == true -> "KernelSU 已授权本应用"
-            rootState == false -> "点击右侧按钮前往 KernelSU 授权"
-            else -> ""
+            rootState == false -> "点击右侧按钮查看授权步骤（需手动允许）"
+            else -> "正在检测中，请稍候"
         },
         actionText = if (rootState == false) "去授权" else null,
-        onAction = { launchKernelSu() }
+        onAction = { showAuthHelp = true }
     )
     Spacer(Modifier.height(12.dp))
 
@@ -346,7 +349,7 @@ private fun StageDiagnosis(
         subtitle = when {
             lspState == true -> "框架与模块状态正常"
             lspState == false -> "点击右侧按钮前往 LSPosed 启用模块"
-            else -> ""
+            else -> "等待 Root 检测通过后自动检测"
         },
         actionText = if (lspState == false) "去启用" else null,
         onAction = { launchLsposed() }
@@ -354,7 +357,7 @@ private fun StageDiagnosis(
     if (rootState == false) {
         Spacer(Modifier.height(10.dp))
         Text(
-            "卡住是因为还没给权限，去 KernelSU 授权后会自动通过",
+            "未授予 Root 权限，请前往 KernelSU 允许 HyperFlow；授权后点击重新检测即可自动通过",
             style = MiuixTheme.textStyles.body2,
             color = Color(0xFFE53935),
             textAlign = TextAlign.Center,
@@ -363,7 +366,7 @@ private fun StageDiagnosis(
     }
     Spacer(Modifier.height(20.dp))
 
-    // 按钮左右排布：左白（重新检测）/ 右蓝（下一步），与参考弹窗一致
+    // 按钮左右排布：左白（重新检测）/ 右蓝（继续，Root 就绪才可点）
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -381,13 +384,42 @@ private fun StageDiagnosis(
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColorsPrimary()
         ) {
-            Text(
-                when {
-                    rootState == false -> "等待 Root 授权…"
-                    rootState == null -> "检测中…"
-                    else -> "下一步"
+            Text(if (rootState == null) "检测中…" else "继续")
+        }
+    }
+
+    // Root 授权引导弹窗（跳转失败时用户可按步骤手动操作）
+    if (showAuthHelp) {
+        WindowDialog(
+            title = "如何授权 Root 权限",
+            summary = "HyperFlow 需要 KernelSU 授予超级用户权限，请按以下步骤操作：\n\n" +
+                    "1. 打开 KernelSU 应用；\n" +
+                    "2. 在「超级用户」列表找到 HyperFlow；\n" +
+                    "3. 点击允许并勾选（默认授予）；\n" +
+                    "4. 返回本页点击「重新检测」。\n\n也可以直接点击下方按钮尝试打开 KernelSU。",
+            show = showAuthHelp,
+            onDismissRequest = { showAuthHelp = false }
+        ) {
+            Row(Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { showAuthHelp = false },
+                    colors = ButtonDefaults.buttonColors(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("知道了")
                 }
-            )
+                Spacer(Modifier.width(12.dp))
+                Button(
+                    onClick = {
+                        launchKernelSu()
+                        showAuthHelp = false
+                    },
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("打开 KernelSU")
+                }
+            }
         }
     }
 }
