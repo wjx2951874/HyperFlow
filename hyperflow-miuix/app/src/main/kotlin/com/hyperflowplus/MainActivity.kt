@@ -31,7 +31,6 @@ import androidx.compose.runtime.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.app.WallpaperManager
 import android.graphics.drawable.BitmapDrawable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
