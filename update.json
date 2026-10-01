@@ -1,6 +1,6 @@
 {
-  "version": "0.4.25",
-  "versionCode": 60,
-  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.25-flashable.zip",
-  "changelog": "引导协议页内容可滚动+卡片下移；设置页开源项目逐条列出；诊断页去授权弹手动步骤窗口，Root 未授权时按钮置灰不可点"
+  "version": "0.4.26",
+  "versionCode": 61,
+  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.26-flashable.zip",
+  "changelog": "消息页排序修复（时间戳比较）；消息列表短信 App 布局（名称左/时间设备右对齐）；检测更新重复点击显示正在检查中"
 }
