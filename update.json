@@ -1,1 +1,6 @@
-{"version": "0.4.30", "versionCode": 65, "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.30-flashable.zip", "changelog": "关闭App内消息勾选框两段式确认；写入系统短信弹窗标题带开启+10s倒计时", "sha256": "a4725a5cd3597849a4abd6164c51fbf9355023aa"}
+{
+  "version": "v0.4.31",
+  "versionCode": 66,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.31/HyperFlow-0.4.31-flashable.zip",
+  "changelog": "·弹窗全面重构：改用引导页同款覆盖层方案，修复全部弹窗闪退（写入系统短信/检测更新/排序/关闭确认）\n·引导页协议卡片布局修复：长文可滑动、按钮固定、不溢出\n·启动秒加载：先渲染上次状态，后台再刷新\n·4 Tab 导航：首页（环境检测红黄绿）/流转（四大开关）/消息/设置\n·设置页重构：主题（悬浮导航栏/液态玻璃）/调试（调试模式/分享日志）/关于\n·完整机型显示（厂商+型号）"
+}
