@@ -74,7 +74,9 @@ val LocalLiquidBackdrop = compositionLocalOf<Backdrop?> { null }
 @Composable
 fun BarBlurHost(enabled: Boolean, content: @Composable () -> Unit) {
     val surface = MiuixTheme.colorScheme.surface
-    val backdrop = if (enabled && isRuntimeShaderSupported()) {
+    // 玻璃根因修复：backdrop 不再依赖 isRuntimeShaderSupported（blur 走 RenderEffect Android12+ 即可用），
+    // lens（折射）内部已自行判断 shader 支持，不支持时自动降级为纯模糊玻璃
+    val backdrop = if (enabled) {
         rememberLayerBackdrop {
             drawRect(surface)
             drawContent()

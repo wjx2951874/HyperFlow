@@ -81,16 +81,16 @@ for f in /data/adb/lspd/config/modules.list /data/adb/modules/lsposed/config/mod
 done
 echo ==SCOPE;
 for f in /data/adb/lspd/config/scope/* /data/adb/modules/lsposed/config/scope/* /data/adb/modules/zygisk_lsposed/config/scope/* /data/adb/lspd/scope/*; do
-  [ -f "${'$'}f" ] && cat "${'$'}f"
+  [ -f "${'$'}f" ] && echo "==FILE ${'$'}(basename ${'$'}f)"
 done
 echo ==END""") }.getOrNull() else null
-            // 解析：LSPosed 存在 / 模块已启用 / 作用域已勾选
+            // 解析：LSPosed 存在 / 模块已启用（modules.list 内容=模块包名）/ 作用域已勾选（scope 目录下存在本模块文件）
             val lspInstalled = !out.isNullOrBlank() && out.contains("==DIR") && (
                     out.contains("lspd") || out.contains("lsposed"))
             val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
             val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
-            val modEnabled = lspInstalled && modsSeg.contains("hyperflow")
-            val scopeOkV = lspInstalled && scopeSeg.contains("com.hyperflowplus")
+            val modEnabled = lspInstalled && (modsSeg.contains("com.hyperflowplus") || modsSeg.contains("hyperflow"))
+            val scopeOkV = lspInstalled && scopeSeg.contains("==FILE com.hyperflowplus")
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")
@@ -122,8 +122,8 @@ echo ==END""") }.getOrNull() else null
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
-        // ===== 环境状态大卡片：整块彩色卡（绿/黄/红）+ 大字标题 + 明细合并（参考 HyperModifier 样式） =====
-        val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
+        // ===== 环境状态汇总行（轻量条，状态一目了然） =====
+        val allOk = rootOk && lspOk && moduleOk && scopeOk && milinkOk  // KSU 并入 Root（有 Root 即内核环境就绪）
         val level: Color = when {
             !rootOk -> CRed
             allOk -> CGreen
@@ -134,75 +134,55 @@ echo ==END""") }.getOrNull() else null
             allOk -> "环境已就绪"
             else -> "部分环境未就绪"
         }
-        val levelSub = when {
-            !rootOk -> "未授予 Root 权限，点击卡片重新授权检测"
-            allOk -> "全部检测通过，功能可正常使用"
-            !moduleOk -> "模块未在 LSPosed 启用，点击下方按钮一键启用"
-            !scopeOk -> "推荐作用域未勾选，点击下方按钮一键勾选"
-            else -> "部分依赖缺失，可正常使用但部分功能受限"
-        }
-        val passed = listOf(rootOk, ksuOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
+        val passed = listOf(rootOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
 
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    if (!checking) detect()   // 整卡点击即重新检测
-                }
+                .padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(level.copy(alpha = 0.16f))
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(12.dp).clip(CircleShape).background(level)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        levelText,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = level
-                    )
-                    Spacer(Modifier.weight(1f))
-                    if (checking) {
-                        Text("检测中…", style = MiuixTheme.textStyles.body2, color = level)
-                    } else {
-                        Text(
-                            "重新检测",
-                            style = MiuixTheme.textStyles.body2,
-                            fontWeight = FontWeight.Medium,
-                            color = level.copy(alpha = 0.9f)
-                        )
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(level))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                levelText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = level
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "$passed/6",
+                style = MiuixTheme.textStyles.body2,
+                color = level.copy(alpha = 0.85f)
+            )
+            Spacer(Modifier.weight(1f))
+            if (checking) {
+                Text("检测中…", style = MiuixTheme.textStyles.body2, color = level)
+            } else {
                 Text(
-                    levelSub,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "$passed/6 项检测通过 · 点击卡片重新检测",
+                    "重新检测",
                     style = MiuixTheme.textStyles.body2,
                     fontWeight = FontWeight.Medium,
-                    color = level.copy(alpha = 0.95f)
+                    color = level.copy(alpha = 0.9f),
+                    modifier = Modifier.clickable { detect() }
                 )
-                Spacer(Modifier.height(12.dp))
-                // 明细行（紧凑合并进大卡片，不再是独立小框）
-                EnvItem("Root 权限", rootOk, "已在 KernelSU 授权" to "未授予 Root 权限", GuideType.ROOT, onOpenGuide)
-                EnvItem("KernelSU", ksuOk, "已安装并可用" to "未检测到 KernelSU", GuideType.ROOT, onOpenGuide)
-                EnvItem("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED, onOpenGuide)
-                EnvItem("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE, onOpenGuide)
-                EnvItem("推荐作用域", scopeOk, "已勾选（本 App + milink）" to "未勾选推荐作用域", GuideType.MODULE_SCOPE, onOpenGuide)
-                EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
-
             }
         }
+
+        // ===== 环境检测小块：每项独立卡片（点击进引导页一键修复，已集成授权入口） =====
+        EnvItem("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT, onOpenGuide)
+        EnvItem("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED, onOpenGuide)
+        EnvItem("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE, onOpenGuide)
+        EnvItem(
+            "推荐作用域",
+            scopeOk,
+            "已勾选（本 App + milink）" to "未勾选推荐作用域",
+            GuideType.MODULE_SCOPE,
+            onOpenGuide,
+            openLsposedFirst = true
+        )
+        EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
 
         // ===== 设备信息 =====
         GroupTitle("设备信息")
@@ -222,19 +202,6 @@ echo ==END""") }.getOrNull() else null
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 )
-                ArrowPreference(
-                    title = "重新授权 Root",
-                    summary = "把 milink 与本模块加入 KernelSU 名单",
-                    onClick = {
-                        Thread {
-                            runCatching {
-                                RootExec.exec("ksud", "allowlist", "add", "com.milink.service")
-                                RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus")
-                            }
-                        }.start()
-                        Toast.makeText(ctx, "已执行授权", Toast.LENGTH_SHORT).show()
-                    }
-                )
             }
         }
     }
@@ -247,46 +214,72 @@ private fun EnvItem(
     ok: Boolean,
     texts: Pair<String, String>,
     guide: GuideType,
-    onOpenGuide: (GuideType) -> Unit
+    onOpenGuide: (GuideType) -> Unit,
+    openLsposedFirst: Boolean = false
 ) {
-    Row(
+    val ctx = LocalContext.current
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenGuide(guide) }
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 3.dp)
+            .clickable {
+                if (openLsposedFirst && !ok) {
+                    // 优先打开 LSPosed 管理器（KernelSU 内嵌版由 KernelSU 管理器承载）手动调整，失败再进引导页
+                    var opened = false
+                    runCatching {
+                        val pm = ctx.packageManager
+                        for (pkg in listOf("com.org.lsposed.manager", "io.github.lsposed.manager", "me.weishu.kernelsu")) {
+                            val launch = pm.getLaunchIntentForPackage(pkg)
+                            if (launch != null) { ctx.startActivity(launch); opened = true; break }
+                        }
+                    }
+                    if (!opened) onOpenGuide(guide)
+                } else {
+                    onOpenGuide(guide)
+                }
+            }
     ) {
-        // Miuix 状态大图标：绿底白勾 / 红底白叉（复用 Miuix 资源，InstallerX 同款样式）
-        Box(
-            Modifier.size(26.dp).clip(CircleShape).background(if (ok) CGreen else CRed),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (ok) CGreen.copy(alpha = 0.07f) else CRed.copy(alpha = 0.07f))
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Miuix 状态大图标：绿底白勾 / 红底白叉（复用 Miuix 资源，InstallerX 同款样式）
+            Box(
+                Modifier.size(26.dp).clip(CircleShape).background(if (ok) CGreen else CRed),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (ok) MiuixIcons.Regular.Ok else MiuixIcons.Regular.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                    tint = Color.White
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    title,
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
+                )
+                Text(
+                    if (ok) texts.first else texts.second,
+                    style = MiuixTheme.textStyles.body2,
+                    color = if (ok) CGreen.copy(alpha = 0.85f) else CRed.copy(alpha = 0.85f)
+                )
+            }
+            Spacer(Modifier.weight(1f))
             Icon(
-                if (ok) MiuixIcons.Regular.Ok else MiuixIcons.Regular.Close,
+                Icons.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                modifier = Modifier.size(15.dp),
-                tint = Color.White
+                modifier = Modifier.size(18.dp),
+                tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.3f)
             )
         }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            title,
-            style = MiuixTheme.textStyles.body2,
-            fontWeight = FontWeight.Medium,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
-        )
-        Spacer(Modifier.weight(1f))
-        Text(
-            if (ok) texts.first else texts.second,
-            style = MiuixTheme.textStyles.body2,
-            color = if (ok) CGreen.copy(alpha = 0.85f) else CRed.copy(alpha = 0.85f)
-        )
-        Icon(
-            Icons.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.3f)
-        )
     }
 }
 

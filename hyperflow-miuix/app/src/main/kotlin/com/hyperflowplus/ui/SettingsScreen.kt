@@ -142,9 +142,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         }
 
-        // 开源致谢小字
+        // 开源致谢小字（按用户要求去掉 AI 辅助字样）
         Text(
-            "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区 · 本项目由 AI 辅助开发调试，并经人工验证",
+            "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区",
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
             modifier = Modifier

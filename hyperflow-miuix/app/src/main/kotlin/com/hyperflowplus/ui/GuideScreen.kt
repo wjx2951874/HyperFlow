@@ -206,15 +206,15 @@ private fun launchKernelSu(ctx: android.content.Context) {
 fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules/lsposed/config /data/adb/modules/zygisk_lsposed/config; do
   [ -e "${'$'}d" ] || continue
   mkdir -p "${'$'}d/scope"
-  if [ -f "${'$'}d/modules.list" ]; then grep -q 'hyperflow' "${'$'}d/modules.list" || echo 'hyperflow' >> "${'$'}d/modules.list"; fi
-  for sc in "${'$'}d"/scope/hyperflow* "${'$'}d"/scope/*hyperflow* "${'$'}d"/scope/hyperflowplus "${'$'}d"/scope/com.hyperflowplus; do
-    [ -f "${'$'}sc" ] || continue
-    grep -qx 'com.hyperflowplus' "${'$'}sc" || echo 'com.hyperflowplus' >> "${'$'}sc"
-    grep -qx 'com.milink.service' "${'$'}sc" || echo 'com.milink.service' >> "${'$'}sc"
-  done
-  sc2="${'$'}d/scope/hyperflow"
-  [ -f "${'$'}sc2" ] || { echo 'com.hyperflowplus' > "${'$'}sc2"; echo 'com.milink.service' >> "${'$'}sc2"; }
+  if [ -f "${'$'}d/modules.list" ]; then grep -q 'com.hyperflowplus' "${'$'}d/modules.list" || echo 'com.hyperflowplus' >> "${'$'}d/modules.list"; fi
+  sc2="${'$'}d/scope/com.hyperflowplus"
+  if [ -f "${'$'}sc2" ]; then
+    grep -qx 'com.hyperflowplus' "${'$'}sc2" || echo 'com.hyperflowplus' >> "${'$'}sc2"
+    grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
+  else
+    { echo 'com.hyperflowplus'; echo 'com.milink.service'; } > "${'$'}sc2"
+  fi
 done
-chmod 644 /data/adb/lspd/config/scope/* 2>/dev/null
+chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
 chown -R 0:0 /data/adb/lspd/config 2>/dev/null
 echo done"""

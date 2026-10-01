@@ -23,8 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Text
@@ -52,6 +54,7 @@ fun HyperDialog(
     title: String? = null,
     summary: String? = null,
     onDismiss: () -> Unit,
+    bottomInset: Dp = 48.dp,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     if (!show) return
@@ -74,9 +77,13 @@ fun HyperDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
-                    .padding(bottom = 48.dp)
+                    .padding(bottom = bottomInset)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MiuixTheme.colorScheme.surface)
+                    .background(
+                        if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
+                            Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
+                        else MiuixTheme.colorScheme.surface
+                    )
                     // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },

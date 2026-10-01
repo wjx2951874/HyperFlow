@@ -200,6 +200,8 @@ fun HyperFlowApp() {
         // 四个页面各显示页面名（软件名移到设置页关于区）
         val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
+        // BarBlurHost 包住整个 Scaffold（含 bottomBar）→ backdrop 对导航栏可见，液态玻璃才真正生效
+        BarBlurHost(enabled = state.glassEffect) {
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
@@ -218,36 +220,48 @@ fun HyperFlowApp() {
                 }
             },
             bottomBar = {
-                // 悬浮导航栏 / 液态玻璃 双模式（设置-主题 开关控制）
-                LiquidNavBar(
-                    selectedTabIndex = tab,
-                    onTabSelected = { tab = it },
-                    items = tabs.map { it.icon to it.title },
-                    floatEnabled = state.navFloat,
-                    glassEnabled = state.glassEffect
-                )
+                // 悬浮导航栏：不占 Scaffold 底部（内容全屏，胶囊浮在上面，只有悬浮部分遮挡）
+                // 普通/液态全宽导航栏：正常占位
+                if (!state.navFloat) {
+                    LiquidNavBar(
+                        selectedTabIndex = tab,
+                        onTabSelected = { tab = it },
+                        items = tabs.map { it.icon to it.title },
+                        floatEnabled = false,
+                        glassEnabled = state.glassEffect
+                    )
+                }
             }
             ) { padding ->
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                // 内容区保持主题色不透明（玻璃只作用于顶栏/底栏）
-                BarBlurHost(enabled = state.glassEffect) {
-                    Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-                        when (tab) {
-                            0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                            1 -> FlowScreen(state, contentMod)
-                            2 -> MessagesScreen(state, contentMod)
-                            3 -> SettingsScreen(state, contentMod)
-                        }
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                    when (tab) {
+                        0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                        1 -> FlowScreen(state, contentMod)
+                        2 -> MessagesScreen(state, contentMod)
+                        3 -> SettingsScreen(state, contentMod)
+                    }
+                    // 悬浮导航栏：覆盖在内容之上（浮于底部中央，不挤占内容）
+                    if (state.navFloat) {
+                        LiquidNavBar(
+                            selectedTabIndex = tab,
+                            onTabSelected = { tab = it },
+                            items = tabs.map { it.icon to it.title },
+                            floatEnabled = true,
+                            glassEnabled = state.glassEffect
+                        )
                     }
                 }
             }
+        }
 
         // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
         if (showSort) {
             HyperDialog(
-                title = "排序",
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                title = "排序",
                 show = showSort,
                 onDismiss = { showSort = false }
             ) {
@@ -321,7 +335,8 @@ fun HyperFlowApp() {
         if (showUpd) {
             when (updPhase) {
                 "checking" -> HyperDialog(
-                    title = "检查更新",
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "检查更新",
                     summary = "正在检查更新…",
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -334,7 +349,8 @@ fun HyperFlowApp() {
                     }
                 }
                 "new" -> HyperDialog(
-                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
                     title = "更新日志",
                     summary = updVer,
                     show = showUpd,
@@ -376,7 +392,8 @@ fun HyperFlowApp() {
                     }
                 }
                 "busy" -> HyperDialog(
-                    title = "正在检查更新",
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "正在检查更新",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -388,7 +405,8 @@ fun HyperFlowApp() {
                     )
                 }
                 "none" -> HyperDialog(
-                    title = "已是最新版本",
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "已是最新版本",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -400,7 +418,8 @@ fun HyperFlowApp() {
                     )
                 }
                 else -> HyperDialog(
-                    title = "检查更新失败",
+
+                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "检查更新失败",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
