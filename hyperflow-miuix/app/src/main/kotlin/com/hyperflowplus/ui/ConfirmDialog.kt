@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,10 +29,9 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 /**
- * 通用确认弹窗（Miuix WindowDialog 样式，与引导页/检测更新一致）。
+ * 通用确认弹窗（HyperOS 弹窗样式，基于 [HyperDialog] 系统 Dialog 实现——稳定不闪退）。
  * - 左侧白色按钮（cancelText），右侧蓝色按钮（confirmText，倒计时内不可点）
  * - countdownSec > 0：确定按钮倒计时（期间点击 Toast 提示还剩 X 秒）
  * - checkboxText 非空：内容下方显示 Miuix Checkbox 勾选框（默认不勾），点确认时经 onCheckedConfirm 回调勾选状态
@@ -73,13 +73,13 @@ fun ConfirmDialog(
             if (onCheckedConfirm != null) onCheckedConfirm(checked) else onConfirm()
         }
     }
-    WindowDialog(
+    HyperDialog(
         title = title,
         summary = content,
         show = show,
-        onDismissRequest = { onDismiss() }
+        onDismiss = { onDismiss() }
     ) {
-        // 勾选框（可选项，Miuix Checkbox 同引导页）：点击整行切换；label 先取局部 val 保证 lambda 内类型稳定
+        // 勾选框（可选项，Miuix Checkbox 同引导页）：点击整行切换
         val label = checkboxText
         if (label != null) {
             Row(
@@ -101,6 +101,7 @@ fun ConfirmDialog(
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                 )
             }
+            Spacer(Modifier.height(12.dp))
         }
         if (singleConfirmText != null) {
             // 单按钮模式：右侧蓝色（HyperOS 弹窗确认位）

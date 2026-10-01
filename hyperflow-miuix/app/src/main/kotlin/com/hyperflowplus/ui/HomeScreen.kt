@@ -1,47 +1,83 @@
 package com.hyperflowplus.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** 分组标题（HyperOS 设置页风格） */
-@Composable
-fun GroupTitle(text: String) {
-    Text(
-        text,
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-    )
-}
+// 环境检测三态色：绿=通过 黄=部分 红=关键缺失
+private val CGreen = Color(0xFF34C759)
+private val CYellow = Color(0xFFFF9F0A)
+private val CRed = Color(0xFFFF3B30)
 
-/** 首页：服务开关 + 设备信息（Miuix Card 分组） */
+/** 首页：环境检测（红/黄/绿）+ 设备信息 —— 功能开关已移入"流转"页 */
 @Composable
 fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
+    var checking by remember { mutableStateOf(true) }
+    var rootOk by remember { mutableStateOf(false) }
+    var ksuOk by remember { mutableStateOf(false) }
+    var lspOk by remember { mutableStateOf(false) }
+    var milinkOk by remember { mutableStateOf(false) }
 
-    // 待确认的开关弹窗：null=无；其余为弹窗标识
-    var pendingToggle by remember { mutableStateOf<String?>(null) }
+    fun detect() {
+        checking = true
+        Thread {
+            val r = runCatching { RootExec.su("id -u 2>/dev/null | tr -d ' \\n'") }.getOrNull()?.trim() == "0"
+            val ksuRaw = runCatching { RootExec.su("ksud -V 2>/dev/null || echo none") }.getOrNull()?.trim()
+            val k = r && !ksuRaw.isNullOrBlank() && ksuRaw != "none"
+            val l = if (r) runCatching {
+                val out = RootExec.su("ls /data/adb/lspd 2>/dev/null | head -1; "
+                        + "ls /data/adb/modules/hyperflow/module.prop 2>/dev/null | head -1; "
+                        + "ls /data/adb/modules/hyperflowplus/module.prop 2>/dev/null | head -1")
+                !out.isNullOrBlank() && (out.contains("lspd") || out.contains("hyperflow") || out.contains("hyperflowplus"))
+            }.getOrDefault(false) else false
+            val m = runCatching {
+                val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
+                !pm.isNullOrBlank() && pm.contains("package:")
+            }.getOrDefault(false)
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                rootOk = r; ksuOk = k; lspOk = l; milinkOk = m
+                checking = false
+            }
+        }.start()
+    }
+
+    LaunchedEffect(Unit) { detect() }
 
     Column(
         modifier = modifier
@@ -49,63 +85,76 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
-        GroupTitle("通知流转")
+        // ===== 环境状态卡：全部通过=绿 / 部分缺失=黄 / Root 缺失=红 =====
+        val allOk = rootOk && ksuOk && lspOk && milinkOk
+        val level: Color = when {
+            !rootOk -> CRed
+            allOk -> CGreen
+            else -> CYellow
+        }
+        val levelText = when {
+            !rootOk -> "环境异常"
+            allOk -> "环境已就绪"
+            else -> "部分环境未就绪"
+        }
+        val levelSub = when {
+            !rootOk -> "未授予 Root 权限，点击下方按钮重新授权"
+            allOk -> "全部检测通过，功能可正常使用"
+            else -> "部分依赖缺失，可正常使用但部分功能受限"
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
-                    title = "亮屏流转",
-                    summary = "亮屏时强制模拟锁屏放行通知",
-                    checked = state.forceTransfer,
-                    onCheckedChange = { want ->
-                        if (want) pendingToggle = "force"   // 开启需确认
-                        else state.set("force_transfer", false)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(level.copy(alpha = 0.12f))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier.size(10.dp).clip(CircleShape).background(level)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            levelText,
+                            fontWeight = FontWeight.SemiBold,
+                            color = level,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            levelSub,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                        )
                     }
-                )
-                SwitchPreference(
-                    title = "分身流转",
-                    summary = "微信/QQ 分身通知流转（标题带【分身】）",
-                    checked = state.cloneTransfer,
-                    onCheckedChange = { want ->
-                        if (want) pendingToggle = "clone"
-                        else state.set("clone_transfer", false)
+                    Spacer(Modifier.weight(1f))
+                    if (checking) {
+                        Text("检测中…", style = MiuixTheme.textStyles.body2, color = level)
+                    } else {
+                        Button(
+                            onClick = { detect() },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Text("重新检测", fontSize = 13.sp)
+                        }
                     }
-                )
+                }
+                // 检测项明细（红/黄/绿圆点 + 文案）
+                EnvItem("Root 权限", rootOk, "已在 KernelSU 授权本应用" to "未授予 Root 权限")
+                EnvItem("KernelSU", ksuOk, "已安装并可用" to "未检测到 KernelSU")
+                EnvItem("LSPosed 模块", lspOk, "模块已刷入且框架可用" to "模块未刷入或框架未激活")
+                EnvItem("小米互联服务", milinkOk, "com.milink.service 正常" to "未安装小米互联服务")
             }
         }
 
-        // 短信持久化：默认展开子层（两个内联开关）
-        GroupTitle("短信持久化")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                SwitchPreference(
-                    title = "App 内消息",
-                    summary = if (state.archiveApp) "流转短信显示在消息页" else "关闭后消息页不显示流转短信",
-                    checked = state.archiveApp,
-                    onCheckedChange = { want ->
-                        if (want) pendingToggle = "archive"
-                        else pendingToggle = "archive_off"   // 关闭时选择是否保留本地记录
-                    }
-                )
-                SwitchPreference(
-                    title = "写入系统短信",
-                    summary = "写入系统收件箱（默认关闭：可能回环/被拦截，建议用 App 内消息）",
-                    checked = state.smsPersist,
-                    onCheckedChange = { want ->
-                        if (want) pendingToggle = "sms"   // 10 秒倒计时确认
-                        else state.set(Config.KEY_SMS_PERSIST, false)
-                    }
-                )
-            }
-        }
-
+        // ===== 设备信息 =====
         GroupTitle("设备信息")
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 设备信息直接展示（多行文本，不弹窗——弹窗在部分设备上会闪退）
-                // Root 行动态拼接 state.rootInfo：轮询授权后即时更新，不用重进 App
                 Text(
                     buildString {
                         append(state.deviceInfo.substringBefore("Root：").trimEnd().ifEmpty { "加载中…" })
@@ -121,7 +170,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 ArrowPreference(
                     title = "重新授权 Root",
-                    summary = "把 milink 与本模块加入 KSU 名单",
+                    summary = "把 milink 与本模块加入 KernelSU 名单",
                     onClick = {
                         Thread {
                             runCatching {
@@ -135,69 +184,32 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         }
     }
+}
 
-    // ===== 开启/关闭确认弹窗（Miuix WindowDialog；开启确认后才更新状态，关闭无弹窗直接生效） =====
-    when (pendingToggle) {
-        "force" -> ConfirmDialog(
-            show = true,
-            title = "你确定要开启亮屏流转嘛？",
-            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（来电、短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
-            onConfirm = { state.set("force_transfer", true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
+/** 检测项行：状态圆点（绿=通过 红=未通过）+ 名称 + 状态文案 */
+@Composable
+private fun EnvItem(title: String, ok: Boolean, texts: Pair<String, String>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(8.dp).clip(CircleShape).background(if (ok) CGreen else CRed)
         )
-        "clone" -> ConfirmDialog(
-            show = true,
-            title = "你确定要开启分身流转嘛？",
-            content = "开启后，在小米互联中已开启通知流转的分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
-            onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            title,
+            style = MiuixTheme.textStyles.body2,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
         )
-        "archive" -> ConfirmDialog(
-            show = true,
-            title = "你确定要开启 App 内消息嘛？",
-            content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
-            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        "sms" -> ConfirmDialog(
-            show = true,
-            title = "你确定要开启写入系统短信嘛？",
-            content = "开启后，流转短信会写入系统收件箱。可能存在错误显示、重复互联等问题（测试多次复现），遇到异常请及时关闭。",
-            countdownSec = 10,
-            onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        // 关闭 App 内消息：第一层=勾选框（勾选才清空本地数据）+ 蓝色"继续"；
-        // 勾选后点继续 → 第二层"确定删除/保留数据"二次确认
-        "archive_off" -> ConfirmDialog(
-            show = true,
-            title = "关闭 App 内消息？",
-            content = "关闭后消息页不再显示流转短信。本地保存的历史记录默认保留，重新开启后仍可查看。",
-            checkboxText = "同时清除本地保存的历史记录（删除后不可恢复）",
-            singleConfirmText = "继续",
-            onCheckedConfirm = { del ->
-                if (del) pendingToggle = "archive_del"   // 勾选清除 → 二次确认
-                else {
-                    state.set(Config.KEY_ARCHIVE_APP, false)   // 未勾选 → 直接关闭，保留本地
-                    pendingToggle = null
-                }
-            },
-            onDismiss = { pendingToggle = null }
-        )
-        // 第二层：左白"确定删除"（关闭+清空）/ 右蓝"保留数据"（只关闭，保留本地）
-        "archive_del" -> ConfirmDialog(
-            show = true,
-            title = "确定要删除本地数据？",
-            content = "删除后本地保存的历史短信记录将无法恢复（不影响小米互联端的数据）。",
-            cancelText = "确定删除",
-            confirmText = "保留数据",
-            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, false); pendingToggle = null },   // 蓝：只关闭
-            onCancel = {
-                state.set(Config.KEY_ARCHIVE_APP, false)
-                state.clearHistory()   // 白：关闭 + 清空本地
-                pendingToggle = null
-            },
-            onDismiss = { pendingToggle = null }
+        Spacer(Modifier.weight(1f))
+        Text(
+            if (ok) texts.first else texts.second,
+            style = MiuixTheme.textStyles.body2,
+            color = if (ok) CGreen.copy(alpha = 0.85f) else CRed.copy(alpha = 0.85f)
         )
     }
 }

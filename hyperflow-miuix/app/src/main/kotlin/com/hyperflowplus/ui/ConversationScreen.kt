@@ -34,7 +34,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import com.hyperflowplus.ui.HyperDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -118,10 +118,10 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
 
     // 正文排序弹窗
     if (showSort) {
-        OverlayDialog(
+        HyperDialog(
             title = "正文排序",
             show = showSort,
-            onDismissRequest = { showSort = false }
+            onDismiss = { showSort = false }
         ) {
             Column(Modifier.padding(horizontal = 8.dp)) {
                 DetailSortRow(

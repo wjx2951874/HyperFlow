@@ -1,27 +1,18 @@
 package com.hyperflowplus.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
@@ -29,16 +20,22 @@ import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** 设置页：外观（玻璃）/ 关于（作者、版本与更新、引导） */
+/** 设置页：主题（悬浮导航栏/液态玻璃）→ 调试（调试模式/分享日志）→ 关于（作者/源码/许可/获取更新） */
 @Composable
-fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
 
+    fun browse(url: String) {
+        runCatching {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            Toast.makeText(ctx, "无法打开链接：$url", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -46,64 +43,107 @@ fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
+        // ===== 主题 =====
+        GroupTitle("主题")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                SwitchPreference(
+                    title = "悬浮导航栏",
+                    summary = if (state.navFloat) "已开启悬浮导航栏" else "关闭后使用系统导航栏",
+                    checked = state.navFloat,
+                    onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
+                )
+                SwitchPreference(
+                    title = "液态玻璃",
+                    summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
+                    checked = state.glassEffect,
+                    onCheckedChange = { state.set(Config.KEY_GLASS, it) }
+                )
+            }
+        }
+
+        // ===== 调试 =====
+        GroupTitle("调试")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                SwitchPreference(
+                    title = "调试模式",
+                    summary = if (state.debugMode) "已开启：保存详细运行日志" else "关闭后仅保留关键日志",
+                    checked = state.debugMode,
+                    onCheckedChange = { state.set(Config.KEY_DEBUG_MODE, it) }
+                )
+                ArrowPreference(
+                    title = "分享运行日志",
+                    summary = "导出调试日志用于反馈问题",
+                    onClick = {
+                        val ctxA = ctx
+                        Thread {
+                            val log = runCatching {
+                                RootExec.su("logcat -d -t 300 2>/dev/null | grep -iE 'hyperflow|milink|LSPosed|AndroidRuntime' | tail -200")
+                            }.getOrNull() ?: "日志为空"
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "HyperFlow 运行日志")
+                                    putExtra(Intent.EXTRA_TEXT, "HyperFlow v" + BuildConfig.VERSION_NAME + "\n\n" + log)
+                                }
+                                runCatching { ctxA.startActivity(Intent.createChooser(send, "分享日志")) }
+                                    .onFailure { Toast.makeText(ctxA, "无可用分享应用", Toast.LENGTH_SHORT).show() }
+                            }
+                        }.start()
+                    }
+                )
+            }
+        }
+
+        // ===== 关于 =====
         GroupTitle("关于")
 
         Card(Modifier.fillMaxWidth()) {
             Column {
                 ArrowPreference(
                     title = "HyperFlow",
-                    summary = "澎湃OS 互联通知流转增强 · V${BuildConfig.VERSION_NAME}",
+                    summary = "v${BuildConfig.VERSION_NAME} · 澎湃OS 互联通知流转增强",
                     onClick = {}
                 )
                 ArrowPreference(
                     title = "作者",
-                    summary = "酷安@翰德姆",
-                    onClick = {
-                        runCatching {
-                            ctx.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://www.coolapk.com/u/4112338")
-                                )
-                            )
-                        }
-                    }
+                    summary = "酷安 @翰德姆（关注反馈，会回关哦）",
+                    onClick = { browse("https://www.coolapk.com/u/4112338") }
                 )
                 ArrowPreference(
-                    title = "版本与更新",
-                    summary = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· 点击检查更新",
-                    onClick = { onCheckUpdate() }
+                    title = "查看源代码",
+                    summary = "GitHub：wjx2951874/HyperFlow（GPL-3.0 开源）",
+                    onClick = { browse("https://github.com/wjx2951874/HyperFlow") }
                 )
                 ArrowPreference(
-                    title = "重新查看引导",
-                    summary = "查看功能说明与状态检测",
-                    onClick = { state.showOnboarding = true }
+                    title = "开放源代码许可",
+                    summary = "本项目使用了 KernelSU / LSPosed / Miuix 等开源库，详细许可见源码仓库",
+                    onClick = { browse("https://github.com/wjx2951874/HyperFlow#licenses") }
+                )
+                ArrowPreference(
+                    title = "获取更新",
+                    summary = "检查 GitHub 最新版本（KernelSU 模块页亦提供在线更新）",
+                    onClick = { MainHolder.onCheckUpdate() }
                 )
             }
         }
 
-        GroupTitle("开源与声明")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                ArrowPreference(
-                    title = "Miuix",
-                    summary = "Compose Miuix UI，Apache-2.0 许可证",
-                    onClick = {}
-                )
-                ArrowPreference(
-                    title = "KernelSU",
-                    summary = "KernelSU 模块框架，GPL-3.0 许可证",
-                    onClick = {}
-                )
-                ArrowPreference(
-                    title = "LSPosed",
-                    summary = "Xposed 框架，GPL-3.0 许可证",
-                    onClick = {}
-                )
-            }
-        }
+        // 开源致谢小字
+        Text(
+            "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区 · 本项目由 AI 辅助开发调试，并经人工验证",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        )
     }
-
 }
 
+/** 供设置页回调 MainActivity 的检测更新入口（避免循环依赖） */
+object MainHolder {
+    var onCheckUpdate: () -> Unit = {}
+}

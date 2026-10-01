@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,7 +50,7 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
+import com.hyperflowplus.ui.HyperDialog
 
 /**
  * 引导弹窗（Miuix 风格，三步流程）：
@@ -91,11 +93,13 @@ fun OnboardingScreen(state: HFState) {
             .background(Color.Black.copy(alpha = 0.45f)),
         contentAlignment = Alignment.BottomCenter
     ) {
+        val maxCardH = LocalConfiguration.current.screenHeightDp.dp * 0.78f
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 64.dp)
+                .padding(bottom = 40.dp)
+                .heightIn(max = maxCardH)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MiuixTheme.colorScheme.surface)
                 .border(
@@ -167,10 +171,11 @@ private fun StageAgreement(
     )
     Spacer(Modifier.height(18.dp))
 
-    // 说明内容区：内容较长时可滚动（按钮与勾选固定底部）
+    // 说明内容区：weight 弹性占位——内容长时可滚动，勾选/按钮固定底部不随滚动消失
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = 300.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -390,7 +395,7 @@ private fun StageDiagnosis(
 
     // Root 授权引导弹窗（跳转失败时用户可按步骤手动操作）
     if (showAuthHelp) {
-        WindowDialog(
+        HyperDialog(
             title = "如何授权 Root 权限",
             summary = "HyperFlow 需要 KernelSU 授予超级用户权限，请按以下步骤操作：\n\n" +
                     "1. 打开 KernelSU 应用；\n" +
@@ -398,7 +403,7 @@ private fun StageDiagnosis(
                     "3. 点击允许并勾选（默认授予）；\n" +
                     "4. 返回本页点击「重新检测」。\n\n也可以直接点击下方按钮尝试打开 KernelSU。",
             show = showAuthHelp,
-            onDismissRequest = { showAuthHelp = false }
+            onDismiss = { showAuthHelp = false }
         ) {
             Row(Modifier.fillMaxWidth()) {
                 Button(

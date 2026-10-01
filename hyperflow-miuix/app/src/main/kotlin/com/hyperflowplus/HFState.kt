@@ -88,6 +88,9 @@ object HFState {
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val archiveApp: Boolean get() = cfg.optBoolean("archive_app", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
+    val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏
+    val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃
+    val debugMode: Boolean get() = cfg.optBoolean("debug_mode", false)       // 调试模式
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
@@ -258,7 +261,29 @@ object HFState {
             val finalFlow = flowText
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
-            saveCache(finalCfg, finalFlow)   // 文件 IO 留在后台线程
+            val finalDev = "机型：${android.os.Build.MANUFACTURER.uppercase()} ${android.os.Build.MODEL}\n" +
+                    "澎湃OS：${fMiui.ifEmpty { "未知" }}\n" +
+                    "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
+                    "内核：${fKernel.ifEmpty { "未知" }}\n" +
+                    "Root：${finalRoot} / KSU ${fKsu}"
+            // ===== 秒开：先用缓存快照渲染上次状态，再后台重查覆盖 =====
+            val cache = readCache()
+            if (cache != null) {
+                val cparts = cache.split("@@CFG|@@FLOW|@@DEV".toRegex())
+                val cCfg = if (cparts.size > 1 && cparts[1].trim().isNotEmpty()) cparts[1].trim() else null
+                val cFlow = if (cparts.size > 2) cparts[2].trim() else null
+                val cDev = if (cparts.size > 3) cparts[3].trim() else null
+                if (cCfg != null || cFlow != null || cDev != null) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        if (cCfg != null) cfg = runCatching { JSONObject(cCfg) }.getOrDefault(JSONObject())
+                        if (cFlow != null && cFlow.isNotBlank() && flow.isEmpty()) flow = cFlow
+                        if (cDev != null && cDev.isNotBlank()) applyDevSnapshot(cDev)
+                        loading = false   // 缓存已渲染，秒开完成（后台刷新完成后再次置 false）
+                    }
+                }
+            }
+            // ===== 后台重查（真值） =====
+            saveCache(finalCfg, finalFlow, finalDev)   // 文件 IO 留在后台线程
             val mergedFlow = if (finalFlow != null) {
                 if (finalCfg != null && runCatching { JSONObject(finalCfg).optBoolean("archive_app", false) }.getOrDefault(false)) {
                     val hist = readHistory()
@@ -268,7 +293,7 @@ object HFState {
                 }
             } else null
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                cfg = runCatching { JSONObject(finalCfg ?: "") }.getOrDefault(JSONObject())
+                if (finalCfg != null) cfg = runCatching { JSONObject(finalCfg) }.getOrDefault(JSONObject())
                 if (mergedFlow != null) flow = mergedFlow
                 else if (finalFlow != null) flow = finalFlow
                 rootInfo = finalRoot
@@ -276,11 +301,7 @@ object HFState {
                 androidVersion = fAndroid
                 kernelVersion = fKernel
                 ksuVersion = fKsu
-                deviceInfo = "机型：${android.os.Build.MODEL}\n" +
-                        "澎湃OS：${fMiui.ifEmpty { "未知" }}\n" +
-                        "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
-                        "内核：${fKernel.ifEmpty { "未知" }}\n" +
-                        "Root：${finalRoot} / KSU ${fKsu}"
+                deviceInfo = finalDev
                 subtitle = if (finalRoot.contains("可用")) "澎湃OS 互联通知流转增强" else "root 不可用，仅界面展示"
                 loading = false
             }
@@ -290,11 +311,11 @@ object HFState {
     // ===== 缓存（秒开） =====
     private fun Context.getFileDir(name: String): java.io.File = java.io.File(filesDir, name)
 
-    private fun saveCache(cfgText: String?, flowText: String?) {
+    private fun saveCache(cfgText: String?, flowText: String?, devSnapshot: String?) {
         val f = cacheFile ?: return
         try {
             f.parentFile?.mkdirs()
-            f.writeText("@@CFG\n" + (cfgText ?: "") + "\n@@FLOW\n" + (flowText ?: ""))
+            f.writeText("@@CFG\n" + (cfgText ?: "") + "\n@@FLOW\n" + (flowText ?: "") + "\n@@DEV\n" + (devSnapshot ?: ""))
         } catch (t: Throwable) {
         }
     }
@@ -306,6 +327,25 @@ object HFState {
         } catch (t: Throwable) {
             null
         }
+    }
+
+    /** 解析缓存中的设备快照并立即渲染（秒开：启动先显示上次状态，后台重查后再覆盖） */
+    private fun applyDevSnapshot(snap: String?) {
+        if (snap.isNullOrBlank()) return
+        for (l in snap.split("\n")) {
+            when {
+                l.startsWith("澎湃OS：") -> miuiOsVersion = l.removePrefix("澎湃OS：").trim()
+                l.startsWith("Android：") -> androidVersion = l.removePrefix("Android：").trim()
+                l.startsWith("内核：") -> kernelVersion = l.removePrefix("内核：").trim()
+                l.startsWith("Root：") -> {
+                    val rest = l.removePrefix("Root：").trim()
+                    rootInfo = rest.substringBefore("/").trim().ifEmpty { "su 不可用" }
+                    val ksu = rest.substringAfter("/", "").trim()
+                    if (ksu.isNotEmpty()) ksuVersion = ksu
+                }
+            }
+        }
+        deviceInfo = snap
     }
 
     private fun saveCfgLater() {

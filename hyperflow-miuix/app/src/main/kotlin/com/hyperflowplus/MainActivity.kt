@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,12 +54,14 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import com.hyperflowplus.ui.ConversationScreen
+import com.hyperflowplus.ui.FlowScreen
 import com.hyperflowplus.ui.HomeScreen
+import com.hyperflowplus.ui.HyperDialog
+import com.hyperflowplus.ui.MainHolder
 import com.hyperflowplus.ui.MessagesScreen
 import com.hyperflowplus.ui.OnboardingScreen
 import com.hyperflowplus.ui.SettingsScreen
@@ -86,9 +89,49 @@ fun HyperFlowApp() {
     MiuixTheme(controller = controller) {
         val state = HFState
         val ctx = LocalContext.current
+        var tab by remember { mutableIntStateOf(0) }
+        var showSort by remember { mutableStateOf(false) }
+        var showUpd by remember { mutableStateOf(false) }
+        var updVer by remember { mutableStateOf("") }
+        var updUrl by remember { mutableStateOf("") }
+        var updLog by remember { mutableStateOf("") }
+        var updPhase by remember { mutableStateOf("idle") }   // idle/checking/new/none/error
+        var updMsg by remember { mutableStateOf("") }
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
+            MainHolder.onCheckUpdate = {
+                // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示
+                updPhase = "checking"
+                updMsg = ""
+                showUpd = true
+                checkUpdate(
+                    onNew = { ver, url, log ->
+                        runCatching {
+                            updVer = ver; updUrl = url; updLog = log
+                            updPhase = "new"; showUpd = true
+                        }
+                    },
+                    onNone = {
+                        runCatching {
+                            updMsg = "当前使用的是 V${BuildConfig.VERSION_NAME}。"
+                            updPhase = "none"; showUpd = true
+                        }
+                    },
+                    onError = {
+                        runCatching {
+                            updMsg = it
+                            updPhase = "error"; showUpd = true
+                        }
+                    },
+                    onBusy = {
+                        runCatching {
+                            updMsg = "正在检查中，请稍候再试"
+                            updPhase = "busy"; showUpd = true
+                        }
+                    }
+                )
+            }
         }
         // 引导判断：首次（App 私有标记，root 无关）显示引导页
         LaunchedEffect(state.cfg) {
@@ -107,14 +150,6 @@ fun HyperFlowApp() {
             }
         }
 
-        var tab by remember { mutableIntStateOf(0) }
-        var showSort by remember { mutableStateOf(false) }
-        var showUpd by remember { mutableStateOf(false) }
-        var updVer by remember { mutableStateOf("") }
-        var updUrl by remember { mutableStateOf("") }
-        var updLog by remember { mutableStateOf("") }
-        var updPhase by remember { mutableStateOf("idle") }   // idle/checking/new/none/error
-        var updMsg by remember { mutableStateOf("") }
 
         // 会话详情（独立覆盖页，返回手势/返回键返回列表）
         val conversation = state.currentConversation
@@ -128,11 +163,12 @@ fun HyperFlowApp() {
 
         val tabs = listOf(
             Tab("首页", Icons.Filled.Home),
+            Tab("流转", Icons.Filled.Send),
             Tab("消息", Icons.Filled.Notifications),
             Tab("设置", Icons.Filled.Settings)
         )
-        // 首页/消息/设置各显示页面名（软件名移到设置页关于区）
-        val title = when (tab) { 0 -> "首页"; 1 -> "消息"; 2 -> "设置"; else -> "" }
+        // 四个页面各显示页面名（软件名移到设置页关于区）
+        val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
@@ -141,7 +177,7 @@ fun HyperFlowApp() {
                     title = title,
                     modifier = Modifier.background(MiuixTheme.colorScheme.surface)
                 ) {
-                    if (tab == 1) {
+                    if (tab == 2) {
                         IconButton(onClick = { showSort = true }) {
                             top.yukonga.miuix.kmp.basic.Icon(
                                 imageVector = Icons.Filled.KeyboardArrowDown,
@@ -171,53 +207,19 @@ fun HyperFlowApp() {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
                     when (tab) {
                         0 -> HomeScreen(state, contentMod)
-                        1 -> MessagesScreen(state, contentMod)
-                        else -> SettingsScreen(
-                            state,
-                            onCheckUpdate = {
-                                // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示（不再用 Toast）
-                                updPhase = "checking"
-                                updMsg = ""
-                                showUpd = true
-                                checkUpdate(
-                                    onNew = { ver, url, log ->
-                                        runCatching {
-                                            updVer = ver; updUrl = url; updLog = log
-                                            updPhase = "new"; showUpd = true
-                                        }
-                                    },
-                                    onNone = {
-                                        runCatching {
-                                            updMsg = "当前使用的是 V${BuildConfig.VERSION_NAME}。"
-                                            updPhase = "none"; showUpd = true
-                                        }
-                                    },
-                                    onError = {
-                                        runCatching {
-                                            updMsg = it
-                                            updPhase = "error"; showUpd = true
-                                        }
-                                    },
-                                    onBusy = {
-                                        runCatching {
-                                            updMsg = "正在检查中，请稍候再试"
-                                            updPhase = "busy"; showUpd = true
-                                        }
-                                    }
-                                )
-                            },
-                            contentMod
-                        )
+                        1 -> FlowScreen(state, contentMod)
+                        2 -> MessagesScreen(state, contentMod)
+                        3 -> SettingsScreen(state, contentMod)
                     }
                 }
             }
 
-        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；WindowDialog 防 Overlay 闪退）
+        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
         if (showSort) {
-            WindowDialog(
+            HyperDialog(
                 title = "排序",
                 show = showSort,
-                onDismissRequest = { showSort = false }
+                onDismiss = { showSort = false }
             ) {
                 Column(Modifier.padding(horizontal = 8.dp)) {
                     Text(
@@ -285,14 +287,14 @@ fun HyperFlowApp() {
             }
         }
 
-        // 更新检测弹窗（MIUI 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
+        // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
         if (showUpd) {
             when (updPhase) {
-                "checking" -> WindowDialog(
+                "checking" -> HyperDialog(
                     title = "检查更新",
                     summary = "正在检查更新…",
                     show = showUpd,
-                    onDismissRequest = { showUpd = false }
+                    onDismiss = { showUpd = false }
                 ) {
                     Box(
                         Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -301,11 +303,11 @@ fun HyperFlowApp() {
                         CircularProgressIndicator(progress = null)
                     }
                 }
-                "new" -> WindowDialog(
+                "new" -> HyperDialog(
                     title = "发现新版本 V$updVer",
                     summary = updLog.ifEmpty { "检测到新版本，请前往 KernelSU 更新模块（模块内 APK 将一并更新，无需单独安装）" },
                     show = showUpd,
-                    onDismissRequest = { showUpd = false }
+                    onDismiss = { showUpd = false }
                 ) {
                     Row(Modifier.fillMaxWidth()) {
                         Button(
@@ -328,11 +330,11 @@ fun HyperFlowApp() {
                         }
                     }
                 }
-                "busy" -> WindowDialog(
+                "busy" -> HyperDialog(
                     title = "正在检查更新",
                     summary = updMsg,
                     show = showUpd,
-                    onDismissRequest = { showUpd = false }
+                    onDismiss = { showUpd = false }
                 ) {
                     TextButton(
                         text = "关闭",
@@ -340,11 +342,11 @@ fun HyperFlowApp() {
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                "none" -> WindowDialog(
+                "none" -> HyperDialog(
                     title = "已是最新版本",
                     summary = updMsg,
                     show = showUpd,
-                    onDismissRequest = { showUpd = false }
+                    onDismiss = { showUpd = false }
                 ) {
                     TextButton(
                         text = "关闭",
@@ -352,11 +354,11 @@ fun HyperFlowApp() {
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                else -> WindowDialog(
+                else -> HyperDialog(
                     title = "检查更新失败",
                     summary = updMsg,
                     show = showUpd,
-                    onDismissRequest = { showUpd = false }
+                    onDismiss = { showUpd = false }
                 ) {
                     TextButton(
                         text = "关闭",

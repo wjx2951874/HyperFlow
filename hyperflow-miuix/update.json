@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.9",
-  "versionCode": 44,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.9/HyperFlow-0.4.9-flashable.zip",
-  "changelog": "·液态玻璃重做：iOS 26 Liquid Glass 安卓实现（lens 折射+深度效果+色散光效+高斯模糊+边缘暗调），顶栏/底栏跟随壁纸实时折射，对标 AndroidLiquidGlass\n·消息列表排序（发送人 A→Z / Z→A / 最近 / 最早）+ 正文排序独立设置\n·机型英文原样显示、Root 动态刷新\n·两步引导 + 酷安互关入口\n·自定义大标题顶栏"
+  "version": "v0.4.31",
+  "versionCode": 66,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.31/HyperFlow-0.4.31-flashable.zip",
+  "changelog": "·弹窗全面重构：改用引导页同款覆盖层方案，修复全部弹窗闪退（写入系统短信/检测更新/排序/关闭确认）\n·引导页协议卡片布局修复：长文可滑动、按钮固定、不溢出\n·启动秒加载：先渲染上次状态，后台再刷新\n·4 Tab 导航：首页（环境检测红黄绿）/流转（四大开关）/消息/设置\n·设置页重构：主题（悬浮导航栏/液态玻璃）/调试（调试模式/分享日志）/关于\n·完整机型显示（厂商+型号）"
 }

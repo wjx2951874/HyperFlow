@@ -1,2 +1,5 @@
 *.zip
 *.tar.gz
+hyperflow-miuix/.gradle/
+hyperflow-miuix/**/build/
+hyperflow-miuix/local.properties

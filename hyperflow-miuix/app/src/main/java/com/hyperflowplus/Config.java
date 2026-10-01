@@ -38,6 +38,8 @@ public final class Config {
     public static final String KEY_AUTO_UNLOCK = "auto_unlock";             // 功能⑤（P1）自动输锁屏密码开关
     public static final String KEY_AUTO_UNLOCK_PASSWORD = "auto_unlock_pwd"; // 功能⑤（P1）明文密码，用户自行填写
     public static final String KEY_GLASS = "glass_effect";                  // UI 玻璃效果开关（毛玻璃卡片）
+    public static final String KEY_NAV_FLOAT = "nav_float";                 // 主题：悬浮导航栏开关
+    public static final String KEY_DEBUG_MODE = "debug_mode";               // 调试：调试模式（保存详细日志）
     public static final String KEY_ARCHIVE_SORT = "archive_sort";           // 消息列表排序 name_asc/name_desc/time_asc/time_desc（默认 name_asc 按发送人）
     public static final String KEY_DETAIL_SORT = "detail_sort";             // 正文列表排序 desc/asc（默认 desc 新在前）
 
