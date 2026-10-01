@@ -1,6 +1,6 @@
 {
-  "version": "0.4.26",
-  "versionCode": 61,
-  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.26-flashable.zip",
-  "changelog": "消息页排序修复（时间戳比较）；消息列表短信 App 布局（名称左/时间设备右对齐）；检测更新重复点击显示正在检查中"
+  "version": "0.4.27",
+  "versionCode": 62,
+  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.27-flashable.zip",
+  "changelog": "来电亮屏全屏接听实测版：模拟锁屏扩展到广播链路；来电通知链路短路避免双显示"
 }
