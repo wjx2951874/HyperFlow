@@ -457,18 +457,27 @@ private fun StageFeedback(
     )
     Spacer(Modifier.height(26.dp))
 
-    // 按钮左右排布：左白（我知道了，倒计时 10s 后可点）/ 右蓝（我现在关注，随时可点）
+    // 按钮左右排布：左白（我知道了，倒计时内点击弹提示）/ 右蓝（我现在关注，随时可点）
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
-            enabled = countdown <= 0,
-            onClick = onDone,
+            onClick = {
+                if (countdown > 0) {
+                    android.widget.Toast.makeText(
+                        ctx,
+                        "$countdown 秒后才可以点击，不妨去酷安关注下作者",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    onDone()
+                }
+            },
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors()
         ) {
-            Text(if (countdown > 0) "我知道了（$countdown）" else "我知道了")
+            Text("我知道了")
         }
         Button(
             onClick = {
