@@ -11,9 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      VERSION_NAME: 0.4.8
-      VERSION_CODE: 43
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +50,11 @@ jobs:
       - name: Assemble flashable zip
         run: |
           set -e
+          # 版本号从 ksu-module/module.prop 动态读取（单一事实来源，避免 workflow env 缓存旧值）
+          VERSION_NAME=$(grep '^version=' hyperflow-miuix/ksu-module/module.prop | head -1 | cut -d= -f2)
+          VERSION_CODE=$(grep '^versionCode=' hyperflow-miuix/ksu-module/module.prop | head -1 | cut -d= -f2)
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           APK=hyperflow-miuix/app/build/outputs/apk/release/app-release.apk
           test -f "$APK" || { echo "APK not found"; exit 1; }
           rm -rf flash && mkdir -p flash/system/priv-app/HyperFlowPlus
