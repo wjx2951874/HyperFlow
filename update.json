@@ -1,1 +1,1 @@
-{"version": "0.4.18", "versionCode": 53, "zipUrl": "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/releases/HyperFlow-0.4.18-flashable.zip", "changelog": "v0.4.18：① 首页分组改「通知流转」；② 引导页三步重做（协议说明弹窗 + Miuix 勾选 + 诊断页可点击跳转 KernelSU/LSPosed 授权 + 酷安互关卡片）。"}
+{"version": "0.4.19", "versionCode": 54, "zipUrl": "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/releases/HyperFlow-0.4.19-flashable.zip", "changelog": "v0.4.19：① 酷安卡片点击跳转回来自动完成引导；② 按钮一蓝一白（Miuix 主色/浅色）左右排布；③ 酷安文案优化（更新/反馈/催更都在酷安）。"}
