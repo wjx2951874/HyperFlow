@@ -3,3 +3,6 @@
 hyperflow-miuix/.gradle/
 hyperflow-miuix/**/build/
 hyperflow-miuix/local.properties
+
+# 内部文档（禁止提交）
+docs-internal/
