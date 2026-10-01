@@ -1,6 +1,6 @@
 {
-  "version": "0.4.3",
-  "versionCode": 38,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.3/HyperFlow-0.4.3-flashable.zip",
-  "changelog": "消息解析修复（键值对正确切分/来源设备 notification_ref/时间紧凑格式）；短信App会话样式；消息页右上角排序；引导页+状态检测；设备信息详情；AndroidLiquidGlass 柔光玻璃；标题随页面；KSU 标题去版本号；更新通道指向 GitHub Release"
+  "version": "v0.4.7",
+  "versionCode": 42,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.7/HyperFlow-0.4.7-flashable.zip",
+  "changelog": "分身通知点击直达分身微信（HookCloneClick 剥除 hf_clone_ 前缀还原 key，命中分身原始 contentIntent）；引导页三步流程（协议勾选同意→诊断→互关）；主/分身重合双保险；消息按发送人合并+机型移时间后；玻璃顶栏/底栏局部模糊+强度调节；首页标题；root 授权阻断+循环检测"
 }
