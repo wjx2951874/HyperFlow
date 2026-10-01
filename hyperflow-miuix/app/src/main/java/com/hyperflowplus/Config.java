@@ -22,11 +22,11 @@ public final class Config {
     private static final String PREFS = "hyperflowplus_cfg";
     public static final String GLOBAL_CFG = "/data/adb/hyperflowplus/config.json";
     // 首选 github raw（无 CDN 缓存，永远最新）；jsDelivr 有 12h 缓存会导致误报"已是最新"（v0.4.7 起）
-    // 更新通道（App 内按序尝试，哪个通用哪个）：jsDelivr 双域名 + GitHub raw 兜底
+    // 更新通道（App 内按序尝试，哪个通用哪个）：GitHub raw 优先（HMA 等模块已验证手机端可达）+ jsDelivr 兜底
     public static final String[] UPDATE_JSON_URLS = {
+            "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json",
             "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json",
-            "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json",
-            "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json"
+            "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json"
     };
 
     // 功能开关（全局配置 key）
