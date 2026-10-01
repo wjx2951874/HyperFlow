@@ -1,6 +1,6 @@
 {
-  "version": "0.4.12",
-  "versionCode": 47,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.12/HyperFlow-0.4.12-flashable.zip",
-  "changelog": "v0.4.12：①短信持久化二级菜单（App内消息/写入系统短信，写入默认关+风险提示）②亮屏/分身流转开启前确认弹窗 ③壁纸Monet动态取色（HyperOS配色）④配色风格6选一 ⑤KSU在线更新走jsDelivr"
+  "version": "0.4.13",
+  "versionCode": 48,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.13/HyperFlow-0.4.13-flashable.zip",
+  "changelog": "v0.4.13：更新链路强化（jsDelivr首选国内可达、5秒超时、点击立即反馈、结果必弹提示）"
 }
