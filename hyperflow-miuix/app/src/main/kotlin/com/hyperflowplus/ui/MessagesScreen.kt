@@ -63,32 +63,34 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     }
     LazyColumn(modifier.fillMaxSize()) {
         items(convos, key = { it.first }) { (sender, rows) ->
-            val latest = rows.maxByOrNull { it[0] } ?: return@items
+            val latest = rows.maxByOrNull { timeToEpoch(it[0]) } ?: return@items
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { state.currentConversation = sender to rows }
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // 行 1：发送人名称（系统短信样式，左对齐加粗）
-                Text(
-                    sender,
-                    style = MiuixTheme.textStyles.body1,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                // 行 2：时间｜来自设备（小字灰色，紧跟名称下方）
-                Text(
-                    fmtTime(latest[0]) +
-                        if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 3.dp)
-                )
-                // 行 3：最新正文预览（灰色小字，最多两行）
+                // 行 1：发送人名称（左，加粗）+ 最近时间｜来自设备（右，灰色小字，短信 App 样式）
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        sender,
+                        style = MiuixTheme.textStyles.body1,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        fmtTime(latest[0]) +
+                            if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                // 行 2：最新正文预览（灰色小字，最多两行）
                 Text(
                     latest[2].ifEmpty { "(无正文)" },
                     style = MiuixTheme.textStyles.body2,
@@ -123,16 +125,21 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
             .replace(Regex("[\\uFFFD\\u0000-\\u001F]"), "")
             .trim()
         if (title.isEmpty() && body.isEmpty()) continue
-        // 只按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
-        // 分身微信因标题带【分身】前缀天然分开
-        groups.getOrPut(title) { mutableListOf() }.add(arrayOf(time, device, body))
+        // 按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
+        // 标题为空时回退到设备名，避免全部挤进"未知"分组
+        val key = title.ifEmpty { device.ifEmpty { "未知" } }
+        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body))
     }
     val list = groups.map { it.key to it.value }.toMutableList()
     val timeDesc = sort == "time_desc" || sort == "desc"
     val nameDesc = sort == "name_desc"
     val byName = sort.startsWith("name")
     for ((_, rows) in list) {
-        rows.sortWith { a, b -> if (timeDesc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
+        // 时间排序：统一解析成时间戳再比较（content_time 有 yyyyMMddTHHmmss 和 yyyy-MM-dd HH:mm 两种格式，字符串比较会错乱）
+        rows.sortWith { a, b ->
+            if (timeDesc) (timeToEpoch(b[0]) - timeToEpoch(a[0])).toInt()
+            else (timeToEpoch(a[0]) - timeToEpoch(b[0])).toInt()
+        }
     }
     list.sortWith { a, b ->
         if (byName) {
@@ -140,10 +147,23 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         } else {
             val ta = a.second.firstOrNull()?.get(0) ?: ""
             val tb = b.second.firstOrNull()?.get(0) ?: ""
-            if (timeDesc) tb.compareTo(ta) else ta.compareTo(tb)
+            if (timeDesc) (timeToEpoch(tb) - timeToEpoch(ta)).toInt()
+            else (timeToEpoch(ta) - timeToEpoch(tb)).toInt()
         }
     }
     return list
+}
+
+/** 解析两种时间格式为时间戳（排序用）：20260930T155344 / 2026-09-30 15:53 */
+private fun timeToEpoch(raw: String): Long {
+    if (raw.isBlank()) return 0L
+    return runCatching {
+        if (raw.contains("T")) {
+            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
+        } else {
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
+        }
+    }.getOrDefault(0L)
 }
 
 /** 取键值对中某字段值；结束边界 = 下一个已知字段（含 ", " 前缀），避免正文内逗号干扰 */

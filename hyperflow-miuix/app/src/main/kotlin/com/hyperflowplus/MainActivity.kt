@@ -197,6 +197,12 @@ fun HyperFlowApp() {
                                             updMsg = it
                                             updPhase = "error"; showUpd = true
                                         }
+                                    },
+                                    onBusy = {
+                                        runCatching {
+                                            updMsg = "正在检查中，请稍候再试"
+                                            updPhase = "busy"; showUpd = true
+                                        }
                                     }
                                 )
                             },
@@ -322,6 +328,18 @@ fun HyperFlowApp() {
                         }
                     }
                 }
+                "busy" -> WindowDialog(
+                    title = "正在检查更新",
+                    summary = updMsg,
+                    show = showUpd,
+                    onDismissRequest = { showUpd = false }
+                ) {
+                    TextButton(
+                        text = "关闭",
+                        onClick = { showUpd = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 "none" -> WindowDialog(
                     title = "已是最新版本",
                     summary = updMsg,
@@ -391,10 +409,11 @@ private val updateChecking = java.util.concurrent.atomic.AtomicBoolean(false)
 private fun checkUpdate(
     onNew: (String, String, String) -> Unit,
     onNone: () -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    onBusy: () -> Unit = {}
 ) {
     if (!updateChecking.compareAndSet(false, true)) {
-        onError("正在检查中，请稍候再试")
+        onBusy()
         return
     }
     Thread {
