@@ -340,36 +340,35 @@ private fun StageCoolapk(
     onDone: () -> Unit
 ) {
     Text(
-        "一起去酷安看看",
+        "去酷安关注作者",
         style = MiuixTheme.textStyles.title1,
         fontWeight = FontWeight.Bold
     )
     Spacer(Modifier.height(8.dp))
     Text(
-        "我是酷安@翰德姆，加个关注（会回关的哦，好友位有限，先到先得），\n" +
+        "我是酷安@翰德姆，加个关注呗（会回关的哦，好友位有限，先到先得）\n" +
+                "更新、反馈、催更都在酷安，有问题随时来找我，\n" +
                 "咱们一起把 HyperFlow 做得更好~",
         style = MiuixTheme.textStyles.body2,
         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f),
         textAlign = TextAlign.Center
     )
-    Spacer(Modifier.height(10.dp))
-    Text(
-        "遇到问题随时点进酷安找作者反馈",
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-        textAlign = TextAlign.Center
-    )
     Spacer(Modifier.height(26.dp))
 
+    // 蓝色主按钮：点完跳酷安，回来直接完成引导（不再停留）
     Button(
-        onClick = { openCoolapk(ctx) }
+        onClick = {
+            openCoolapk(ctx)
+            onDone()
+        },
+        colors = ButtonDefaults.buttonColorsPrimary()
     ) {
         Text("去酷安看看")
     }
     Spacer(Modifier.height(8.dp))
+    // 白色次按钮：默认浅色，保持一蓝一白
     Button(
-        onClick = onDone,
-        colors = ButtonDefaults.buttonColors()
+        onClick = onDone
     ) {
         Text("算了，先跳过")
     }
