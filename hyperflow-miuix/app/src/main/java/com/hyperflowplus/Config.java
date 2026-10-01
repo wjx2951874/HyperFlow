@@ -26,10 +26,16 @@ public final class Config {
     // - jsDelivr：国内可达性好，但默认有 12h CDN 缓存 → 必须带时间戳参数穿透（v0.4.32 修复误报"已是最新"）
     public static String[] updateJsonUrls() {
         long v = System.currentTimeMillis() / 1000;
+        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
         return new String[]{
-                "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json?t=" + v,
+                // 国内可达主力：jsDelivr（带时间戳穿透 CDN 缓存）
                 "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json?v=" + v,
-                "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json?v=" + v
+                "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json?v=" + v,
+                // GitHub 国内加速镜像兜底
+                "https://ghfast.top/" + raw,
+                "https://gh-proxy.com/" + raw,
+                // raw 直连（海外/代理环境）
+                raw + "?t=" + v
         };
     }
 

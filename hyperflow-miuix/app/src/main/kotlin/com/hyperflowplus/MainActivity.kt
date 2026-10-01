@@ -10,10 +10,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -330,20 +334,35 @@ fun HyperFlowApp() {
                     }
                 }
                 "new" -> HyperDialog(
-                    title = "发现新版本 V$updVer",
-                    summary = updLog.ifEmpty { "检测到新版本，请前往 KernelSU 更新模块（模块内 APK 将一并更新，无需单独安装）" },
+                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+                    title = "更新日志",
+                    summary = updVer,
                     show = showUpd,
                     onDismiss = { showUpd = false }
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 230.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 2.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            updLog.ifEmpty { "检测到新版本，请点击「更新」前往 KernelSU 安装。" },
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                    Spacer(Modifier.height(18.dp))
                     Row(Modifier.fillMaxWidth()) {
-                        Button(
+                        TextButton(
+                            text = "取消",
                             onClick = { showUpd = false },
-                            colors = ButtonDefaults.buttonColors(),
                             modifier = Modifier.weight(1f)
-                        ) {
-                            Text("稍后再说")
-                        }
-                        Spacer(Modifier.width(20.dp))
+                        )
+                        Spacer(Modifier.width(16.dp))
                         Button(
                             onClick = {
                                 showUpd = false
@@ -352,7 +371,7 @@ fun HyperFlowApp() {
                             colors = ButtonDefaults.buttonColorsPrimary(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("去 KernelSU 更新")
+                            Text("更新")
                         }
                     }
                 }
