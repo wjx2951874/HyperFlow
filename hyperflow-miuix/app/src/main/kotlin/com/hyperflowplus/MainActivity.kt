@@ -51,6 +51,7 @@ import android.widget.Toast
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -112,6 +113,8 @@ fun HyperFlowApp() {
         var updVer by remember { mutableStateOf("") }
         var updUrl by remember { mutableStateOf("") }
         var updLog by remember { mutableStateOf("") }
+        var updPhase by remember { mutableStateOf("idle") }   // idle/checking/new/none/error
+        var updMsg by remember { mutableStateOf("") }
 
         // 会话详情（独立覆盖页，返回手势/返回键返回列表）
         val conversation = state.currentConversation
@@ -172,21 +175,27 @@ fun HyperFlowApp() {
                         else -> SettingsScreen(
                             state,
                             onCheckUpdate = {
-                                Toast.makeText(ctx, "正在检查更新…", Toast.LENGTH_SHORT).show()
+                                // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示（不再用 Toast）
+                                updPhase = "checking"
+                                updMsg = ""
+                                showUpd = true
                                 checkUpdate(
                                     onNew = { ver, url, log ->
                                         runCatching {
-                                            updVer = ver; updUrl = url; updLog = log; showUpd = true
+                                            updVer = ver; updUrl = url; updLog = log
+                                            updPhase = "new"; showUpd = true
                                         }
                                     },
                                     onNone = {
                                         runCatching {
-                                            Toast.makeText(ctx, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                                            updMsg = "当前使用的是 V${BuildConfig.VERSION_NAME}。"
+                                            updPhase = "none"; showUpd = true
                                         }
                                     },
                                     onError = {
                                         runCatching {
-                                            Toast.makeText(ctx, "检查更新失败：$it", Toast.LENGTH_SHORT).show()
+                                            updMsg = it
+                                            updPhase = "error"; showUpd = true
                                         }
                                     }
                                 )
@@ -270,33 +279,72 @@ fun HyperFlowApp() {
             }
         }
 
-        // 发现新版本弹窗（引导式：提示前往 KernelSU 更新模块，APK 随模块一并更新，版本永远一致）
+        // 更新检测弹窗（MIUI 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
         if (showUpd) {
-            WindowDialog(
-                title = "发现新版本 V$updVer",
-                summary = updLog.ifEmpty { "检测到新版本，请前往 KernelSU 更新模块（模块内 APK 将一并更新，无需单独安装）" },
-                show = showUpd,
-                onDismissRequest = { showUpd = false }
-            ) {
-                Row(Modifier.fillMaxWidth()) {
-                    Button(
+            when (updPhase) {
+                "checking" -> WindowDialog(
+                    title = "检查更新",
+                    summary = "正在检查更新…",
+                    show = showUpd,
+                    onDismissRequest = { showUpd = false }
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(progress = null)
+                    }
+                }
+                "new" -> WindowDialog(
+                    title = "发现新版本 V$updVer",
+                    summary = updLog.ifEmpty { "检测到新版本，请前往 KernelSU 更新模块（模块内 APK 将一并更新，无需单独安装）" },
+                    show = showUpd,
+                    onDismissRequest = { showUpd = false }
+                ) {
+                    Row(Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { showUpd = false },
+                            colors = ButtonDefaults.buttonColors(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("稍后再说")
+                        }
+                        Spacer(Modifier.width(20.dp))
+                        Button(
+                            onClick = {
+                                showUpd = false
+                                launchKernelSu()
+                            },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("去 KernelSU 更新")
+                        }
+                    }
+                }
+                "none" -> WindowDialog(
+                    title = "已是最新版本",
+                    summary = updMsg,
+                    show = showUpd,
+                    onDismissRequest = { showUpd = false }
+                ) {
+                    TextButton(
+                        text = "关闭",
                         onClick = { showUpd = false },
-                        colors = ButtonDefaults.buttonColors(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("稍后再说")
-                    }
-                    Spacer(Modifier.width(20.dp))
-                    Button(
-                        onClick = {
-                            showUpd = false
-                            launchKernelSu()
-                        },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("去 KernelSU 更新")
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                else -> WindowDialog(
+                    title = "检查更新失败",
+                    summary = updMsg,
+                    show = showUpd,
+                    onDismissRequest = { showUpd = false }
+                ) {
+                    TextButton(
+                        text = "关闭",
+                        onClick = { showUpd = false },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
