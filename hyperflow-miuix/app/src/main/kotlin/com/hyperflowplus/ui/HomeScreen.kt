@@ -67,11 +67,25 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                     checked = state.cloneTransfer,
                     onCheckedChange = { state.set("clone_transfer", it) }
                 )
+            }
+        }
+
+        // 短信持久化：默认展开子层（两个内联开关，不用弹窗，避免点击闪退）
+        GroupTitle("短信持久化")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
                 SwitchPreference(
-                    title = "短信持久化",
-                    summary = "保存流转短信（App 内消息 / 写入系统短信在设置页选择）",
-                    checked = state.smsPersist || state.archiveApp,
-                    onCheckedChange = { state.set("sms_persist", it) }
+                    title = "App 内消息",
+                    summary = if (state.archiveApp) "流转短信显示在消息页" else "关闭后消息页不显示流转短信",
+                    checked = state.archiveApp,
+                    onCheckedChange = { state.set(Config.KEY_ARCHIVE_APP, it) }
+                )
+                SwitchPreference(
+                    title = "写入系统短信",
+                    summary = "写入系统收件箱（默认关闭：可能回环/被拦截，建议用 App 内消息）",
+                    checked = state.smsPersist,
+                    onCheckedChange = { state.set(Config.KEY_SMS_PERSIST, it) }
                 )
             }
         }
