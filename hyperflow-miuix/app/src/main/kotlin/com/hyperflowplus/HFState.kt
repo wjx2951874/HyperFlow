@@ -20,6 +20,7 @@ object HFState {
     var subtitle by mutableStateOf("澎湃OS 互联通知流转增强")
     var currentConversation by mutableStateOf<Pair<String, List<Array<String>>>?>(null)
     var deviceInfo by mutableStateOf("")          // 设备详情（多行文本）
+    var deviceName by mutableStateOf("")          // 机型名（品牌+数字，如 Redmi Note 12 Turbo）
     var miuiOsVersion by mutableStateOf("")        // 澎湃 OS 版本号
     var androidVersion by mutableStateOf("")       // Android 版本
     var kernelVersion by mutableStateOf("")        // 内核版本
@@ -225,7 +226,7 @@ object HFState {
             var cfgText: String? = null
             var flowText: String? = null
             var rootRaw = "su 不可用"
-            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devKsu = "未检测"
+            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devKsu = "未检测"
             try {
                 // 先读本地缓存（渲染素材）
                 val cache = readCache()
@@ -241,7 +242,7 @@ object HFState {
                         + "content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60; "
                         + "echo @@ROOT; id -u; echo @@DEV; "
                         + "getprop ro.mi.os.version.name; getprop ro.build.version.release; uname -r; "
-                        + "ksud -V 2>/dev/null || echo 'none'")
+                        + "getprop ro.product.marketname; ksud -V 2>/dev/null || echo 'none'")
                 if (all != null) {
                     val parts = all.split("@@CFG|@@FLOW|@@ROOT|@@DEV".toRegex())
                     if (parts.size > 1) cfgText = parts[1].trim()
@@ -253,6 +254,7 @@ object HFState {
                         if (dev.size > 1) devAndroid = dev[1].trim()
                         if (dev.size > 2) devKernel = dev[2].trim()
                         if (dev.size > 3) devKsu = if (dev[3].trim() == "none") "未安装" else dev[3].trim()
+                        if (dev.size > 4) devModel = dev[4].trim()
                     }
                 }
             } catch (t: Throwable) {
@@ -261,7 +263,7 @@ object HFState {
             val finalFlow = flowText
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
-            val finalDev = "机型：${android.os.Build.MANUFACTURER.uppercase()} ${android.os.Build.MODEL}\n" +
+            val finalDev = "机型：${devModel.ifEmpty { android.os.Build.MANUFACTURER.uppercase() + " " + android.os.Build.MODEL }}（${android.os.Build.MODEL}）\n" +
                     "澎湃OS：${fMiui.ifEmpty { "未知" }}\n" +
                     "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
                     "内核：${fKernel.ifEmpty { "未知" }}\n" +
@@ -302,6 +304,7 @@ object HFState {
                 kernelVersion = fKernel
                 ksuVersion = fKsu
                 deviceInfo = finalDev
+                deviceName = finalDev.substringAfter("机型：").substringBefore("（").trim()
                 subtitle = if (finalRoot.contains("可用")) "澎湃OS 互联通知流转增强" else "root 不可用，仅界面展示"
                 loading = false
             }
@@ -334,6 +337,7 @@ object HFState {
         if (snap.isNullOrBlank()) return
         for (l in snap.split("\n")) {
             when {
+                l.startsWith("机型：") -> deviceName = l.removePrefix("机型：").substringBefore("（").trim()
                 l.startsWith("澎湃OS：") -> miuiOsVersion = l.removePrefix("澎湃OS：").trim()
                 l.startsWith("Android：") -> androidVersion = l.removePrefix("Android：").trim()
                 l.startsWith("内核：") -> kernelVersion = l.removePrefix("内核：").trim()

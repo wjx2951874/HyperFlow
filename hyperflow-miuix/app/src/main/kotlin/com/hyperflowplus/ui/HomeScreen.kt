@@ -3,6 +3,7 @@ package com.hyperflowplus.ui
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -90,6 +91,14 @@ done
 find /data/adb -maxdepth 7 -path "*scope*" -type f 2>/dev/null | while read f; do
   case "${'$'}f" in *lspd*|*lsposed*) echo "==FILEX ${'$'}(basename ${'$'}f)";; esac
 done
+echo ==DB;
+# LSPosed 1.9+（含 KernelSU 内嵌版）：启用状态存在 SQLite 数据库 modules_config.db，无 modules.list/scope 文件
+for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
+  [ -f "${'$'}db" ] && { echo "==DBFILE ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"; }
+done
+find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
+  echo "==DBX ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"
+done
 echo ==END""") }.getOrNull() else null
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
             if (!out.isNullOrBlank()) {
@@ -101,9 +110,12 @@ echo ==END""") }.getOrNull() else null
                     out.contains("lspd") || out.contains("lsposed"))
             val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
             val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
+            val dbSeg = out?.substringAfter("==DB", "") ?: ""
+            // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）
+            val dbHit = dbSeg.contains("==HF_IN_DB")
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
-            val modEnabled = lspInstalled && hasModName(modsSeg)
-            val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true))
+            val modEnabled = (lspInstalled && hasModName(modsSeg)) || dbHit
+            val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")
@@ -197,25 +209,81 @@ echo ==END""") }.getOrNull() else null
         )
         EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
 
-        // ===== 设备信息 =====
+        // ===== 设备信息（大框大标题 + 小卡网格） =====
         GroupTitle("设备信息")
 
-        Card(Modifier.fillMaxWidth()) {
-            Column {
+        // 解析各字段（机型行格式：机型：Redmi Note 12 Turbo（23049RP8BC））
+        val devLine = state.deviceInfo.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val modelName = state.deviceName.ifEmpty {
+            devLine.firstOrNull { it.startsWith("机型：") }?.removePrefix("机型：")?.substringBefore("（")?.trim() ?: "加载中…"
+        }
+        val modelCode = devLine.firstOrNull { it.startsWith("机型：") }?.substringAfter("（", "")?.substringBefore("）")?.trim() ?: ""
+        val miuiV = devLine.firstOrNull { it.startsWith("澎湃OS：") }?.removePrefix("澎湃OS：")?.trim() ?: state.miuiOsVersion
+        val andV = devLine.firstOrNull { it.startsWith("Android：") }?.removePrefix("Android：")?.trim() ?: state.androidVersion
+        val kernV = devLine.firstOrNull { it.startsWith("内核：") }?.removePrefix("内核：")?.trim() ?: state.kernelVersion
+        val rootV = if (state.rootInfo.isNotEmpty()) "${state.rootInfo} / KSU ${state.ksuVersion}" else "未授权"
+
+        // 大框：机型小标题 + 品牌数字大标题 + 括号型号
+        Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    buildString {
-                        append(state.deviceInfo.substringBefore("Root：").trimEnd().ifEmpty { "加载中…" })
-                        if (state.deviceInfo.isNotEmpty()) {
-                            append("\nRoot：").append(state.rootInfo).append(" / KSU ").append(state.ksuVersion)
-                        }
-                    },
+                    "机型",
                     style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    modelName,
+                    fontSize = 22.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.onBackground,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1
+                )
+                if (modelCode.isNotEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "型号：$modelCode",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
+                    )
+                }
             }
+        }
+
+        // 小卡网格（两行两列，圆角小块）
+        @Composable
+        fun InfoCard(label: String, value: String) {
+            Card(Modifier.weight(1f).padding(vertical = 3.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp)
+                ) {
+                    Text(
+                        label,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        value.ifEmpty { "未知" },
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            InfoCard("澎湃OS", miuiV)
+            InfoCard("Android", andV)
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            InfoCard("内核", kernV)
+            InfoCard("Root", rootV)
         }
     }
 }

@@ -49,7 +49,7 @@ fun HyperDialog(
     title: String? = null,
     summary: String? = null,
     onDismiss: () -> Unit,
-    bottomInset: Dp = 24.dp,
+    bottomInset: Dp = 40.dp,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     AnimatedVisibility(

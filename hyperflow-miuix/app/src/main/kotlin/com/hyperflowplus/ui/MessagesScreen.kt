@@ -70,7 +70,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         }
         ConfirmDialog(
             show = showStartDialog,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "你确定要开启 App 内消息嘛？",
             content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
             onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); showStartDialog = false },
@@ -182,6 +182,17 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         // 标题为空时回退到设备名，避免全部挤进"未知"分组
         val key = title.ifEmpty { device.ifEmpty { "未知" } }
         groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src))
+    }
+    // 去重：本地归档与小米端（云端）同一条短信重复显示 → 云端优先，本地隐藏；
+    // 同会话内以「时间戳+正文」为唯一键，live 记录保留、local 记录丢弃（本地独有的仍保留并带 hf_source=local 标记）
+    for ((_, rows) in groups) {
+        val seen = HashMap<String, Boolean>()
+        rows.removeAll { r ->
+            val k = r[0] + "|" + r[2]
+            val isLive = r.getOrNull(3) != "local"
+            if (isLive) { seen[k] = true; false }
+            else { seen[k] ?: false }
+        }
     }
     val list = groups.map { it.key to it.value }.toMutableList()
     val timeDesc = sort == "time_desc" || sort == "desc"

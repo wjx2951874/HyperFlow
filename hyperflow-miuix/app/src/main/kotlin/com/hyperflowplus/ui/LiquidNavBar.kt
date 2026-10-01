@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -218,105 +219,65 @@ private fun FloatingPlainBar(
 
 // ===== 普通模式 + 液态玻璃 =====
 
-@Composable
-private fun RowLiquidBar(
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit,
-    items: List<Pair<ImageVector, String>>,
-    backdrop: Backdrop,
-) {
-    val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
-    val pillShape = RoundedCornerShape(28.dp)
-    val containerColor = MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
-    val contentColor = MiuixTheme.colorScheme.onSurface
+// ===== 三层液态玻璃核心（InstallerX/KernelSU 同源：基础层 + 透明捕获层 + 组合折射指示器） =====
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectableGroup()
-            .dropShadow(
-                shape = pillShape,
-                shadow = Shadow(
-                    radius = 10.dp,
-                    color = androidx.compose.ui.graphics.Color.Black,
-                    alpha = if (isDark) 0.2f else 0.1f,
-                ),
-            )
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { pillShape },
-                effects = {
-                    vibrancy()
-                    blur(4.dp.toPx(), 4.dp.toPx())
-                    lens(24.dp.toPx(), 24.dp.toPx())
-                },
-                highlight = { IndicatorSpecular.copy(alpha = 0.75f) },
-                onDrawSurface = { drawRect(containerColor) },
-            )
-            .innerShadow(shape = pillShape) {
-                com.hyperflowplus.ui.liquid.InnerShadow(radius = 8.dp)
-            }
-            .height(56.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        items.forEachIndexed { i, (icon, label) ->
-            Column(
-                modifier = Modifier
-                    .selectable(
-                        selected = selectedTabIndex == i,
-                        interactionSource = null,
-                        indication = null,
-                        onClick = { onTabSelected(i) },
-                    )
-                    .fillMaxHeight()
-                    .weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-            ) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp))
-                Text(
-                    label,
-                    fontSize = 11.sp,
-                    color = contentColor,
-                    maxLines = 1,
-                )
-            }
+@Composable
+private fun RowScope.LiquidTabs(
+    items: List<Pair<ImageVector, String>>,
+    active: Boolean,
+    onTabSelected: (Int) -> Unit,
+    tabWidth: androidx.compose.ui.unit.Dp,
+) {
+    val onSurface = MiuixTheme.colorScheme.onSurface
+    val color = if (active) MiuixTheme.colorScheme.primary
+    else onSurface.copy(alpha = 0.65f)
+    items.forEachIndexed { i, (icon, label) ->
+        Column(
+            modifier = Modifier
+                .width(tabWidth.coerceAtLeast(56.dp))
+                .clickable { onTabSelected(i) }
+                .padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(2.dp))
+            Text(label, fontSize = 11.sp, color = color)
         }
     }
 }
 
-// ===== 悬浮模式 + 液态玻璃（单层稳定版：玻璃胶囊 + 简单移动指示器） =====
-
+/** 共享三层结构：基础层（玻璃胶囊）+ 透明捕获层（选中态内容）+ 组合折射指示器胶囊 */
 @Composable
-private fun FloatingLiquidBar(
+private fun LiquidGlassLayers(
+    items: List<Pair<ImageVector, String>>,
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
-    items: List<Pair<ImageVector, String>>,
     backdrop: Backdrop,
+    floating: Boolean,
 ) {
-    // 单层结构：玻璃胶囊（drawBackdrop 光效链）+ 移动指示器。
-    // 弃用 combinedBackdrop/layerBackdrop 组合捕获（部分 KernelSU 设备渲染空白），指示器用 Miuix 风格半透明胶囊。
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
     val pillShape = RoundedCornerShape(28.dp)
     val containerColor = MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val density = LocalDensity.current
     var totalWidthPx by remember { mutableFloatStateOf(0f) }
     var tabWidthPx by remember { mutableFloatStateOf(0f) }
+    val tabsBackdrop = rememberLayerBackdrop()
+    val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
     val indicatorAnim by animateFloatAsState(
         targetValue = selectedTabIndex.toFloat(),
         animationSpec = tween(320),
-        label = "flIndicator"
+        label = "liquidIndicator"
     )
+    val tabWidthDp = with(density) { tabWidthPx.toDp() }
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp + navBottom),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
+        // ===== 基础层（未选中态玻璃胶囊） =====
         Row(
             modifier = Modifier
+                .selectableGroup()
                 .onGloballyPositioned { coords ->
                     totalWidthPx = coords.size.width.toFloat()
                     tabWidthPx = (totalWidthPx - with(density) { 8.dp.toPx() }) / items.size.coerceAtLeast(1)
@@ -340,50 +301,101 @@ private fun FloatingLiquidBar(
                     highlight = { IndicatorSpecular.copy(alpha = 0.75f) },
                     onDrawSurface = { drawRect(containerColor) },
                 )
-                .innerShadow(shape = pillShape) {
-                    com.hyperflowplus.ui.liquid.InnerShadow(radius = 8.dp)
-                }
                 .height(64.dp)
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            items.forEachIndexed { i, (icon, label) ->
-                val selected = selectedTabIndex == i
-                Column(
-                    modifier = Modifier
-                        .width(with(density) { tabWidthPx.toDp() }.coerceAtLeast(56.dp))
-                        .clickable { onTabSelected(i) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (selected) MiuixTheme.colorScheme.onSurface
-                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        label,
-                        fontSize = 11.sp,
-                        color = if (selected) MiuixTheme.colorScheme.onSurface
-                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
+            LiquidTabs(items, active = false, onTabSelected = onTabSelected, tabWidth = tabWidthDp)
         }
-        // 移动指示胶囊（Miuix 风格半透明，不带玻璃组合捕获，保证全设备稳定渲染）
+        // ===== 透明捕获层：选中态内容写入 tabsBackdrop（不可见，仅供指示器折射） =====
+        Row(
+            modifier = Modifier
+                .clearAndSetSemantics {}
+                .alpha(0f)
+                .layerBackdrop(tabsBackdrop)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { pillShape },
+                    effects = {
+                        vibrancy()
+                        blur(4.dp.toPx(), 4.dp.toPx())
+                        lens(refractionHeight = 24.dp.toPx(), refractionAmount = 24.dp.toPx())
+                    },
+                    onDrawSurface = { drawRect(containerColor) },
+                )
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LiquidTabs(items, active = true, onTabSelected = onTabSelected, tabWidth = tabWidthDp)
+        }
+        // ===== 指示器层：combinedBackdrop（背景+选中内容）折射胶囊 =====
         if (tabWidthPx > 0f) {
             Box(
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
                     .graphicsLayer { translationX = indicatorAnim * tabWidthPx }
-                    .clip(pillShape)
-                    .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                    .width(with(density) { tabWidthPx.toDp() })
+                    .drawBackdrop(
+                        backdrop = combinedBackdrop,
+                        shape = { pillShape },
+                        effects = {
+                            lens(
+                                refractionHeight = 10.dp.toPx(),
+                                refractionAmount = 14.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = 0.5f,
+                            )
+                        },
+                        highlight = { IndicatorSpecular.copy(alpha = 1f) },
+                        onDrawSurface = {
+                            drawRect(
+                                if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f)
+                                else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.1f)
+                            )
+                        },
+                    )
+                    .innerShadow(shape = pillShape) {
+                        com.hyperflowplus.ui.liquid.InnerShadow(
+                            radius = 8.dp,
+                            color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.15f),
+                            alpha = 1f,
+                        )
+                    }
                     .height(56.dp)
+                    .width(tabWidthDp),
             ) {}
         }
+    }
+}
+
+// ===== 普通全宽液态（三层） =====
+
+@Composable
+private fun RowLiquidBar(
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    items: List<Pair<ImageVector, String>>,
+    backdrop: Backdrop,
+) {
+    LiquidGlassLayers(items, selectedTabIndex, onTabSelected, backdrop, floating = false)
+}
+
+// ===== 悬浮液态（三层，底部上浮胶囊） =====
+
+@Composable
+private fun FloatingLiquidBar(
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    items: List<Pair<ImageVector, String>>,
+    backdrop: Backdrop,
+) {
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp + navBottom),
+        contentAlignment = Alignment.Center,
+    ) {
+        LiquidGlassLayers(items, selectedTabIndex, onTabSelected, backdrop, floating = true)
     }
 }

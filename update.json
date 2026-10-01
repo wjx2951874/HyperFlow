@@ -1,6 +1,6 @@
 {
- "version": "v0.4.40",
- "versionCode": 75,
- "zipUrl": "https://ghfast.top/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.40/HyperFlow-0.4.40-flashable.zip",
- "changelog": "·修复悬浮液态：单层稳定版（弃用组合捕获，此前部分设备开启悬浮后底部空白）\n·修复 LSP 检测：find 全盘遍历 modules.list/scope（覆盖全部 LSPosed 变体路径），结果写 detect.log\n·弹窗位置靠下：学引导页贴底遮住导航栏（此前上移过高）\n·引导页「退出」直接关闭应用\n·移除页面\"由衷感谢\"字样\n·普通液态玻璃增强 innerShadow"
+ "version": "v0.4.41",
+ "versionCode": 76,
+ "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.41/HyperFlow-0.4.41-flashable.zip",
+ "changelog": "·App 下载更新包改调用系统浏览器（通知栏进度条、断点续传），不再后台无进度转圈\n·KSU 在线检测通道换 gh-proxy.com（ghfast 在国内网络不可达），日本/国内双覆盖\n·检测弹窗显示更新日志（通道名 + changelog）"
 }

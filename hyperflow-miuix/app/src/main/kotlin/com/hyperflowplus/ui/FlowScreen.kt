@@ -88,7 +88,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     when (pendingToggle) {
         "force" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "你确定要开启亮屏流转嘛？",
             content = "开启后会模拟锁屏状态，让小米互联中已开启应用（来电、短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
@@ -96,7 +96,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         "clone" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "你确定要开启分身流转嘛？",
             content = "开启后，在小米互联中已开启通知流转的分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
             onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
@@ -104,7 +104,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         "archive" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "你确定要开启 App 内消息嘛？",
             content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
             onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); pendingToggle = null },
@@ -112,7 +112,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         "sms" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "你确定要开启写入系统短信嘛？",
             content = "开启后，流转短信会写入系统收件箱。可能存在错误显示、重复互联等问题（测试多次复现），遇到异常请及时关闭。",
             countdownSec = 10,
@@ -123,7 +123,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         // 勾选后点继续 → 第二层"确定删除/保留数据"二次确认
         "archive_off" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "关闭 App 内消息？",
             content = "关闭后消息页不再显示流转短信。本地保存的历史记录默认保留，重新开启后仍可查看。",
             checkboxText = "同时清除本地保存的历史记录（删除后不可恢复）",
@@ -140,7 +140,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         // 第二层：左白"确定删除"（关闭+清空）/ 右蓝"保留数据"（只关闭，保留本地）
         "archive_del" -> ConfirmDialog(
             show = true,
-            bottomInset = if (state.navFloat) 56.dp else 24.dp,
+            bottomInset = 40.dp,
             title = "确定要删除本地数据？",
             content = "删除后本地保存的历史短信记录将无法恢复（不影响小米互联端的数据）。",
             cancelText = "确定删除",

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -40,6 +42,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,7 @@ import android.widget.Toast
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -214,11 +218,113 @@ fun HyperFlowApp() {
                     modifier = Modifier.background(MiuixTheme.colorScheme.surface)
                 ) {
                     if (tab == 2) {
-                        IconButton(onClick = { showSort = true }) {
-                            top.yukonga.miuix.kmp.basic.Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = "排序"
-                            )
+                        Box {
+                            IconButton(onClick = { showSort = true }) {
+                                top.yukonga.miuix.kmp.basic.Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = "排序"
+                                )
+                            }
+                            // KSU 风格排序下拉菜单：点 Sort 图标在右上角展开（Popup 锚定，非系统 Dialog，防闪退）
+                            if (showSort) {
+                                androidx.compose.ui.window.Popup(
+                                    alignment = Alignment.TopEnd,
+                                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
+                                    onDismissRequest = { showSort = false }
+                                ) {
+                                    val cur = state.archiveSort
+                                    val dim = if (cur.startsWith("name")) "name" else "time"
+                                    val desc = cur.endsWith("desc")
+                                    Surface(
+                                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                        shadowElevation = 10.dp,
+                                        modifier = Modifier.width(230.dp)
+                                    ) {
+                                        Column(Modifier.padding(vertical = 6.dp)) {
+                                            @Composable
+                                            fun Item(label: String, summary: String, sel: Boolean, onClick: () -> Unit) {
+                                                Row(
+                                                    Modifier.fillMaxWidth()
+                                                        .clickable(onClick = onClick)
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        label,
+                                                        style = MiuixTheme.textStyles.body1,
+                                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Text(
+                                                        summary,
+                                                        style = MiuixTheme.textStyles.body2,
+                                                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                                                        modifier = Modifier.padding(end = 6.dp)
+                                                    )
+                                                    if (sel) {
+                                                        top.yukonga.miuix.kmp.basic.Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = "已选",
+                                                            tint = MiuixTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Item(
+                                                "发送人",
+                                                if (dim == "name") (if (desc) "Z→A" else "A→Z") else "",
+                                                dim == "name",
+                                                {
+                                                    if (state.archiveSort != "name_" + (if (desc) "desc" else "asc")) {
+                                                        state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_" + (if (desc) "desc" else "asc"))
+                                                    }
+                                                    showSort = false
+                                                }
+                                            )
+                                            Item(
+                                                "时间",
+                                                if (dim == "time") (if (desc) "新→旧" else "旧→新") else "",
+                                                dim == "time",
+                                                {
+                                                    if (state.archiveSort != "time_" + (if (desc) "desc" else "asc")) {
+                                                        state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_" + (if (desc) "desc" else "asc"))
+                                                    }
+                                                    showSort = false
+                                                }
+                                            )
+                                            Box(
+                                                Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp)
+                                                    .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
+                                            )
+                                            // 底部倒序开关（KSU 风格）
+                                            Row(
+                                                Modifier.fillMaxWidth()
+                                                    .clickable { showSort = false }
+                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    "倒序",
+                                                    style = MiuixTheme.textStyles.body1,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                top.yukonga.miuix.kmp.basic.Switch(
+                                                    checked = desc,
+                                                    onCheckedChange = {
+                                                        state.setSortValue(
+                                                            Config.KEY_ARCHIVE_SORT,
+                                                            dim + "_" + (if (desc) "asc" else "desc")
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -261,86 +367,14 @@ fun HyperFlowApp() {
             }
         }
 
-        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
-        if (showSort) {
-            HyperDialog(
-
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                title = "排序",
-                show = showSort,
-                onDismiss = { showSort = false }
-            ) {
-                Column(Modifier.padding(horizontal = 8.dp)) {
-                    Text(
-                        "消息列表排序",
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    SortOptionRow(
-                        label = "发送人 A→Z",
-                        selected = state.archiveSort == "name_asc",
-                        onClick = {
-                            if (state.archiveSort != "name_asc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_asc")
-                            showSort = false
-                        }
-                    )
-                    SortOptionRow(
-                        label = "发送人 Z→A",
-                        selected = state.archiveSort == "name_desc",
-                        onClick = {
-                            if (state.archiveSort != "name_desc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_desc")
-                            showSort = false
-                        }
-                    )
-                    SortOptionRow(
-                        label = "最近接收在前",
-                        selected = state.archiveSort == "time_desc" || state.archiveSort == "desc",
-                        onClick = {
-                            if (state.archiveSort != "time_desc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_desc")
-                            showSort = false
-                        }
-                    )
-                    SortOptionRow(
-                        label = "最早接收在前",
-                        selected = state.archiveSort == "time_asc" || state.archiveSort == "asc",
-                        onClick = {
-                            if (state.archiveSort != "time_asc") state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_asc")
-                            showSort = false
-                        }
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "正文排序",
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    SortOptionRow(
-                        label = "最新在前",
-                        selected = state.detailSort != "asc",
-                        onClick = {
-                            if (state.detailSort != "desc") state.setSort(Config.KEY_DETAIL_SORT)
-                            showSort = false
-                        }
-                    )
-                    SortOptionRow(
-                        label = "最早在前",
-                        selected = state.detailSort == "asc",
-                        onClick = {
-                            if (state.detailSort == "desc") state.setSort(Config.KEY_DETAIL_SORT)
-                            showSort = false
-                        }
-                    )
-                }
-            }
-        }
+        // 排序菜单已内联在 topBar 的 Sort 图标下方（KSU 风格下拉，Popup 锚定，见 topBar 块）
 
         // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
         if (showUpd) {
             when (updPhase) {
                 "checking" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                    title = "检查更新",
+                    bottomInset = 40.dp,                    title = "检查更新",
                     summary = "正在检查更新…",
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -354,7 +388,7 @@ fun HyperFlowApp() {
                 }
                 "new" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+                    bottomInset = 40.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
                     title = "更新日志",
                     summary = updVer,
                     show = showUpd,
@@ -397,7 +431,7 @@ fun HyperFlowApp() {
                 }
                 "busy" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                    title = "正在检查更新",
+                    bottomInset = 40.dp,                    title = "正在检查更新",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -410,7 +444,7 @@ fun HyperFlowApp() {
                 }
                 "none" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                    title = "已是最新版本",
+                    bottomInset = 40.dp,                    title = "已是最新版本",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -423,7 +457,7 @@ fun HyperFlowApp() {
                 }
                 else -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 56.dp else 24.dp,                    title = "检查更新失败",
+                    bottomInset = 40.dp,                    title = "检查更新失败",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -440,8 +474,8 @@ fun HyperFlowApp() {
         if (updMethod) {
             HyperDialog(
                 title = "选择更新方式",
-                summary = "① 直接下载更新包：稍后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
-                bottomInset = if (state.navFloat) 56.dp else 24.dp,
+                summary = "① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
+                bottomInset = 40.dp,
                 show = updMethod,
                 onDismiss = { updMethod = false }
             ) {
@@ -457,14 +491,10 @@ fun HyperFlowApp() {
                     Spacer(Modifier.width(16.dp))
                     Button(
                         onClick = {
+                            // 调用系统浏览器下载：通知栏可见进度、支持断点；下载完到 KSU 从本地安装
                             updMethod = false
-                            updDownloading = true
-                            updDlError = null
-                            downloadUpdateZip(ctx, updUrl) { ok, msg ->
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    updDownloading = false
-                                    if (ok) updDownloaded = msg else updDlError = msg
-                                }
+                            if (!openBrowserDownload(ctx, updUrl)) {
+                                updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
                             }
                         },
                         colors = ButtonDefaults.buttonColorsPrimary(),
@@ -481,7 +511,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "正在下载更新包",
                 summary = "正在从镜像通道下载，请稍候…",
-                bottomInset = if (state.navFloat) 56.dp else 24.dp,
+                bottomInset = 40.dp,
                 show = updDownloading,
                 onDismiss = { updDownloading = false }
             ) {
@@ -499,7 +529,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "更新包已下载",
                 summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
-                bottomInset = if (state.navFloat) 56.dp else 24.dp,
+                bottomInset = 40.dp,
                 show = true,
                 onDismiss = { updDownloaded = null }
             ) {
@@ -529,7 +559,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "下载失败",
                 summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
-                bottomInset = if (state.navFloat) 56.dp else 24.dp,
+                bottomInset = 40.dp,
                 show = true,
                 onDismiss = { updDlError = null }
             ) {
@@ -538,12 +568,8 @@ fun HyperFlowApp() {
                         text = "重试下载",
                         onClick = {
                             updDlError = null
-                            updDownloading = true
-                            downloadUpdateZip(ctx, updUrl) { ok, msg ->
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    updDownloading = false
-                                    if (ok) updDownloaded = msg else updDlError = msg
-                                }
+                            if (!openBrowserDownload(ctx, updUrl)) {
+                                updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
                             }
                         },
                         modifier = Modifier.weight(1f)
@@ -762,6 +788,18 @@ private fun downloadUpdateZip(ctx: Context, url: String, onDone: (Boolean, Strin
         }
     }.start()
 }
+
+    /** 调用系统浏览器下载（通知栏显示进度、支持断点），优于应用内无进度下载；返回是否成功 */
+    private fun openBrowserDownload(ctx: Context, url: String): Boolean {
+        return try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
 private fun launchKernelSu() {
     RootExec.su("for p in com.kernelsu.manager com.kernelsu com.rifsxd.ksunext; do " +
