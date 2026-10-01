@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.7",
-  "versionCode": 42,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.7/HyperFlow-0.4.7-flashable.zip",
-  "changelog": "分身通知点击直达分身微信（HookCloneClick 剥除 hf_clone_ 前缀还原 key，命中分身原始 contentIntent）；引导页三步流程（协议勾选同意→诊断→互关）；主/分身重合双保险；消息按发送人合并+机型移时间后；玻璃顶栏/底栏局部模糊+强度调节；首页标题；root 授权阻断+循环检测"
+  "version": "v0.4.8",
+  "versionCode": 43,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.8/HyperFlow-0.4.8-flashable.zip",
+  "changelog": "·柔光玻璃重做：纯位图+RenderEffect 模糊（顶栏/底栏毛玻璃，跟随壁纸，不再黑屏/白屏，开关秒同步）\n·消息列表排序：发送人 A→Z / Z→A / 最近接收 / 最早接收，正文独立设置（最新/最早在前），默认按发送人排序\n·机型显示修复：去掉异常字符、按英文机型原样显示，设备信息 Root 动态刷新（授权后即时可用）\n·引导精简为两步（协议→诊断），诊断通过即开始使用；酷安入口：点我互关，作者会回关\n·自定义顶栏大标题（左对齐加粗，往上走）\n·短信写入默认关闭防回环，App 内归档秒级刷新"
 }
