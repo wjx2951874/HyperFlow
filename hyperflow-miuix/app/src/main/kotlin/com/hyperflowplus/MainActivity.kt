@@ -421,10 +421,11 @@ private fun CustomTopBar(
 
 /** 从系统壁纸提取主色（平均色）作为 Monet 动态配色种子 */
 private fun wallpaperKeyColor(ctx: android.content.Context): Color {
+    val d = WallpaperManager.getInstance(ctx).drawable
+    val bmp = (d as? BitmapDrawable)?.bitmap
+    if (bmp == null) return Color(0xFF0A84FF)
     return runCatching {
-        val d = WallpaperManager.getInstance(ctx).drawable
-        val bmp = (d as? BitmapDrawable)?.bitmap ?: return Color(0xFF0A84FF)
-        val sm = Bitmap.createScaledBitmap(bmp, 8, 8, true)
+        val sm = android.graphics.Bitmap.createScaledBitmap(bmp, 8, 8, true)
         var r = 0L; var g = 0L; var b = 0L; var n = 0
         for (x in 0 until 8) for (y in 0 until 8) {
             val c = sm.getPixel(x, y)
