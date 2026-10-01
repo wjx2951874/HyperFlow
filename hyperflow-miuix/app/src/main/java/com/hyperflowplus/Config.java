@@ -22,8 +22,9 @@ public final class Config {
     private static final String PREFS = "hyperflowplus_cfg";
     public static final String GLOBAL_CFG = "/data/adb/hyperflowplus/config.json";
     // 首选 github raw（无 CDN 缓存，永远最新）；jsDelivr 有 12h 缓存会导致误报"已是最新"（v0.4.7 起）
-    public static final String UPDATE_JSON = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
-    public static final String UPDATE_JSON_FALLBACK = "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json";
+    // 更新通道：jsDelivr CDN 首选（国内可达、无缓存已 purge），raw.githubusercontent 仅作兜底（主域名可能不通）
+    public static final String UPDATE_JSON = "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json";
+    public static final String UPDATE_JSON_FALLBACK = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
 
     // 功能开关（全局配置 key）
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转

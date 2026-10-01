@@ -175,6 +175,7 @@ fun HyperFlowApp() {
                         else -> SettingsScreen(
                             state,
                             onCheckUpdate = {
+                                Toast.makeText(ctx, "正在检查更新…", Toast.LENGTH_SHORT).show()
                                 checkUpdate(
                                     onNew = { ver, url, log ->
                                         runCatching {
@@ -362,9 +363,10 @@ private fun checkUpdate(
             for (u in urls) {
                 try {
                     val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
                     conn.instanceFollowRedirects = true
+                    conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
                     text = conn.inputStream.bufferedReader().use { it.readText() }
                     break
                 } catch (t: Throwable) { lastErr = t }
@@ -375,18 +377,16 @@ private fun checkUpdate(
             val vc = json.optInt("versionCode", 0)
             val zipUrl = json.optString("zipUrl", "")
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                // UI 回调全部兜底，任何异常不闪退
-                runCatching {
-                    if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                        onNew(ver, zipUrl, json.optString("changelog", ""))
-                    } else {
-                        onNone()
-                    }
+                // 结果必弹：无论成功/最新/异常都通知用户
+                if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
+                    onNew(ver, zipUrl, json.optString("changelog", ""))
+                } else {
+                    onNone()
                 }
             }
         } catch (t: Throwable) {
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                runCatching { onError(t.message ?: "网络错误") }
+                onError(t.message ?: "网络错误")
             }
         }
     }.start()
