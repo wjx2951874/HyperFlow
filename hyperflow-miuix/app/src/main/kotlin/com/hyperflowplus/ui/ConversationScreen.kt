@@ -98,7 +98,7 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(
                                     MiuixTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = if (HFState.glassOn) 0.45f else 0.65f
+                                        alpha = 0.65f
                                     )
                                 )
                                 .padding(horizontal = 14.dp, vertical = 10.dp)

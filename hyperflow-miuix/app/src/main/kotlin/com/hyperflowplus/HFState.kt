@@ -68,9 +68,6 @@ object HFState {
     val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", true)
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
-    val glassOn: Boolean get() = cfg.optBoolean("glass_effect", false)
-    /** 玻璃模糊强度：8=柔和 16=标准 24=强烈 */
-    val glassBlur: Int get() = cfg.optInt("glass_blur", 16)
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
