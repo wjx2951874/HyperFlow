@@ -59,13 +59,14 @@ fun OnboardingScreen(state: HFState) {
     val ctx = LocalContext.current
     var stage by remember { mutableIntStateOf(1) }
     var agreed by remember { mutableStateOf(false) }
+    var retryKey by remember { mutableIntStateOf(0) }
     // 三态检测：null=检测中，true=通过，false=未通过
     var lspState by remember { mutableStateOf<Boolean?>(null) }
     var rootState by remember { mutableStateOf<Boolean?>(null) }
     var checking by remember { mutableStateOf(true) }
 
     // 状态检测（阶段2 进入时启动）：未授予 root 时循环重测，授权后自动通过
-    LaunchedEffect(stage) {
+    LaunchedEffect(stage, retryKey) {
         if (stage != 2) return@LaunchedEffect
         checking = true
         while (true) {
@@ -85,12 +86,13 @@ fun OnboardingScreen(state: HFState) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.45f)),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.BottomCenter
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
+                .padding(bottom = 48.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MiuixTheme.colorScheme.surface)
                 .border(
@@ -106,14 +108,19 @@ fun OnboardingScreen(state: HFState) {
                     ctx = ctx,
                     agreed = agreed,
                     onAgree = { agreed = it },
-                    onNext = { stage = 2 }
+                    onNext = { stage = 2 },
+                    onExit = {
+                        state.markFirstRunDone()
+                        state.showOnboarding = false
+                    }
                 )
                 2 -> StageDiagnosis(
                     ctx = ctx,
                     checking = checking,
                     rootState = rootState,
                     lspState = lspState,
-                    onStart = { stage = 3 }
+                    onStart = { stage = 3 },
+                    onRetry = { retryKey++ }
                 )
                 3 -> StageCoolapk(
                     ctx = ctx,
@@ -245,11 +252,26 @@ private fun StageAgreement(
     }
     Spacer(Modifier.height(12.dp))
 
-    Button(
-        enabled = agreed,
-        onClick = onNext
+    // 按钮左右排布：左白（退出）/ 右蓝（继续），与参考弹窗一致
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(if (agreed) "继续" else "请先勾选同意")
+        Button(
+            onClick = onExit,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors()
+        ) {
+            Text("退出")
+        }
+        Button(
+            enabled = agreed,
+            onClick = onNext,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColorsPrimary()
+        ) {
+            Text(if (agreed) "继续" else "请先勾选同意")
+        }
     }
 }
 
@@ -260,7 +282,8 @@ private fun StageDiagnosis(
     checking: Boolean,
     rootState: Boolean?,
     lspState: Boolean?,
-    onStart: () -> Unit
+    onStart: () -> Unit,
+    onRetry: () -> Unit
 ) {
     Text(
         "环境诊断",
@@ -321,17 +344,32 @@ private fun StageDiagnosis(
     }
     Spacer(Modifier.height(20.dp))
 
-    Button(
-        enabled = rootState == true,
-        onClick = onStart
+    // 按钮左右排布：左白（重新检测）/ 右蓝（下一步），与参考弹窗一致
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            when {
-                rootState == false -> "等待 Root 授权…"
-                rootState == null -> "检测中…"
-                else -> "开始使用"
-            }
-        )
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors()
+        ) {
+            Text("重新检测")
+        }
+        Button(
+            enabled = rootState == true,
+            onClick = onStart,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColorsPrimary()
+        ) {
+            Text(
+                when {
+                    rootState == false -> "等待 Root 授权…"
+                    rootState == null -> "检测中…"
+                    else -> "下一步"
+                }
+            )
+        }
     }
 }
 
@@ -342,7 +380,7 @@ private fun StageCoolapk(
     onDone: () -> Unit
 ) {
     Text(
-        "去酷安关注作者",
+        "来酷安关注作者",
         style = MiuixTheme.textStyles.title1,
         fontWeight = FontWeight.Bold
     )
