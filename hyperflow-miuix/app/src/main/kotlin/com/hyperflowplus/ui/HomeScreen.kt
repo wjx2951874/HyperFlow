@@ -2,6 +2,7 @@ package com.hyperflowplus.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -85,7 +86,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
-        // ===== 环境状态卡：全部通过=绿 / 部分缺失=黄 / Root 缺失=红 =====
+        // ===== 环境状态大卡片：整块彩色卡（绿/黄/红）+ 大字标题 + 明细合并（参考 HyperModifier 样式） =====
         val allOk = rootOk && ksuOk && lspOk && milinkOk
         val level: Color = when {
             !rootOk -> CRed
@@ -98,55 +99,67 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             else -> "部分环境未就绪"
         }
         val levelSub = when {
-            !rootOk -> "未授予 Root 权限，点击下方按钮重新授权"
+            !rootOk -> "未授予 Root 权限，点击卡片重新授权检测"
             allOk -> "全部检测通过，功能可正常使用"
             else -> "部分依赖缺失，可正常使用但部分功能受限"
         }
+        val passed = listOf(rootOk, ksuOk, lspOk, milinkOk).count { it }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(level.copy(alpha = 0.12f))
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (!checking) detect()   // 整卡点击即重新检测
+                }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(level.copy(alpha = 0.16f))
+                    .padding(horizontal = 18.dp, vertical = 16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.size(10.dp).clip(CircleShape).background(level)
+                        Modifier.size(12.dp).clip(CircleShape).background(level)
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            levelText,
-                            fontWeight = FontWeight.SemiBold,
-                            color = level,
-                            fontSize = 15.sp
-                        )
-                        Text(
-                            levelSub,
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                        )
-                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        levelText,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = level
+                    )
                     Spacer(Modifier.weight(1f))
                     if (checking) {
                         Text("检测中…", style = MiuixTheme.textStyles.body2, color = level)
                     } else {
-                        Button(
-                            onClick = { detect() },
-                            colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Text("重新检测", fontSize = 13.sp)
-                        }
+                        Text(
+                            "重新检测",
+                            style = MiuixTheme.textStyles.body2,
+                            fontWeight = FontWeight.Medium,
+                            color = level.copy(alpha = 0.9f)
+                        )
                     }
                 }
-                // 检测项明细（红/黄/绿圆点 + 文案）
-                EnvItem("Root 权限", rootOk, "已在 KernelSU 授权本应用" to "未授予 Root 权限")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    levelSub,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "$passed/4 项检测通过 · 点击卡片查看状态",
+                    style = MiuixTheme.textStyles.body2,
+                    fontWeight = FontWeight.Medium,
+                    color = level.copy(alpha = 0.95f)
+                )
+                Spacer(Modifier.height(12.dp))
+                // 明细行（紧凑合并进大卡片，不再是独立小框）
+                EnvItem("Root 权限", rootOk, "已在 KernelSU 授权" to "未授予 Root 权限")
                 EnvItem("KernelSU", ksuOk, "已安装并可用" to "未检测到 KernelSU")
-                EnvItem("LSPosed 模块", lspOk, "模块已刷入且框架可用" to "模块未刷入或框架未激活")
-                EnvItem("小米互联服务", milinkOk, "com.milink.service 正常" to "未安装小米互联服务")
+                EnvItem("LSPosed 模块", lspOk, "模块已启用且框架可用" to "模块未启用或框架未激活")
+                EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
             }
         }
 

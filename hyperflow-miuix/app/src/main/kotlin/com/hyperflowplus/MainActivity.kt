@@ -61,6 +61,7 @@ import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.FlowScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.HyperDialog
+import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
 import com.hyperflowplus.ui.MessagesScreen
 import com.hyperflowplus.ui.OnboardingScreen
@@ -92,6 +93,7 @@ fun HyperFlowApp() {
         var tab by remember { mutableIntStateOf(0) }
         var showSort by remember { mutableStateOf(false) }
         var showUpd by remember { mutableStateOf(false) }
+        var showLicenses by remember { mutableStateOf(false) }
         var updVer by remember { mutableStateOf("") }
         var updUrl by remember { mutableStateOf("") }
         var updLog by remember { mutableStateOf("") }
@@ -100,6 +102,7 @@ fun HyperFlowApp() {
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
+            MainHolder.onOpenLicenses = { showLicenses = true }
             MainHolder.onCheckUpdate = {
                 // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示
                 updPhase = "checking"
@@ -157,6 +160,14 @@ fun HyperFlowApp() {
             BackHandler { state.currentConversation = null }
             Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
                 ConversationScreen(state, conversation.first, conversation.second)
+            }
+            return@MiuixTheme
+        }
+        // 开源许可覆盖页（设置页进入）
+        if (showLicenses) {
+            BackHandler { showLicenses = false }
+            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                LicensesScreen(onBack = { showLicenses = false })
             }
             return@MiuixTheme
         }
@@ -458,7 +469,7 @@ private fun checkUpdate(
     }.start()
 }
 
-/** 自定义顶栏：左对齐大标题（往上走、醒目），右侧放操作按钮 */
+/** 自定义顶栏：InstallerX 风格大标题（28sp、左对齐、沉稳靠下），右侧放操作按钮 */
 @Composable
 private fun CustomTopBar(
     title: String,
@@ -469,12 +480,12 @@ private fun CustomTopBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             title,
-            fontSize = 22.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = MiuixTheme.colorScheme.onSurface,
             maxLines = 1,

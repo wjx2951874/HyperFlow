@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.31",
-  "versionCode": 66,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.31/HyperFlow-0.4.31-flashable.zip",
-  "changelog": "·弹窗全面重构：改用引导页同款覆盖层方案，修复全部弹窗闪退（写入系统短信/检测更新/排序/关闭确认）\n·引导页协议卡片布局修复：长文可滑动、按钮固定、不溢出\n·启动秒加载：先渲染上次状态，后台再刷新\n·4 Tab 导航：首页（环境检测红黄绿）/流转（四大开关）/消息/设置\n·设置页重构：主题（悬浮导航栏/液态玻璃）/调试（调试模式/分享日志）/关于\n·完整机型显示（厂商+型号）"
+  "version": "v0.4.32",
+  "versionCode": 67,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.32/HyperFlow-0.4.32-flashable.zip",
+  "changelog": "·顶栏标题升级为大号左对齐样式（InstallerX 风），四页统一对齐\n·首页环境检测改为整块大卡片（绿/黄/红状态 + 大标题 + 明细合并，点击卡片重新检测）\n·设置页开放源代码许可改为列表页：每个开源库单独卡片（名称/版本/作者/许可），点开弹窗查看许可全文 + 访问主页"
 }

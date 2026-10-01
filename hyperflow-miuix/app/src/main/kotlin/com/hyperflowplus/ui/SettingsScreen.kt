@@ -120,8 +120,8 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 ArrowPreference(
                     title = "开放源代码许可",
-                    summary = "本项目使用了 KernelSU / LSPosed / Miuix 等开源库，详细许可见源码仓库",
-                    onClick = { browse("https://github.com/wjx2951874/HyperFlow#licenses") }
+                    summary = "Miuix / KernelSU / LSPosed / AndroidX 等开源库许可详情",
+                    onClick = { MainHolder.onOpenLicenses() }
                 )
                 ArrowPreference(
                     title = "获取更新",
@@ -146,4 +146,5 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 /** 供设置页回调 MainActivity 的检测更新入口（避免循环依赖） */
 object MainHolder {
     var onCheckUpdate: () -> Unit = {}
+    var onOpenLicenses: () -> Unit = {}
 }
