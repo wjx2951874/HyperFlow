@@ -376,11 +376,11 @@ private fun checkUpdate(
     onError: (String) -> Unit
 ) {
     Thread {
-        val urls = listOf(Config.UPDATE_JSON, Config.UPDATE_JSON_FALLBACK)
         try {
             var lastErr: Throwable? = null
             var text = ""
-            for (u in urls) {
+            var used = ""
+            for (u in Config.UPDATE_JSON_URLS) {
                 try {
                     val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
                     conn.connectTimeout = 5000
@@ -388,10 +388,11 @@ private fun checkUpdate(
                     conn.instanceFollowRedirects = true
                     conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
                     text = conn.inputStream.bufferedReader().use { it.readText() }
+                    used = u
                     break
                 } catch (t: Throwable) { lastErr = t }
             }
-            if (text.isEmpty()) throw lastErr ?: RuntimeException("更新通道不可达")
+            if (text.isEmpty()) throw lastErr ?: RuntimeException("所有更新通道不可达")
             val json = org.json.JSONObject(text)
             val ver = json.optString("version", "")
             val vc = json.optInt("versionCode", 0)
@@ -399,7 +400,7 @@ private fun checkUpdate(
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 // 结果必弹：无论成功/最新/异常都通知用户
                 if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                    onNew(ver, zipUrl, json.optString("changelog", ""))
+                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：" + used + "）").trim())
                 } else {
                     onNone()
                 }
