@@ -57,7 +57,7 @@ fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier
                     modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 2.dp)
                 )
                 val options = listOf(
-                    "标准" to "tonal_spot",
+                    "标准" to "tonal_spot",   // 默认：最兼容的取色风格
                     "中性" to "neutral",
                     "鲜艳" to "vibrant",
                     "表现力" to "expressive",

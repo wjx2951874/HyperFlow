@@ -90,12 +90,14 @@ fun HyperFlowApp() {
         else -> ThemePaletteStyle.TonalSpot
     }
     val controller = remember(keyColor, palette) {
-        ThemeController(
-            colorSchemeMode = ColorSchemeMode.MonetSystem,   // 壁纸动态取色（MaterialKolor）
-            keyColor = keyColor,
-            paletteStyle = palette,
-            colorSpec = ThemeColorSpec.Spec2025
-        )
+        runCatching {
+            ThemeController(
+                colorSchemeMode = ColorSchemeMode.MonetSystem,   // 壁纸动态取色（MaterialKolor）
+                keyColor = keyColor,
+                paletteStyle = palette,
+                colorSpec = ThemeColorSpec.Spec2025
+            )
+        }.getOrElse { ThemeController(ColorSchemeMode.System) }   // 取色失败退回系统默认主题，绝不让 App 崩溃
     }
     MiuixTheme(controller = controller) {
         val state = HFState
@@ -421,7 +423,7 @@ private fun CustomTopBar(
 
 /** 从系统壁纸提取主色（平均色）作为 Monet 动态配色种子 */
 private fun wallpaperKeyColor(ctx: android.content.Context): Color {
-    val d = WallpaperManager.getInstance(ctx).drawable
+    val d = runCatching { WallpaperManager.getInstance(ctx).drawable }.getOrNull() ?: return Color(0xFF0A84FF)
     val bmp = (d as? BitmapDrawable)?.bitmap
     if (bmp == null) return Color(0xFF0A84FF)
     return runCatching {
