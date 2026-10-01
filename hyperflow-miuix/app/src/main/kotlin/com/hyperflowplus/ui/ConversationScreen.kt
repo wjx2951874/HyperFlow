@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,6 +47,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>) {
     var showSort by remember { mutableStateOf(false) }
     val desc = state.detailSort != "asc"
+
+    /** 本地私有解析（与消息页同规则）：正文列表首列 M/dd HH:mm 转毫秒时间戳，用于排序 */
+    fun timeToEpoch(raw: String): Long {
+        val t = raw.trim().replace("/", "-")
+        val p = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.US)
+        p.isLenient = false
+        return runCatching { p.parse(t)?.time ?: raw.toLongOrNull() ?: 0L }.getOrDefault(0L)
+    }
     val sorted = remember(rows, desc, state.sortVersion) {
         // 时间戳排序：兼容 content_time 两种格式（字符串比较会错乱）
         rows.sortedWith { a, b ->
@@ -60,11 +69,21 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
         TopAppBar(
             title = sender,
             subtitle = "",
-            actions = {
-                IconButton(onClick = { showSort = true }) {
+            navigationIcon = {
+                IconButton(onClick = { state.currentConversation = null }) {
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "正文排序"
+                        imageVector = Icons.Filled.KeyboardArrowLeft,
+                        contentDescription = "返回"
+                    )
+                }
+            },
+            actions = {
+                // 排序直接点击切换（最新在前 ↔ 最早在前），不再弹窗
+                IconButton(onClick = { state.setSort(Config.KEY_DETAIL_SORT) }) {
+                    Icon(
+                        imageVector = if (desc) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                        contentDescription = if (desc) "最新在前" else "最早在前",
+                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                     )
                 }
             }
@@ -115,73 +134,4 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
             }
         }
     }
-
-    // 正文排序弹窗
-    if (showSort) {
-        HyperDialog(
-            title = "正文排序",
-            show = showSort,
-            bottomInset = 40.dp,
-            onDismiss = { showSort = false }
-        ) {
-            Column(Modifier.padding(horizontal = 8.dp)) {
-                DetailSortRow(
-                    label = "最新在前",
-                    selected = state.detailSort != "asc",
-                    onClick = {
-                        if (state.detailSort == "asc") state.setSort(Config.KEY_DETAIL_SORT)
-                        showSort = false
-                    }
-                )
-                DetailSortRow(
-                    label = "最早在前",
-                    selected = state.detailSort == "asc",
-                    onClick = {
-                        if (state.detailSort != "asc") state.setSort(Config.KEY_DETAIL_SORT)
-                        showSort = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-/** 正文排序行：单选两行（最新在前/最早在前），选中高亮 primary */
-@Composable
-private fun DetailSortRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = if (selected) Icons.Filled.CheckCircle else Icons.Filled.KeyboardArrowDown,
-            contentDescription = null,
-            modifier = Modifier.width(20.dp).height(20.dp),
-            tint = if (selected) MiuixTheme.colorScheme.primary
-            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            label,
-            style = MiuixTheme.textStyles.body1,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MiuixTheme.colorScheme.primary
-            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f)
-        )
-    }
-}
-
-/** 解析两种时间格式为时间戳（排序用）：20260930T155344 / 2026-09-30 15:53 */
-private fun timeToEpoch(raw: String): Long {
-    if (raw.isBlank()) return 0L
-    return runCatching {
-        if (raw.contains("T")) {
-            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
-        } else {
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
-        }
-    }.getOrDefault(0L)
 }

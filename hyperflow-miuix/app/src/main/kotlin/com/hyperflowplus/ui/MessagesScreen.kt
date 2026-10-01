@@ -188,7 +188,9 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
     for ((_, rows) in groups) {
         val seen = HashMap<String, Boolean>()
         rows.removeAll { r ->
-            val k = r[0] + "|" + r[2]
+            // 分钟级时间戳（本地保存与云端流转时间可能差几秒，属同一条短信）
+            val minTs = timeToEpoch(r[0]) / 60000
+            val k = minTs.toString() + "|" + r[2]
             val isLive = r.getOrNull(3) != "local"
             if (isLive) { seen[k] = true; false }
             else { seen[k] ?: false }

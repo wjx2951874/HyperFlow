@@ -1,10 +1,5 @@
 package com.hyperflowplus.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -49,13 +46,18 @@ fun HyperDialog(
     title: String? = null,
     summary: String? = null,
     onDismiss: () -> Unit,
-    bottomInset: Dp = 40.dp,
+    bottomInset: Dp = smartInset,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    AnimatedVisibility(
-        visible = show,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(280)) + fadeIn(),
-        exit = fadeOut(tween(150))
+    if (!show) return
+    // 窗口层 Popup 渲染：全屏遮罩盖住包括悬浮导航栏在内的一切（引导页同款层级），
+    // 不受 Scaffold/悬浮栏遮挡；非系统 Dialog，KernelSU 环境不闪退
+    Popup(
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(
+            focusable = true,
+            excludeFromSystemGesture = true
+        )
     ) {
         Box(
             modifier = Modifier
@@ -112,3 +114,6 @@ fun HyperDialog(
         }
     }
 }
+
+/** 智能底部间距：悬浮/液态玻璃开启时弹窗自动上移更多（MainActivity 每次重组时设置） */
+var smartInset: Dp = 40.dp

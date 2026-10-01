@@ -73,6 +73,7 @@ import com.hyperflowplus.ui.GuideType
 import com.hyperflowplus.ui.BarBlurHost
 import com.hyperflowplus.ui.HyperDialog
 import com.hyperflowplus.ui.LiquidNavBar
+import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
 import com.hyperflowplus.ui.MessagesScreen
@@ -208,8 +209,11 @@ fun HyperFlowApp() {
         // 四个页面各显示页面名（软件名移到设置页关于区）
         val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
-        // BarBlurHost 包住整个 Scaffold（含 bottomBar）→ backdrop 对导航栏可见，液态玻璃才真正生效
-        BarBlurHost(enabled = state.glassEffect) {
+        // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
+        com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
+
+        // BarBlurHost 提供 backdrop；悬浮模式也启用捕获（悬浮胶囊有内容可模糊），玻璃胶囊只模糊内容页
+        BarBlurHost(enabled = state.glassEffect || state.navFloat) {
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
@@ -346,7 +350,17 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                // layerBackdrop 只捕获内容页（不含导航栏）→ 玻璃胶囊模糊的是页面内容，效果与 InstallerX/KernelSU 一致
+                val bd = com.hyperflowplus.ui.LocalLiquidBackdrop.current
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MiuixTheme.colorScheme.surface)
+                        .then(
+                            if (bd is top.yukonga.miuix.kmp.blur.LayerBackdrop) Modifier.layerBackdrop(bd)
+                            else Modifier
+                        )
+                ) {
                     when (tab) {
                         0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
                         1 -> FlowScreen(state, contentMod)

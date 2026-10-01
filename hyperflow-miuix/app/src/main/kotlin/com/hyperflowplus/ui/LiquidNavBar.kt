@@ -234,7 +234,7 @@ private fun RowScope.LiquidTabs(
     items.forEachIndexed { i, (icon, label) ->
         Column(
             modifier = Modifier
-                .width(tabWidth.coerceAtLeast(56.dp))
+                .width(tabWidth.coerceAtLeast(44.dp))
                 .clickable { onTabSelected(i) }
                 .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -362,7 +362,7 @@ private fun LiquidGlassLayers(
                         )
                     }
                     .height(56.dp)
-                    .width(tabWidthDp),
+                    .width(tabWidthDp.coerceAtLeast(44.dp)),
             ) {}
         }
     }

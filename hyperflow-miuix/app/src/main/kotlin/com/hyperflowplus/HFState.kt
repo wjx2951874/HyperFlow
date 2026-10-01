@@ -28,8 +28,39 @@ object HFState {
     var showOnboarding by mutableStateOf(false)    // 引导页是否显示
     var sortVersion by mutableStateOf(0)             // 排序版本号：任何排序变更自增，强制列表/详情重算
     var liveAvailable by mutableStateOf(true)        // 小米端 flow provider 最近一次是否有数据（false=当前显示的是本地历史）
+    // ===== 环境检测结果缓存（进入首页先显缓存，后台重查后再更新，避免红→绿跳变） =====
+    var envRoot by mutableStateOf(false)
+    var envKsu by mutableStateOf(false)
+    var envLsp by mutableStateOf(false)
+    var envModule by mutableStateOf(false)
+    var envScope by mutableStateOf(false)
+    var envMilink by mutableStateOf(false)
+    var envChecked by mutableStateOf(false)
 
     private var pollingStarted = false
+
+    /** 环境检测结果缓存：进入首页先显示上次结果（避免闪红再变绿），持久化到 SharedPreferences */
+    fun loadEnvCache() {
+        val p = prefs ?: return
+        envRoot = p.getBoolean("env_root", false)
+        envKsu = p.getBoolean("env_ksu", false)
+        envLsp = p.getBoolean("env_lsp", false)
+        envModule = p.getBoolean("env_module", false)
+        envScope = p.getBoolean("env_scope", false)
+        envMilink = p.getBoolean("env_milink", false)
+        envChecked = true
+    }
+    fun saveEnvCache(root: Boolean, ksu: Boolean, lsp: Boolean, module: Boolean, scope: Boolean, milink: Boolean) {
+        envRoot = root; envKsu = ksu; envLsp = lsp; envModule = module; envScope = scope; envMilink = milink
+        val p = prefs ?: return
+        try {
+            p.edit()
+                .putBoolean("env_root", root).putBoolean("env_ksu", ksu)
+                .putBoolean("env_lsp", lsp).putBoolean("env_module", module)
+                .putBoolean("env_scope", scope).putBoolean("env_milink", milink)
+                .apply()
+        } catch (t: Throwable) {}
+    }
 
     /** 归档实时刷新：每 5 秒重读 flow provider，有变化立即更新消息页（流转到达即显示）。
      *  App 内消息开启时：每次读取合并去重保存到本机（hf_flow_history.txt），
@@ -93,7 +124,7 @@ object HFState {
     val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃
     val debugMode: Boolean get() = cfg.optBoolean("debug_mode", false)       // 调试模式
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
-    val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
+    val archiveSort: String get() = cfg.optString("archive_sort", "time_desc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
 
     fun set(key: String, value: Boolean) {
@@ -226,7 +257,7 @@ object HFState {
             var cfgText: String? = null
             var flowText: String? = null
             var rootRaw = "su 不可用"
-            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devKsu = "未检测"
+            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devOsCode = ""; var devKsu = "未检测"
             try {
                 // 先读本地缓存（渲染素材）
                 val cache = readCache()
@@ -242,7 +273,8 @@ object HFState {
                         + "content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60; "
                         + "echo @@ROOT; id -u; echo @@DEV; "
                         + "getprop ro.mi.os.version.name; getprop ro.build.version.release; uname -r; "
-                        + "getprop ro.product.marketname; ksud -V 2>/dev/null || echo 'none'")
+                        + "getprop ro.product.marketname; ksud -V 2>/dev/null || echo 'none'; "
+                        + "getprop ro.mi.os.version.code; getprop ro.build.display.id")
                 if (all != null) {
                     val parts = all.split("@@CFG|@@FLOW|@@ROOT|@@DEV".toRegex())
                     if (parts.size > 1) cfgText = parts[1].trim()
@@ -253,8 +285,9 @@ object HFState {
                         if (dev.size > 0) devMiui = dev[0].trim()
                         if (dev.size > 1) devAndroid = dev[1].trim()
                         if (dev.size > 2) devKernel = dev[2].trim()
-                        if (dev.size > 3) devKsu = if (dev[3].trim() == "none") "未安装" else dev[3].trim()
-                        if (dev.size > 4) devModel = dev[4].trim()
+                        if (dev.size > 3) devModel = dev[3].trim()
+                        if (dev.size > 4) devKsu = if (dev[4].trim() == "none") "未安装" else dev[4].trim()
+                        if (dev.size > 5) devOsCode = dev[5].trim()
                     }
                 }
             } catch (t: Throwable) {
@@ -264,7 +297,7 @@ object HFState {
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
             val finalDev = "机型：${devModel.ifEmpty { android.os.Build.MANUFACTURER.uppercase() + " " + android.os.Build.MODEL }}（${android.os.Build.MODEL}）\n" +
-                    "澎湃OS：${fMiui.ifEmpty { "未知" }}\n" +
+                    "澎湃OS：${if (fMiui.isNotEmpty()) fMiui + " " + devOsCode else "未知"}\n" +
                     "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
                     "内核：${fKernel.ifEmpty { "未知" }}\n" +
                     "Root：${finalRoot} / KSU ${fKsu}"

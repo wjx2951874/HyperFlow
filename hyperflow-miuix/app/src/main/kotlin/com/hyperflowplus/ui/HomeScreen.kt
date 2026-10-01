@@ -18,6 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,12 +59,13 @@ private val CRed = Color(0xFFFF3B30)
 fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (GuideType) -> Unit = {}) {
     val ctx = LocalContext.current
     var checking by remember { mutableStateOf(true) }
-    var rootOk by remember { mutableStateOf(false) }
-    var ksuOk by remember { mutableStateOf(false) }
-    var lspOk by remember { mutableStateOf(false) }        // LSPosed 框架存在
-    var moduleOk by remember { mutableStateOf(false) }    // 模块已在 LSPosed 启用（modules.list）
-    var scopeOk by remember { mutableStateOf(false) }     // 推荐作用域已勾选（scope 文件含本 App + milink）
-    var milinkOk by remember { mutableStateOf(false) }
+    // 初始值 = 上次检测缓存（避免每次进入红→绿跳变），LaunchedEffect 里后台重查后再更新
+    var rootOk by remember { mutableStateOf(state.envRoot) }
+    var ksuOk by remember { mutableStateOf(state.envKsu) }
+    var lspOk by remember { mutableStateOf(state.envLsp) }
+    var moduleOk by remember { mutableStateOf(state.envModule) }
+    var scopeOk by remember { mutableStateOf(state.envScope) }
+    var milinkOk by remember { mutableStateOf(state.envMilink) }
 
     fun detect() {
         checking = true
@@ -124,6 +127,7 @@ echo ==END""") }.getOrNull() else null
                 rootOk = r; ksuOk = k; lspOk = lspInstalled
                 moduleOk = modEnabled; scopeOk = scopeOkV; milinkOk = m
                 checking = false
+                state.saveEnvCache(r, k, lspInstalled, modEnabled, scopeOkV, m)
             }
         }.start()
     }
@@ -148,7 +152,7 @@ echo ==END""") }.getOrNull() else null
             .padding(horizontal = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
-        val allOk = rootOk && lspOk && moduleOk && scopeOk && milinkOk  // KSU 并入 Root（有 Root 即内核环境就绪）
+        val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
         val level: Color = when {
             !rootOk -> CRed
             allOk -> CGreen
@@ -159,7 +163,7 @@ echo ==END""") }.getOrNull() else null
             allOk -> "环境已就绪"
             else -> "部分环境未就绪"
         }
-        val passed = listOf(rootOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
+        val passed = listOf(rootOk, ksuOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
 
         Row(
             modifier = Modifier
@@ -195,19 +199,66 @@ echo ==END""") }.getOrNull() else null
             }
         }
 
-        // ===== 环境检测小块：每项独立卡片（点击进引导页一键修复，已集成授权入口） =====
-        EnvItem("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT, onOpenGuide)
-        EnvItem("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED, onOpenGuide)
-        EnvItem("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE, onOpenGuide)
-        EnvItem(
-            "推荐作用域",
-            scopeOk,
-            "已勾选（本 App + milink）" to "未勾选推荐作用域",
-            GuideType.MODULE_SCOPE,
-            onOpenGuide,
-            openLsposedFirst = true
-        )
-        EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
+        // ===== 环境检测 =====
+        // 全部就绪：折叠为小米风格大对号卡片，点击弹出 6 项详情；未就绪：逐项显示（点击进引导修复）
+        if (allOk) {
+            var showEnvDetail by remember { mutableStateOf(false) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { showEnvDetail = true }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    top.yukonga.miuix.kmp.basic.Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "环境已就绪",
+                        tint = CGreen,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "环境已就绪",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CGreen
+                    )
+                }
+            }
+            if (showEnvDetail) {
+                HyperDialog(
+                    title = "环境检测",
+                    show = showEnvDetail,
+                    onDismiss = { showEnvDetail = false }
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
+                        EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
+                        EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
+                        EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
+                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink）" to "未勾选推荐作用域")
+                        EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
+                    }
+                }
+            }
+        } else {
+            EnvItem("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT, onOpenGuide)
+            EnvItem("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU", GuideType.ROOT, onOpenGuide)
+            EnvItem("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED, onOpenGuide)
+            EnvItem("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE, onOpenGuide)
+            EnvItem(
+                "推荐作用域",
+                scopeOk,
+                "已勾选（本 App + milink）" to "未勾选推荐作用域",
+                GuideType.MODULE_SCOPE,
+                onOpenGuide,
+                openLsposedFirst = true
+            )
+            EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
+        }
 
         // ===== 设备信息（大框大标题 + 小卡网格） =====
         GroupTitle("设备信息")
@@ -289,6 +340,30 @@ echo ==END""") }.getOrNull() else null
 }
 
 /** 检测项行：状态圆点（绿=通过 红=未通过）+ 名称 + 状态文案 */
+@Composable
+private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        top.yukonga.miuix.kmp.basic.Icon(
+            imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.Close,
+            contentDescription = null,
+            tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (ok) texts.first else texts.second,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun EnvItem(
     title: String,
