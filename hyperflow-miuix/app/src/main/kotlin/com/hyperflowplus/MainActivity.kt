@@ -80,6 +80,8 @@ private data class Tab(val title: String, val icon: ImageVector)
 @Composable
 fun HyperFlowApp() {
     val ctx = LocalContext.current
+    // 上次闪退日志：启动自动读取展示（无需终端抓日志）
+    var crashLog by remember { mutableStateOf(readCrashLog(ctx)) }
     val keyColor = remember(ctx) { wallpaperKeyColor(ctx) }   // 壁纸主色（Monet 种子）
     val palette = when (HFState.paletteStyle) {
         "neutral" -> ThemePaletteStyle.Neutral
@@ -109,6 +111,22 @@ fun HyperFlowApp() {
         // 引导判断：首次（App 私有标记，root 无关）显示引导页
         LaunchedEffect(state.cfg) {
             state.showOnboarding = !state.firstRunDone
+        }
+
+        // 崩溃日志弹窗（自动展示上次闪退原因）
+        if (crashLog != null) {
+            OverlayDialog(
+                title = "上次闪退诊断",
+                summary = crashLog!!.take(800),
+                show = crashLog != null,
+                onDismissRequest = { crashLog = null }
+            ) {
+                TextButton(
+                    text = "知道了",
+                    onClick = { crashLog = null },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         var tab by remember { mutableIntStateOf(0) }
@@ -439,4 +457,15 @@ private fun wallpaperKeyColor(ctx: android.content.Context): Color {
         sm.recycle()
         Color((r / n).toInt(), (g / n).toInt(), (b / n).toInt())
     }.getOrElse { Color(0xFF0A84FF) }
+}
+
+/** 读取并清空上次闪退日志（无则 null） */
+private fun readCrashLog(ctx: android.content.Context): String? {
+    return runCatching {
+        val f = java.io.File(ctx.filesDir, "hf_crash.log")
+        if (!f.exists() || f.length() == 0L) return null
+        val log = f.readText()
+        f.delete()
+        log.take(1000)
+    }.getOrNull()
 }
