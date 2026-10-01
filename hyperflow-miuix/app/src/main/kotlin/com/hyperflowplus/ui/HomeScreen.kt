@@ -51,7 +51,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp)
     ) {
-        GroupTitle("服务开关")
+        GroupTitle("通知流转")
 
         Card(Modifier.fillMaxWidth()) {
             Column {
