@@ -45,8 +45,14 @@ public class HookForceTransfer {
                             if (!Config.isForceTransferEnabled()) {
                                 return chain.proceed();
                             }
-                            if (isRunnableStateCard((StatusBarNotification) chain.getArg(0))) {
+                            StatusBarNotification sbn = (StatusBarNotification) chain.getArg(0);
+                            if (isRunnableStateCard(sbn)) {
                                 MiflowLog.d("skip runnable-state card (not a real notification)");
+                                return Boolean.FALSE;
+                            }
+                            // 来电通知：通知链路短路，改由广播链路走 voip 全屏（避免"全屏+卡片"双显示）
+                            if (isCallSbn(sbn)) {
+                                MiflowLog.d("call notification: notification path short-circuited (voip broadcast handles it)");
                                 return Boolean.FALSE;
                             }
                             Config.bump(Config.CNT_FORCE);
@@ -59,7 +65,8 @@ public class HookForceTransfer {
             MiflowLog.e("HookForceTransfer[gate] install failed", t);
         }
 
-        // 兜底：KeyguardManager 层（栈中含 NotificationHandler 即放行）
+        // 兜底：KeyguardManager 层（调用栈含 milink 流转任意类即模拟锁屏，
+        // 覆盖通知链路 + 广播链路——来电 voip 全屏需要广播链路也"看到"锁屏）
         try {
             Method m = KeyguardManager.class.getDeclaredMethod("isKeyguardLocked");
             m.setAccessible(true);
@@ -71,7 +78,7 @@ public class HookForceTransfer {
                             if (!Config.isForceTransferEnabled()) {
                                 return chain.proceed();
                             }
-                            if (calledFromMilinkNotificationHandler()) {
+                            if (calledFromMilink()) {
                                 return Boolean.TRUE;
                             }
                             return chain.proceed();
@@ -116,14 +123,30 @@ public class HookForceTransfer {
         }
     }
 
-    /** 只要调用栈中出现流转监听处理类即放行（容错内联/合成方法） */
-    private static boolean calledFromMilinkNotificationHandler() {
+    /** 只要调用栈中出现 milink 流转监听/处理/广播类即放行（等效模拟锁屏） */
+    private static boolean calledFromMilink() {
         StackTraceElement[] st = Thread.currentThread().getStackTrace();
         for (StackTraceElement e : st) {
-            if ("com.xiaomi.dist.notification.listener.handle.NotificationHandler".equals(e.getClassName())) {
+            if (e.getClassName().startsWith("com.xiaomi.dist.notification")) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** sbn 是否为来电通知：类别 call 或包名 incallui/dialer/phone */
+    private static boolean isCallSbn(StatusBarNotification sbn) {
+        try {
+            String pkg = sbn.getPackageName();
+            if (pkg != null && (pkg.contains("incallui") || pkg.contains("dialer")
+                    || "com.android.phone".equals(pkg))) {
+                return true;
+            }
+            android.app.Notification n = sbn.getNotification();
+            return n != null && n.category != null
+                    && n.category.equals(android.app.Notification.CATEGORY_CALL);
+        } catch (Throwable t) {
+            return false;
+        }
     }
 }

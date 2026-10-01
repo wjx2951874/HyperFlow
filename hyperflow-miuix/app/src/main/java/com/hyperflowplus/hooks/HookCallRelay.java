@@ -42,41 +42,12 @@ public class HookCallRelay {
     private static final String EXTRA_FROM_BROADCAST = "notification_from_broadcast";
 
     public static void install(ClassLoader cl) {
-        // ① 来电广播短路：防锁屏时"广播 voip + 通知 msg"双显示
-        try {
-            Class<?> receiver = Class.forName("com.xiaomi.dist.notification.listener.NotifTransReceiver", false, cl);
-            for (Method m : receiver.getDeclaredMethods()) {
-                if (!m.getName().equals("buildSbnFromIntent")) {
-                    continue;
-                }
-                if (m.getParameterCount() != 1 || !Intent.class.isAssignableFrom(m.getParameterTypes()[0])) {
-                    continue;
-                }
-                m.setAccessible(true);
-                XposedEntry.get().hook(m)
-                        .setExceptionMode(ExceptionMode.PROTECTIVE)
-                        .intercept(new Hooker() {
-                            @Override
-                            public Object intercept(Chain chain) throws Throwable {
-                                if (!Config.isForceTransferEnabled()) {
-                                    return chain.proceed();
-                                }
-                                Intent it = (Intent) chain.getArg(0);
-                                if (isCallIntent(it)) {
-                                    MiflowLog.d("call broadcast short-circuited (avoid dual display)");
-                                    return null;
-                                }
-                                return chain.proceed();
-                            }
-                        });
-                MiflowLog.i("HookCallRelay[broadcast] installed");
-                break;
-            }
-        } catch (Throwable t) {
-            MiflowLog.e("HookCallRelay[broadcast] install failed", t);
-        }
+        // ①（V0.4.27 移除）来电广播短路：
+        // 原来为防"广播 voip + 通知 msg"双显示而短路 buildSbnFromIntent；
+        // 现在来电通知链路已在 HookForceTransfer.isDeviceSupported 短路（仅广播链路流转 voip 全屏），
+        // 若再短路广播链路会导致来电完全不流转，故删除。
 
-        // ② 通知链路：来电通知打上广播标记，令 buildPlainMessage 走 voip
+        // ② 通知链路：来电通知打上广播标记，令 buildPlainMessage 走 voip（双保险）
         try {
             Class<?> builder = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationBuilder", false, cl);
             for (Method m : builder.getDeclaredMethods()) {
@@ -146,22 +117,6 @@ public class HookCallRelay {
             }
         } catch (Throwable t) {
             MiflowLog.e("HookCallRelay[voip] install failed", t);
-        }
-    }
-
-    /** 广播 intent 是否为来电（pkg 为 incallui 或 notification 类别为 call） */
-    private static boolean isCallIntent(Intent it) {
-        try {
-            String pkg = it.getStringExtra("pkg");
-            if (pkg != null && (pkg.contains("incallui") || pkg.contains("dialer")
-                    || "com.android.phone".equals(pkg))) {
-                return true;
-            }
-            Notification n = (Notification) it.getParcelableExtra("notification");
-            return n != null && n.category != null
-                    && n.category.equals(Notification.CATEGORY_CALL);
-        } catch (Throwable t) {
-            return false;
         }
     }
 
