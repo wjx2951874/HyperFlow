@@ -10,6 +10,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.drawPlainBackdrop
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.RowScope
@@ -123,7 +136,7 @@ fun HyperFlowApp() {
                 topBar = {
                     if (state.glassOn) {
                         Box {
-                            GlassBar(state.glassBlur, glassTint, Modifier.matchParentSize())
+                            LiquidGlassBar(state.glassBlur, top = true, Modifier.matchParentSize())
                             CustomTopBar(
                                 title = title,
                                 modifier = Modifier.background(Color.Transparent)
@@ -157,7 +170,7 @@ fun HyperFlowApp() {
                 bottomBar = {
                     if (state.glassOn) {
                         Box {
-                            GlassBar(state.glassBlur, glassTint, Modifier.matchParentSize())
+                            LiquidGlassBar(state.glassBlur, top = false, Modifier.matchParentSize())
                             NavigationBar(color = Color.Transparent) {
                                 tabs.forEachIndexed { i, t ->
                                     NavigationBarItem(
@@ -345,24 +358,68 @@ private fun CustomTopBar(
     }
 }
 
-/** 毛玻璃栏背景：模糊壁纸 + 半透明主题色覆盖（纯位图+RenderEffect，安全不黑屏） */
+/**
+ * 液态玻璃栏背景（iOS 26 Liquid Glass 安卓实现，对标 Kyant0/AndroidLiquidGlass）：
+ * 壁纸画入 CanvasBackdrop → 高斯模糊打底 → lens 折射（SDF 圆角折射 + 深度 + 色散）→ 边缘暗调。
+ * 不用 layerBackdrop（避免渲染树黑屏问题），背景直接画位图，安全不黑屏。
+ */
 @Composable
-private fun GlassBar(blurRadius: Int, tint: Color, modifier: Modifier = Modifier) {
+private fun LiquidGlassBar(blurRadius: Int, top: Boolean, modifier: Modifier = Modifier) {
     val bmp = rememberWallpaperBitmap()
-    Box(modifier.clipToBounds()) {
+    val backdrop = rememberCanvasBackdrop {
         if (bmp != null) {
-            Image(
-                bitmap = bmp,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur((blurRadius.coerceAtLeast(4) * 2f).dp),
-                contentScale = ContentScale.Crop
+            // 壁纸近似 Crop 填充（液态玻璃折射的是壁纸本身）
+            val area = this.size
+            val sw = bmp.width.toFloat()
+            val sh = bmp.height.toFloat()
+            val scale = maxOf(area.width / sw, area.height / sh)
+            val srcW = area.width / scale
+            val srcH = area.height / scale
+            drawImage(
+                bmp,
+                srcOffset = IntOffset(((sw - srcW) / 2f).toInt(), ((sh - srcH) / 2f).toInt()),
+                srcSize = IntSize(srcW.toInt(), srcH.toInt()),
+                dstOffset = Offset.Zero,
+                dstSize = IntSize(area.width.toInt(), area.height.toInt()),
+                filterQuality = FilterQuality.Medium
             )
         } else {
-            Box(Modifier.fillMaxSize().background(Color(0xFFF3F5F7)))
+            drawRect(Color(0xFFF3F5F7))
         }
-        Box(Modifier.fillMaxSize().background(tint.copy(alpha = 0.55f)))
+    }
+    val shape = if (top) {
+        AbsoluteRoundedCornerShape(0.dp, 0.dp, 28.dp, 28.dp)
+    } else {
+        AbsoluteRoundedCornerShape(28.dp, 28.dp, 0.dp, 0.dp)
+    }
+    Box(modifier) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawPlainBackdrop(
+                    backdrop,
+                    shape = { shape },
+                    effects = {
+                        blur(blurRadius.coerceAtLeast(8).toFloat())
+                        lens(
+                            refractionHeight = 60f,
+                            refractionAmount = 14f,
+                            depthEffect = true,
+                            chromaticAberration = true
+                        )
+                    }
+                )
+        ) {}
+        // 边缘暗调（玻璃的景深过渡）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.10f))
+                    )
+                )
+        )
     }
 }
 
