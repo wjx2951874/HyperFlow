@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.8",
-  "versionCode": 43,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.8/HyperFlow-0.4.8-flashable.zip",
-  "changelog": "·柔光玻璃重做：纯位图+RenderEffect 模糊（顶栏/底栏毛玻璃，跟随壁纸，不再黑屏/白屏，开关秒同步）\n·消息列表排序：发送人 A→Z / Z→A / 最近接收 / 最早接收，正文独立设置（最新/最早在前），默认按发送人排序\n·机型显示修复：去掉异常字符、按英文机型原样显示，设备信息 Root 动态刷新（授权后即时可用）\n·引导精简为两步（协议→诊断），诊断通过即开始使用；酷安入口：点我互关，作者会回关\n·自定义顶栏大标题（左对齐加粗，往上走）\n·短信写入默认关闭防回环，App 内归档秒级刷新"
+  "version": "v0.4.9",
+  "versionCode": 44,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.9/HyperFlow-0.4.9-flashable.zip",
+  "changelog": "·液态玻璃重做：iOS 26 Liquid Glass 安卓实现（lens 折射+深度效果+色散光效+高斯模糊+边缘暗调），顶栏/底栏跟随壁纸实时折射，对标 AndroidLiquidGlass\n·消息列表排序（发送人 A→Z / Z→A / 最近 / 最早）+ 正文排序独立设置\n·机型英文原样显示、Root 动态刷新\n·两步引导 + 酷安互关入口\n·自定义大标题顶栏"
 }
