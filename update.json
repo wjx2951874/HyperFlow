@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.32",
-  "versionCode": 67,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.32/HyperFlow-0.4.32-flashable.zip",
-  "changelog": "·液态玻璃真渲染：底部导航栏支持\"悬浮导航栏 + 液态玻璃\"双模式（Miuix blur + RuntimeShader 折射/色散/双光源高光，参考 HyperIsland/超级岛实现）\n·环境检测重做：真实读取 KernelSU/LSPosed 配置判断\"模块已启用 / 推荐作用域已勾选\"，Miuix 绿勾/红叉状态图标，点击未通过项进入引导页一键修复\n·引导页重排 3 阶段：使用协议 → 酷安关注作者（会回关）→ 问题反馈，弹窗底部上滑、标题正文居中\n·设置页：主题设置（悬浮导航栏/液态玻璃）+ 调试开关 + 关于页（开源许可列表卡片）；连点版本号 3 次可重开引导\n·弹窗全部改为 App 内覆盖层实现，修复多项闪退"
+  "version": "v0.4.33",
+  "versionCode": 68,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.33/HyperFlow-0.4.33-flashable.zip",
+  "changelog": "·修复检测更新：多通道并行检测（最坏 5 秒出结果），jsDelivr 加时间戳穿透 12h CDN 缓存，不再误报\"已是最新\"\n·液态玻璃真渲染：底部导航栏支持\"悬浮导航栏 + 液态玻璃\"双模式（Miuix blur + RuntimeShader 折射/色散/双光源高光）\n·环境检测重做：真实读取 KernelSU/LSPosed 配置判断模块已启用/推荐作用域已勾选，Miuix 绿勾红叉图标，点击未通过项进引导页一键修复\n·引导页 3 阶段（协议→酷安关注→反馈），弹窗底部上滑；设置页主题/调试/关于重构"
 }

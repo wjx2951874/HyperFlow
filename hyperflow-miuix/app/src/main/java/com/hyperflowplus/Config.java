@@ -21,13 +21,17 @@ import java.nio.charset.StandardCharsets;
 public final class Config {
     private static final String PREFS = "hyperflowplus_cfg";
     public static final String GLOBAL_CFG = "/data/adb/hyperflowplus/config.json";
-    // 首选 github raw（无 CDN 缓存，永远最新）；jsDelivr 有 12h 缓存会导致误报"已是最新"（v0.4.7 起）
-    // 更新通道（App 内按序尝试，哪个通用哪个）：GitHub raw 优先（HMA 等模块已验证手机端可达）+ jsDelivr 兜底
-    public static final String[] UPDATE_JSON_URLS = {
-            "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json",
-            "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json",
-            "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json"
-    };
+    // 更新通道（App 内并行尝试，哪个通用哪个）：
+    // - raw.githubusercontent：永远最新，但国内常超时
+    // - jsDelivr：国内可达性好，但默认有 12h CDN 缓存 → 必须带时间戳参数穿透（v0.4.32 修复误报"已是最新"）
+    public static String[] updateJsonUrls() {
+        long v = System.currentTimeMillis() / 1000;
+        return new String[]{
+                "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json?t=" + v,
+                "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json?v=" + v,
+                "https://fastly.jsdelivr.net/gh/wjx2951874/HyperFlow@main/update.json?v=" + v
+        };
+    }
 
     // 功能开关（全局配置 key）
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转

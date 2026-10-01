@@ -446,22 +446,42 @@ private fun checkUpdate(
     }
     Thread {
         try {
-            var lastErr: Throwable? = null
-            var text = ""
-            var used = ""
-            for (u in Config.UPDATE_JSON_URLS) {
-                try {
-                    val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 5000
-                    conn.readTimeout = 5000
-                    conn.instanceFollowRedirects = true
-                    conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
-                    text = conn.inputStream.bufferedReader().use { it.readText() }
-                    used = u
-                    break
-                } catch (t: Throwable) { lastErr = t }
+            // 多通道并行检测：谁先成功用谁，避免串行等待（国内网络 raw 常超时，jsDelivr 兜底）
+            val urls = Config.updateJsonUrls()
+            val latch = java.util.concurrent.CountDownLatch(1)
+            val holder = java.util.concurrent.atomic.AtomicReference<String?>()
+            val done = java.util.concurrent.atomic.AtomicBoolean(false)
+            val threads = urls.map { u ->
+                Thread {
+                    try {
+                        val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 3000
+                        conn.readTimeout = 4000
+                        conn.instanceFollowRedirects = true
+                        conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        if (body.isNotEmpty() && done.compareAndSet(false, true)) {
+                            holder.set(body)
+                            latch.countDown()
+                        }
+                    } catch (_: Throwable) {
+                        // 单个通道失败不影响其他通道
+                    }
+                }
             }
-            if (text.isEmpty()) throw lastErr ?: RuntimeException("所有更新通道不可达")
+            threads.forEach { it.start() }
+            // 全部等最多 5 秒；谁先返回就用谁
+            val got = latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            threads.forEach { t ->
+                try { t.interrupt() } catch (_: Throwable) {}
+            }
+            val text = if (got) holder.get() else null
+            if (text == null) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    onError("所有更新通道不可达（网络超时），请检查网络后重试")
+                }
+                return@Thread
+            }
             val json = org.json.JSONObject(text)
             val ver = json.optString("version", "")
             val vc = json.optInt("versionCode", 0)
@@ -469,7 +489,7 @@ private fun checkUpdate(
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 // 结果必弹：无论成功/最新/异常都通知用户
                 if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：" + used + "）").trim())
+                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：已并行检测）").trim())
                 } else {
                     onNone()
                 }
