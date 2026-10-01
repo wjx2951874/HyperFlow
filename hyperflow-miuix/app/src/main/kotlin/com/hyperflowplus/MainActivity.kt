@@ -62,6 +62,8 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+import android.widget.Toast
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -101,6 +103,10 @@ fun HyperFlowApp() {
 
         var tab by remember { mutableIntStateOf(0) }
         var showSort by remember { mutableStateOf(false) }
+        var showUpd by remember { mutableStateOf(false) }
+        var updVer by remember { mutableStateOf("") }
+        var updUrl by remember { mutableStateOf("") }
+        var updLog by remember { mutableStateOf("") }
 
         // 会话详情（独立覆盖页，返回手势/返回键返回列表）
         val conversation = state.currentConversation
@@ -204,7 +210,29 @@ fun HyperFlowApp() {
                     when (tab) {
                         0 -> HomeScreen(state, contentMod)
                         1 -> MessagesScreen(state, contentMod)
-                        else -> SettingsScreen(state, contentMod)
+                        else -> SettingsScreen(
+                            state,
+                            onCheckUpdate = {
+                                checkUpdate(
+                                    onNew = { ver, url, log ->
+                                        runCatching {
+                                            updVer = ver; updUrl = url; updLog = log; showUpd = true
+                                        }
+                                    },
+                                    onNone = {
+                                        runCatching {
+                                            Toast.makeText(this@MainActivity, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onError = {
+                                        runCatching {
+                                            Toast.makeText(this@MainActivity, "检查更新失败：$it", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                )
+                            },
+                            contentMod
+                        )
                     }
                 }
             }
@@ -283,6 +311,47 @@ fun HyperFlowApp() {
             }
         }
 
+        // 发现新版本弹窗（root 层渲染，避免子页面弹窗崩溃）
+        if (showUpd) {
+            OverlayDialog(
+                title = "发现新版本 V$updVer",
+                summary = updLog.ifEmpty { "点击下载并一键安装（ksud module install）" },
+                show = showUpd,
+                onDismissRequest = { showUpd = false }
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    TextButton(
+                        text = "取消",
+                        onClick = { showUpd = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(20.dp))
+                    TextButton(
+                        text = "下载并安装",
+                        onClick = {
+                            showUpd = false
+                            Toast.makeText(this@MainActivity, "开始下载", Toast.LENGTH_SHORT).show()
+                            Thread {
+                                runCatching {
+                                    val f = java.io.File(
+                                        getExternalFilesDir(null) ?: filesDir,
+                                        "HyperFlow.zip"
+                                    )
+                                    val conn = java.net.URL(updUrl).openConnection()
+                                    conn.connectTimeout = 10000
+                                    conn.inputStream.use { input ->
+                                        f.outputStream().use { out -> input.copyTo(out) }
+                                    }
+                                    RootExec.su("ksud module install '" + f.absolutePath + "' && reboot")
+                                }
+                            }.start()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
         // 首次引导覆盖层
         if (state.showOnboarding) {
             OnboardingScreen(state)
@@ -317,6 +386,49 @@ private fun SortOptionRow(label: String, selected: Boolean, onClick: () -> Unit)
             )
         }
     }
+}
+
+private fun checkUpdate(
+    onNew: (String, String, String) -> Unit,
+    onNone: () -> Unit,
+    onError: (String) -> Unit
+) {
+    Thread {
+        val urls = listOf(Config.UPDATE_JSON, Config.UPDATE_JSON_FALLBACK)
+        try {
+            var lastErr: Throwable? = null
+            var text = ""
+            for (u in urls) {
+                try {
+                    val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.instanceFollowRedirects = true
+                    text = conn.inputStream.bufferedReader().use { it.readText() }
+                    break
+                } catch (t: Throwable) { lastErr = t }
+            }
+            if (text.isEmpty()) throw lastErr ?: RuntimeException("更新通道不可达")
+            val json = org.json.JSONObject(text)
+            val ver = json.optString("version", "")
+            val vc = json.optInt("versionCode", 0)
+            val zipUrl = json.optString("zipUrl", "")
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                // UI 回调全部兜底，任何异常不闪退
+                runCatching {
+                    if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
+                        onNew(ver, zipUrl, json.optString("changelog", ""))
+                    } else {
+                        onNone()
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                runCatching { onError(t.message ?: "网络错误") }
+            }
+        }
+    }.start()
 }
 
 /** 壁纸位图（懒加载，缓存一次） */

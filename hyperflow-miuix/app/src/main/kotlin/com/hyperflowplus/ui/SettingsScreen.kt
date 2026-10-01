@@ -35,13 +35,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 设置页：外观（玻璃）/ 关于（作者、版本与更新、引导） */
 @Composable
-fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
+fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
 
-    var showUpd by remember { mutableStateOf(false) }
-    var updVer by remember { mutableStateOf("") }
-    var updUrl by remember { mutableStateOf("") }
-    var updLog by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -116,15 +112,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 ArrowPreference(
                     title = "版本与更新",
                     summary = "V${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）· 点击检查更新",
-                    onClick = {
-                        checkUpdate(ctx,
-                            onNew = { ver, url, log ->
-                                updVer = ver; updUrl = url; updLog = log; showUpd = true
-                            },
-                            onNone = { Toast.makeText(ctx, "当前已是最新版本", Toast.LENGTH_SHORT).show() },
-                            onError = { Toast.makeText(ctx, "检查更新失败：$it", Toast.LENGTH_SHORT).show() }
-                        )
-                    }
+                    onClick = { onCheckUpdate() }
                 )
                 ArrowPreference(
                     title = "重新查看引导",
@@ -135,82 +123,5 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         }
     }
 
-    if (showUpd) {
-        OverlayDialog(
-            title = "发现新版本 V$updVer",
-            summary = updLog.ifEmpty { "点击按钮下载并一键安装（ksud module install）" },
-            show = showUpd,
-            onDismissRequest = { showUpd = false }
-        ) {
-            Row(Modifier.fillMaxWidth()) {
-                TextButton(
-                    text = "取消",
-                    onClick = { showUpd = false },
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(20.dp))
-                TextButton(
-                    text = "下载并安装",
-                    onClick = {
-                        showUpd = false
-                        Toast.makeText(ctx, "开始下载", Toast.LENGTH_SHORT).show()
-                        Thread {
-                            runCatching {
-                                val f = java.io.File(
-                                    ctx.getExternalFilesDir(null) ?: ctx.filesDir,
-                                    "HyperFlow.zip"
-                                )
-                                val conn = java.net.URL(updUrl).openConnection()
-                                conn.connectTimeout = 10000
-                                conn.inputStream.use { input ->
-                                    f.outputStream().use { out -> input.copyTo(out) }
-                                }
-                                RootExec.su("ksud module install '" + f.absolutePath + "' && reboot")
-                            }
-                        }.start()
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
 }
 
-private fun checkUpdate(
-    ctx: android.content.Context,
-    onNew: (String, String, String) -> Unit,
-    onNone: () -> Unit,
-    onError: (String) -> Unit
-) {
-    Thread {
-        val urls = listOf(Config.UPDATE_JSON, Config.UPDATE_JSON_FALLBACK)
-        try {
-            var lastErr: Throwable? = null
-            var text = ""
-            for (u in urls) {
-                try {
-                    val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
-                    conn.instanceFollowRedirects = true
-                    text = conn.inputStream.bufferedReader().use { it.readText() }
-                    break
-                } catch (t: Throwable) { lastErr = t }
-            }
-            if (text.isEmpty()) throw lastErr ?: RuntimeException("更新通道不可达")
-            val json = org.json.JSONObject(text)
-            val ver = json.optString("version", "")
-            val vc = json.optInt("versionCode", 0)
-            val zipUrl = json.optString("zipUrl", "")
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                    onNew(ver, zipUrl, json.optString("changelog", ""))
-                } else {
-                    onNone()
-                }
-            }
-        } catch (t: Throwable) {
-            android.os.Handler(android.os.Looper.getMainLooper()).post { onError(t.message ?: "网络错误") }
-        }
-    }.start()
-}
