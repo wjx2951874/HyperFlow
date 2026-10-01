@@ -2,5 +2,5 @@
   "version": "v0.4.7",
   "versionCode": 42,
   "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.7/HyperFlow-0.4.7-flashable.zip",
-  "changelog": "分身通知点击直达分身微信（HookCloneClick 剥除 hf_clone_ 前缀还原 key，命中分身原始 contentIntent）；引导页三步流程（协议勾选同意→诊断→互关）；主/分身重合双保险；消息按发送人合并+机型移时间后；玻璃顶栏/底栏局部模糊+强度调节；首页标题；root 授权阻断+循环检测"
+  "changelog": "·分身通知点击直达分身微信（去掉 hf_clone_ key 前缀，发送端按原始 key 查询命中分身通知）\n·主/分身同联系人消息不再重合（【分身】标题分组双保险）\n·消息页 KSU 风格排序菜单：列表/正文两组独立，接收时间前/后\n·系统短信写入默认关闭（防回环：写入会再流转回发送端），App 归档 5 秒实时刷新\n·短信按发送人合并、机型显示在时间后、正文=短信原文\n·三步引导（协议→诊断→互关），只第一次弹出\n·玻璃顶栏/底栏局部效果+强度调节\n·设备信息直列首页"
 }
