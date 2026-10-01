@@ -30,9 +30,9 @@ public final class Config {
         String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
         return new String[]{
                 // GitHub 国内加速镜像（主通道，v0.4.34 起）
+                "https://ghproxy.net/" + raw,
                 "https://ghfast.top/" + raw,
                 "https://gh-proxy.com/" + raw,
-                "https://ghproxy.net/" + raw,
                 // raw 直连（海外/代理环境兜底）
                 raw
         };

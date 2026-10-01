@@ -108,6 +108,10 @@ fun HyperFlowApp() {
         var updLog by remember { mutableStateOf("") }
         var updPhase by remember { mutableStateOf("idle") }   // idle/checking/new/none/error
         var updMsg by remember { mutableStateOf("") }
+        var updMethod by remember { mutableStateOf(false) }    // 更新方式选择弹窗
+        var updDownloading by remember { mutableStateOf(false) }
+        var updDownloaded by remember { mutableStateOf<String?>(null) }
+        var updDlError by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
@@ -382,7 +386,7 @@ fun HyperFlowApp() {
                         Button(
                             onClick = {
                                 showUpd = false
-                                launchKernelSu()
+                                updMethod = true   // 先让用户选：下载更新包 / 去 KSU 检测
                             },
                             colors = ButtonDefaults.buttonColorsPrimary(),
                             modifier = Modifier.weight(1f)
@@ -432,7 +436,134 @@ fun HyperFlowApp() {
                 }
             }
         }
+        // ===== 更新方式选择（点「更新」后弹出） =====
+        if (updMethod) {
+            HyperDialog(
+                title = "选择更新方式",
+                summary = "① 直接下载更新包：稍后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
+                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                show = updMethod,
+                onDismiss = { updMethod = false }
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    TextButton(
+                        text = "去 KSU 检测",
+                        onClick = {
+                            updMethod = false
+                            launchKernelSu()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Button(
+                        onClick = {
+                            updMethod = false
+                            updDownloading = true
+                            updDlError = null
+                            downloadUpdateZip(ctx, updUrl) { ok, msg ->
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    updDownloading = false
+                                    if (ok) updDownloaded = msg else updDlError = msg
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("下载更新包")
+                    }
+                }
+            }
+        }
 
+        // ===== 下载中 =====
+        if (updDownloading) {
+            HyperDialog(
+                title = "正在下载更新包",
+                summary = "正在从镜像通道下载，请稍候…",
+                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                show = updDownloading,
+                onDismiss = { updDownloading = false }
+            ) {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(progress = null)
+                }
+            }
+        }
+
+        // ===== 下载完成 =====
+        updDownloaded?.let { path ->
+            HyperDialog(
+                title = "更新包已下载",
+                summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
+                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                show = true,
+                onDismiss = { updDownloaded = null }
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    TextButton(
+                        text = "稍后安装",
+                        onClick = { updDownloaded = null },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Button(
+                        onClick = {
+                            updDownloaded = null
+                            launchKernelSu()
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("打开 KSU 安装")
+                    }
+                }
+            }
+        }
+
+        // ===== 下载失败 =====
+        updDlError?.let { err ->
+            HyperDialog(
+                title = "下载失败",
+                summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
+                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                show = true,
+                onDismiss = { updDlError = null }
+            ) {
+                Row(Modifier.fillMaxWidth()) {
+                    TextButton(
+                        text = "重试下载",
+                        onClick = {
+                            updDlError = null
+                            updDownloading = true
+                            downloadUpdateZip(ctx, updUrl) { ok, msg ->
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    updDownloading = false
+                                    if (ok) updDownloaded = msg else updDlError = msg
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Button(
+                        onClick = {
+                            updDlError = null
+                            launchKernelSu()
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("去 KSU 检测")
+                    }
+                }
+            }
+        }
+
+        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
         // 首次引导覆盖层
         if (state.showOnboarding) {
             OnboardingScreen(state)
@@ -581,6 +712,49 @@ private fun readCrashLog(ctx: android.content.Context): String? {
 }
 
 /** 跳转 KernelSU 管理器（多候选包名，am start -p 拉起主界面）——与引导页同款 */
+private fun downloadUpdateZip(ctx: Context, url: String, onDone: (Boolean, String) -> Unit) {
+    Thread {
+        // 多通道并行下载：镜像 + GitHub 直连，谁先完成用谁（挂代理/境外网络时直连更快）
+        val candidates = mutableListOf(
+            url,
+            url.replace("https://ghproxy.net/https://github.com/", "https://github.com/"),
+            url.replace("https://ghfast.top/https://github.com/", "https://github.com/"),
+            url.replace("https://gh-proxy.com/https://github.com/", "https://github.com/"),
+        ).distinct()
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        val errHolder = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
+        candidates.forEach { u ->
+            Thread {
+                if (done.get()) return@Thread
+                runCatching {
+                    val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 30000
+                    conn.instanceFollowRedirects = true
+                    conn.setRequestProperty("User-Agent", "HyperFlow/" + BuildConfig.VERSION_NAME)
+                    val f = java.io.File(dir, "HyperFlow-update.zip")
+                    f.outputStream().use { outs ->
+                        conn.inputStream.use { ins -> ins.copyTo(outs) }
+                    }
+                    if (f.length() < 1_000_000L) throw java.io.IOException("下载不完整（${f.length()}B）")
+                    if (done.compareAndSet(false, true)) {
+                        onDone(true, f.absolutePath)
+                        latch.countDown()
+                    }
+                }.onFailure {
+                    errHolder.compareAndSet(null, it.message ?: "下载失败")
+                }
+            }.start()
+        }
+        latch.await(120, java.util.concurrent.TimeUnit.SECONDS)
+        if (!done.get()) {
+            onDone(false, errHolder.get() ?: "所有通道下载失败")
+        }
+    }.start()
+}
+
 private fun launchKernelSu() {
     RootExec.su("for p in com.kernelsu.manager com.kernelsu com.rifsxd.ksunext; do " +
             "pm path \$p >/dev/null 2>&1 && { am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p \$p >/dev/null 2>&1 && break; }; done")
