@@ -81,6 +81,28 @@ fun SettingsScreen(state: HFState, onCheckUpdate: () -> Unit, modifier: Modifier
                 )
             }
         }
+
+        GroupTitle("开源与声明")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                ArrowPreference(
+                    title = "AI 辅助生成",
+                    summary = "本项目由 AI 辅助开发、调试与文案撰写，并经人工逐项验证；并非完全由 AI 生成。",
+                    onClick = {}
+                )
+                ArrowPreference(
+                    title = "开源致谢与许可",
+                    summary = "Miuix（Apache-2.0）· KernelSU（GPL-3.0）· LSPosed（GPL-3.0）· Xposed API，感谢各开源社区的贡献。",
+                    onClick = {}
+                )
+                ArrowPreference(
+                    title = "灵感来源",
+                    summary = "部分灵感来源于酷安用户分享的设备互联 / 通知流转方案。",
+                    onClick = {}
+                )
+            }
+        }
     }
 
 }

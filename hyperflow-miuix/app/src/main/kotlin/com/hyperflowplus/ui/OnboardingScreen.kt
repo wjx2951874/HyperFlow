@@ -173,6 +173,7 @@ private fun StageAgreement(
     Text(
         "· 本模块仅供个人设备调试，请遵守相关服务条款\n" +
                 "· 流转数据仅在同一小米账号的设备间传输\n" +
+                "· 本项目由 AI 辅助开发与调试，并经人工验证；并非完全由 AI 生成\n" +
                 "· 使用中有任何问题，点击跳转酷安向作者反馈",
         style = MiuixTheme.textStyles.body2,
         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)

@@ -12,8 +12,26 @@
 - **分身流转**：微信 / QQ 分身（999）通知也参与流转
 - **短信持久化**：流转短信按发送人归档到本机，可随时回看（不依赖系统短信 App）
 - **来电在线接听**：锁屏场景下转为 OS4 在线接听形态
-- **Miuix 风格 UI**：Compose 重写的设置/消息界面，AndroidLiquidGlass 柔光玻璃
+- **Miuix 风格 UI**：Compose 重写的设置/消息界面（柔光玻璃由系统级液态玻璃模块实现）
 - **消息会话页**：短信 App 样式的会话列表 + 时间排序（列表/正文独立）
+
+## AI 辅助生成声明
+
+本项目由 AI 辅助开发、调试与文案撰写，并经人工逐项验证与迭代；**并非完全由 AI 生成**。若你发现任何问题，欢迎在酷安向作者反馈。
+
+## 开源致谢与许可
+
+本项目构建于以下开源项目之上，特此致谢：
+
+- **[Miuix](https://github.com/compose-miuix-ui/miuix)**（Apache-2.0）—— Compose Multiplatform UI 组件库
+- **[KernelSU](https://github.com/tiann/KernelSU)**（GPL-3.0）—— 内核级 Root 解决方案与模块机制
+- **[LSPosed](https://github.com/LSPosed/LSPosed)**（GPL-3.0）—— Xposed 框架与 libxposed API
+
+各开源项目版权归其原作者所有，请遵守对应许可证条款。
+
+## 灵感来源
+
+部分灵感来源于**酷安用户**分享的设备互联 / 通知流转方案与社区讨论。
 
 ## 安装
 
