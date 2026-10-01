@@ -204,7 +204,7 @@ private fun StageAgreement(
             )
             Text(
                 "酷安 @翰德姆（点击前往，问题反馈 / 关注）",
-                style = MiuixTheme.textStyles.caption,
+                style = MiuixTheme.textStyles.body2,
                 color = MiuixTheme.colorScheme.primary
             )
         }
@@ -214,7 +214,7 @@ private fun StageAgreement(
     // 致谢
     Text(
         "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区",
-        style = MiuixTheme.textStyles.caption,
+        style = MiuixTheme.textStyles.body2,
         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth()
@@ -369,7 +369,7 @@ private fun StageCoolapk(
     Spacer(Modifier.height(8.dp))
     Button(
         onClick = onDone,
-        colors = ButtonDefaults.secondaryButtonColors()
+        colors = ButtonDefaults.buttonColors()
     ) {
         Text("算了，先跳过")
     }
@@ -427,7 +427,7 @@ private fun DiagCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     subtitle,
-                    style = MiuixTheme.textStyles.caption,
+                    style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
             }
@@ -436,7 +436,7 @@ private fun DiagCard(
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onAction,
-                colors = ButtonDefaults.secondaryButtonColors()
+                colors = ButtonDefaults.buttonColors()
             ) {
                 Text(actionText)
             }
