@@ -1,6 +1,6 @@
 {
-  "version": "0.4.13",
-  "versionCode": 48,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.13/HyperFlow-0.4.13-flashable.zip",
-  "changelog": "v0.4.13：更新链路强化（jsDelivr首选国内可达、5秒超时、点击立即反馈、结果必弹提示）"
+  "version": "0.4.14",
+  "versionCode": 49,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.14/HyperFlow-0.4.14-flashable.zip",
+  "changelog": "v0.4.14：修复闪退（主题取色全链路兜底，失败自动退回系统默认）+ 更新链路 jsDelivr 首选"
 }
