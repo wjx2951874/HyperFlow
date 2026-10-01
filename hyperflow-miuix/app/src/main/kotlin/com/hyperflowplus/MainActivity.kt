@@ -94,19 +94,15 @@ fun HyperFlowApp() {
             state.showOnboarding = !state.firstRunDone
         }
 
-        // 崩溃日志弹窗（自动展示上次闪退原因，WindowDialog 普通窗口弹窗防 Overlay 闪退）
-        if (crashLog != null) {
-            WindowDialog(
-                title = "上次闪退诊断",
-                summary = crashLog!!.take(800),
-                show = crashLog != null,
-                onDismissRequest = { crashLog = null }
-            ) {
-                TextButton(
-                    text = "知道了",
-                    onClick = { crashLog = null },
-                    modifier = Modifier.fillMaxWidth()
-                )
+        // 上次闪退提示：仅 Toast 展示摘要（不弹窗，避免启动弹窗渲染导致循环闪退）
+        LaunchedEffect(crashLog) {
+            if (crashLog != null) {
+                Toast.makeText(
+                    ctx,
+                    "上次 HyperFlow 异常退出（日志已保存）：" + crashLog!!.take(80),
+                    Toast.LENGTH_LONG
+                ).show()
+                crashLog = null
             }
         }
 
@@ -341,11 +337,18 @@ private fun SortOptionRow(label: String, selected: Boolean, onClick: () -> Unit)
     }
 }
 
+/** 检测更新防并发：多次点击只跑一次，避免线程堆积 */
+private val updateChecking = java.util.concurrent.atomic.AtomicBoolean(false)
+
 private fun checkUpdate(
     onNew: (String, String, String) -> Unit,
     onNone: () -> Unit,
     onError: (String) -> Unit
 ) {
+    if (!updateChecking.compareAndSet(false, true)) {
+        onError("正在检查中，请稍候再试")
+        return
+    }
     Thread {
         try {
             var lastErr: Throwable? = null
@@ -380,6 +383,8 @@ private fun checkUpdate(
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 onError(t.message ?: "网络错误")
             }
+        } finally {
+            updateChecking.set(false)
         }
     }.start()
 }
