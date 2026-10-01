@@ -435,6 +435,6 @@ private fun wallpaperKeyColor(ctx: android.content.Context): Color {
             n++
         }
         sm.recycle()
-        Color(r / n, g / n, b / n)
+        Color((r / n).toInt(), (g / n).toInt(), (b / n).toInt())
     }.getOrElse { Color(0xFF0A84FF) }
 }
