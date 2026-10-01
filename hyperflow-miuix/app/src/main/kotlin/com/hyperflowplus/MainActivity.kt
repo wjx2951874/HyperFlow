@@ -198,7 +198,6 @@ fun HyperFlowApp() {
                     }
                 }
             }
-        }
 
         // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮）
         if (showSort) {
