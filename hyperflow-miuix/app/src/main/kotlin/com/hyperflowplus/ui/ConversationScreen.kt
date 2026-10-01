@@ -45,7 +45,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>) {
     var showSort by remember { mutableStateOf(false) }
     val desc = state.detailSort != "asc"
-    val sorted = remember(rows, desc) {
+    val sorted = remember(rows, desc, state.sortVersion) {
         rows.sortedWith { a, b -> if (desc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
     }
     // 标题副文案：取首条记录的来源设备
@@ -73,13 +73,18 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                 val time = row.getOrElse(0) { "" }
                 val body = row.getOrElse(2) { "" }
                 Column(Modifier.fillMaxWidth()) {
-                    // 时间标签：时间 + 机型（1:18｜来自Xiaomi15）
+                    // 时间标签：时间 + 机型，居中置顶（对齐系统短信时间戳样式）
                     val rowDevice = row.getOrElse(1) { "" }
                     Text(
                         fmtTime(time) + if (rowDevice.isNotEmpty()) "｜来自" + rowDevice else "",
                         style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
+                    // 消息气泡：左对齐、圆角、正文原文、宽度自适应（不撑满全屏）
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Start,
@@ -112,18 +117,29 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
         ) {
             Column(Modifier.padding(horizontal = 8.dp)) {
                 DetailSortRow(
-                    current = state.detailSort,
-                    onClick = { state.setSort(Config.KEY_DETAIL_SORT); showSort = false }
+                    label = "最新在前",
+                    selected = state.detailSort != "asc",
+                    onClick = {
+                        if (state.detailSort == "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                        showSort = false
+                    }
+                )
+                DetailSortRow(
+                    label = "最早在前",
+                    selected = state.detailSort == "asc",
+                    onClick = {
+                        if (state.detailSort != "asc") state.setSort(Config.KEY_DETAIL_SORT)
+                        showSort = false
+                    }
                 )
             }
         }
     }
 }
 
-/** 正文排序行：最新优先（倒序）/ 最早优先（正序），点击即时切换 */
+/** 正文排序行：单选两行（最新在前/最早在前），选中高亮 primary */
 @Composable
-private fun DetailSortRow(current: String, onClick: () -> Unit) {
-    val asc = current == "asc"
+private fun DetailSortRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -132,22 +148,19 @@ private fun DetailSortRow(current: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (asc) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            imageVector = if (selected) Icons.Filled.CheckCircle else Icons.Filled.KeyboardArrowDown,
             contentDescription = null,
             modifier = Modifier.width(20.dp).height(20.dp),
-            tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            tint = if (selected) MiuixTheme.colorScheme.primary
+            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            if (asc) "最早优先" else "最新优先",
+            label,
             style = MiuixTheme.textStyles.body1,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            "点击切换",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) MiuixTheme.colorScheme.primary
+            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f)
         )
     }
 }

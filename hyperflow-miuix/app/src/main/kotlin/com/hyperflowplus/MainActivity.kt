@@ -202,6 +202,7 @@ fun HyperFlowApp() {
                     }
                 }
             ) { padding ->
+                val ctx = LocalContext.current
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -221,12 +222,12 @@ fun HyperFlowApp() {
                                     },
                                     onNone = {
                                         runCatching {
-                                            Toast.makeText(this@MainActivity, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, "当前已是最新版本", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     onError = {
                                         runCatching {
-                                            Toast.makeText(this@MainActivity, "检查更新失败：$it", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, "检查更新失败：$it", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 )
@@ -330,11 +331,11 @@ fun HyperFlowApp() {
                         text = "下载并安装",
                         onClick = {
                             showUpd = false
-                            Toast.makeText(this@MainActivity, "开始下载", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, "开始下载", Toast.LENGTH_SHORT).show()
                             Thread {
                                 runCatching {
                                     val f = java.io.File(
-                                        getExternalFilesDir(null) ?: filesDir,
+                                        ctx.getExternalFilesDir(null) ?: ctx.filesDir,
                                         "HyperFlow.zip"
                                     )
                                     val conn = java.net.URL(updUrl).openConnection()

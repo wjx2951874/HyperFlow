@@ -25,6 +25,7 @@ object HFState {
     var kernelVersion by mutableStateOf("")        // 内核版本
     var ksuVersion by mutableStateOf("未检测")      // KernelSU 版本
     var showOnboarding by mutableStateOf(false)    // 引导页是否显示
+    var sortVersion by mutableStateOf(0)             // 排序版本号：任何排序变更自增，强制列表/详情重算
 
     private var pollingStarted = false
 
@@ -88,6 +89,7 @@ object HFState {
     fun setSort(key: String) {
         val cur = cfg.optString(key, "desc")
         cfg = JSONObject(cfg.toString()).put(key, if (cur == "desc") "asc" else "desc")
+        sortVersion++
         saveCfgLater()
         refreshArchive()
     }
@@ -95,6 +97,7 @@ object HFState {
     /** 直接设置排序值（列表排序菜单：name_asc/name_desc/time_asc/time_desc） */
     fun setSortValue(key: String, value: String) {
         cfg = JSONObject(cfg.toString()).put(key, value)
+        sortVersion++
         saveCfgLater()
         refreshArchive()
     }

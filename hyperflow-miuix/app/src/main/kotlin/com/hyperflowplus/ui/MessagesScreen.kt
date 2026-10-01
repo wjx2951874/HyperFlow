@@ -25,7 +25,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
-    val convos = remember(state.flow, state.archiveSort) {
+    val convos = remember(state.flow, state.archiveSort, state.sortVersion) {
         parseFlow(state.flow, state.archiveSort)
     }
     if (convos.isEmpty()) {
@@ -47,39 +47,39 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize()) {
         items(convos, key = { it.first }) { (sender, rows) ->
             val latest = rows.maxByOrNull { it[0] } ?: return@items
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { state.currentConversation = sender to rows }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            sender,
-                            style = MiuixTheme.textStyles.body1,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            // 机型放在时间后边（1:18｜来自Xiaomi15），发送人名保持原样
-                            fmtTime(latest[0]) +
-                                if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        )
-                    }
-                    Text(
-                        latest[2].ifEmpty { "(无正文)" },
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // 行 1：发送人名称（系统短信样式，左对齐加粗）
+                Text(
+                    sender,
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // 行 2：时间｜来自设备（小字灰色，紧跟名称下方）
+                Text(
+                    fmtTime(latest[0]) +
+                        if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+                // 行 3：最新正文预览（灰色小字，最多两行）
+                Text(
+                    latest[2].ifEmpty { "(无正文)" },
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
             }
         }
     }
