@@ -62,7 +62,9 @@ import com.hyperflowplus.ui.FlowScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.GuideScreen
 import com.hyperflowplus.ui.GuideType
+import com.hyperflowplus.ui.BarBlurHost
 import com.hyperflowplus.ui.HyperDialog
+import com.hyperflowplus.ui.LiquidNavBar
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
 import com.hyperflowplus.ui.MessagesScreen
@@ -212,28 +214,28 @@ fun HyperFlowApp() {
                 }
             },
             bottomBar = {
-                NavigationBar {
-                    tabs.forEachIndexed { i, t ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = t.icon,
-                            label = t.title
-                        )
-                    }
-                }
+                // 悬浮导航栏 / 液态玻璃 双模式（设置-主题 开关控制）
+                LiquidNavBar(
+                    selectedTabIndex = tab,
+                    onTabSelected = { tab = it },
+                    items = tabs.map { it.icon to it.title },
+                    floatEnabled = state.navFloat,
+                    glassEnabled = state.glassEffect
+                )
             }
             ) { padding ->
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
                 // 内容区保持主题色不透明（玻璃只作用于顶栏/底栏）
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-                    when (tab) {
-                        0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                        1 -> FlowScreen(state, contentMod)
-                        2 -> MessagesScreen(state, contentMod)
-                        3 -> SettingsScreen(state, contentMod)
+                BarBlurHost(enabled = state.glassEffect) {
+                    Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                        when (tab) {
+                            0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                            1 -> FlowScreen(state, contentMod)
+                            2 -> MessagesScreen(state, contentMod)
+                            3 -> SettingsScreen(state, contentMod)
+                        }
                     }
                 }
             }
