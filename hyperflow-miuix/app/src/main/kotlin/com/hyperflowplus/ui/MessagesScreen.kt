@@ -96,9 +96,25 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         }
         return
     }
+    // 小米端读不到数据：当前显示的是本地保存的历史记录（避免误以为小米互联还有数据）
+    val localOnly = convos.isNotEmpty() && !state.liveAvailable
     LazyColumn(modifier.fillMaxSize()) {
+        if (localOnly) {
+            item {
+                Text(
+                    "小米端暂无可读数据，以下为本地保存的历史记录",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.primary.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
         items(convos, key = { it.first }) { (sender, rows) ->
             val latest = rows.maxByOrNull { timeToEpoch(it[0]) } ?: return@items
+            val devTag = if (latest[1].isNotEmpty()) "｜来自" + latest[1] else ""
+            val localTag = if (latest.getOrNull(3) == "local") "（本地）" else ""
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,8 +132,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        fmtTime(latest[0]) +
-                            if (latest[1].isNotEmpty()) "｜来自" + latest[1] else "",
+                        fmtTime(latest[0]) + devTag + localTag,
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                         maxLines = 1,
@@ -159,11 +174,13 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
             .substringBefore(",")
             .replace(Regex("[\\uFFFD\\u0000-\\u001F]"), "")
             .trim()
+        // 来源标记：hf_source=live（小米端实时）/ local（本地历史），无标记默认小米端
+        val src = field(line, "hf_source").ifEmpty { "live" }
         if (title.isEmpty() && body.isEmpty()) continue
         // 按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
         // 标题为空时回退到设备名，避免全部挤进"未知"分组
         val key = title.ifEmpty { device.ifEmpty { "未知" } }
-        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body))
+        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src))
     }
     val list = groups.map { it.key to it.value }.toMutableList()
     val timeDesc = sort == "time_desc" || sort == "desc"
@@ -209,7 +226,7 @@ private fun field(line: String, key: String): String {
     var end = line.length
     for (next in arrayOf(
         ", content_title=", ", content_description=", ", content_time=",
-        ", time_stamp=", ", notification_ref=", ", content_device_name="
+        ", time_stamp=", ", notification_ref=", ", content_device_name=", ", hf_source="
     )) {
         val i = line.indexOf(next, vStart)
         if (i >= 0 && i < end) end = i

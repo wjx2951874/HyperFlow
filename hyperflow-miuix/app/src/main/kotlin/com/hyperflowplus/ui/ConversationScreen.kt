@@ -47,7 +47,12 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
     var showSort by remember { mutableStateOf(false) }
     val desc = state.detailSort != "asc"
     val sorted = remember(rows, desc, state.sortVersion) {
-        rows.sortedWith { a, b -> if (desc) b[0].compareTo(a[0]) else a[0].compareTo(b[0]) }
+        // 时间戳排序：兼容 content_time 两种格式（字符串比较会错乱）
+        rows.sortedWith { a, b ->
+            val ta = timeToEpoch(a.getOrElse(0) { "" })
+            val tb = timeToEpoch(b.getOrElse(0) { "" })
+            if (desc) (tb - ta).toInt() else (ta - tb).toInt()
+        }
     }
     // 标题副文案：取首条记录的来源设备
     val device = remember(rows) { rows.firstOrNull()?.getOrElse(1) { "" } ?: "" }
@@ -74,10 +79,12 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                 val time = row.getOrElse(0) { "" }
                 val body = row.getOrElse(2) { "" }
                 Column(Modifier.fillMaxWidth()) {
-                    // 时间标签：时间 + 机型，居中置顶（对齐系统短信时间戳样式）
+                    // 时间标签：时间 + 机型 + 来源（本地历史标记），居中置顶（对齐系统短信时间戳样式）
                     val rowDevice = row.getOrElse(1) { "" }
+                    val rowLocal = if (row.getOrElse(3) { "" } == "local") "（本地）" else ""
+                    val devTag = if (rowDevice.isNotEmpty()) "｜来自" + rowDevice else ""
                     Text(
-                        fmtTime(time) + if (rowDevice.isNotEmpty()) "｜来自" + rowDevice else "",
+                        fmtTime(time) + devTag + rowLocal,
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                         modifier = Modifier
@@ -164,4 +171,16 @@ private fun DetailSortRow(label: String, selected: Boolean, onClick: () -> Unit)
             else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f)
         )
     }
+}
+
+/** 解析两种时间格式为时间戳（排序用）：20260930T155344 / 2026-09-30 15:53 */
+private fun timeToEpoch(raw: String): Long {
+    if (raw.isBlank()) return 0L
+    return runCatching {
+        if (raw.contains("T")) {
+            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
+        } else {
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
+        }
+    }.getOrDefault(0L)
 }

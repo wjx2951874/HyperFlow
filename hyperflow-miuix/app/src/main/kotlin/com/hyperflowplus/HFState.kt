@@ -26,6 +26,7 @@ object HFState {
     var ksuVersion by mutableStateOf("未检测")      // KernelSU 版本
     var showOnboarding by mutableStateOf(false)    // 引导页是否显示
     var sortVersion by mutableStateOf(0)             // 排序版本号：任何排序变更自增，强制列表/详情重算
+    var liveAvailable by mutableStateOf(true)        // 小米端 flow provider 最近一次是否有数据（false=当前显示的是本地历史）
 
     private var pollingStarted = false
 
@@ -43,18 +44,20 @@ object HFState {
                         RootExec.su("content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60")
                     }.getOrNull()
                     var display: String? = null
-                    if (f != null && f.isNotBlank()) {
+                    val live = f != null && f.isNotBlank()
+                    if (live) {
                         if (archiveApp) {
                             val hist = readHistory()
-                            display = if (hist != null) mergeFlow(hist, f) else f
+                            display = if (hist != null) mergeFlow(hist, tagSource(f, "live")) else tagSource(f, "live")
                             persistHistory(f)
                         } else {
-                            display = f
+                            display = tagSource(f, "live")
                         }
                     }
                     val finalDisplay = display
                     handler.post {
                         if (finalDisplay != null && finalDisplay != flow) flow = finalDisplay
+                        liveAvailable = live
                     }
                     // 顺带刷新 root 状态（用户后授权也能即时反映，设备信息不用重进 App）
                     val uid = runCatching { RootExec.su("id -u") }.getOrNull()?.trim()
@@ -157,6 +160,13 @@ object HFState {
         return map.values.joinToString("\n")
     }
 
+    /** 给 flow 行打来源标记：hf_source=live（小米端实时）/ hf_source=local（本地历史） */
+    private fun tagSource(raw: String, src: String): String =
+        raw.lines().joinToString("\n") { line ->
+            if (line.isBlank()) line
+            else line.replace(Regex(",?\\s*hf_source=\\w+"), "") + ", hf_source=$src"
+        }
+
     /** 读取本地历史（App 内消息关闭后仍保留的文件） */
     fun readHistory(): String? {
         val f = historyFile ?: return null
@@ -167,12 +177,12 @@ object HFState {
         }
     }
 
-    /** 保存实时数据到本地历史（去重累积） */
+    /** 保存实时数据到本地历史（去重累积；历史行统一标 hf_source=local） */
     private fun persistHistory(realtime: String) {
         val f = historyFile ?: return
         try {
             val old = if (f.exists()) f.readText() else ""
-            val merged = mergeFlow(old, realtime)
+            val merged = mergeFlow(old, tagSource(realtime, "local"))
             if (merged.isNotBlank()) {
                 f.parentFile?.mkdirs()
                 f.writeText(merged)
@@ -196,9 +206,10 @@ object HFState {
             val f = runCatching {
                 RootExec.su("content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60")
             }.getOrNull()
-            val finalF = f
+            val finalF = if (f != null && f.isNotBlank()) tagSource(f, "live") else null
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 if (finalF != null && finalF != flow) flow = finalF
+                liveAvailable = finalF != null
             }
         }.start()
     }
@@ -251,9 +262,9 @@ object HFState {
             val mergedFlow = if (finalFlow != null) {
                 if (finalCfg != null && runCatching { JSONObject(finalCfg).optBoolean("archive_app", false) }.getOrDefault(false)) {
                     val hist = readHistory()
-                    if (hist != null) mergeFlow(hist, finalFlow) else finalFlow
+                    if (hist != null) mergeFlow(hist, tagSource(finalFlow, "live")) else tagSource(finalFlow, "live")
                 } else {
-                    finalFlow
+                    tagSource(finalFlow, "live")
                 }
             } else null
             android.os.Handler(android.os.Looper.getMainLooper()).post {
