@@ -6,3 +6,4 @@ hyperflow-miuix/local.properties
 
 # 内部文档（禁止提交）
 docs-internal/
+hf-v0434/*.new
