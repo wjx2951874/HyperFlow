@@ -1,6 +1,6 @@
 {
-  "version": "0.4.24",
-  "versionCode": 59,
-  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.24-flashable.zip",
-  "changelog": "引导四层统一靠下；跳过酷安后弹反馈窗口（我知道了 10s 后可点）；检测更新改 MIUI 弹窗（转圈加载）；启动闪退修复（崩溃诊断改 Toast）+ 检测防并发"
+  "version": "0.4.25",
+  "versionCode": 60,
+  "zipUrl": "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/releases/HyperFlow-0.4.25-flashable.zip",
+  "changelog": "引导协议页内容可滚动+卡片下移；设置页开源项目逐条列出；诊断页去授权弹手动步骤窗口，Root 未授权时按钮置灰不可点"
 }
