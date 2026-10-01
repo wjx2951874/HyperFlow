@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LSPosed 预勾选作用域：小米互联服务 + 本 App + android（点击分身打开需拦截 system_server） -->
+    <string-array name="xposedscope">
+        <item>com.milink.service</item>
+        <item>com.hyperflowplus</item>
+        <item>android</item>
+    </string-array>
+</resources>

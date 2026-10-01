@@ -4,6 +4,7 @@ import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
+import com.hyperflowplus.hooks.HookRemoteOpen;
 import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
 
@@ -36,12 +37,29 @@ public class XposedEntry extends XposedModule {
 
     @Override
     public void onPackageLoaded(PackageLoadedParam param) {
-        if (!"com.milink.service".equals(param.getPackageName())) {
+        // 运行态标记：模块被 LSPosed 真正注入加载时写时间戳。
+        // 首页检测据此识别"框架/作用域是否真的生效"（配置态 db/scope 在框架关闭时残留会误判）。
+        markLoaded();
+        String pkgName = param.getPackageName();
+        ClassLoader cl = param.getDefaultClassLoader();
+        if ("android".equals(pkgName)) {
+            // system_server：拦截"远程打开应用"请求，把分身通知的点击改为打开 999 空间
+            // 微信/QQ（需要作用域勾选 android）
+            try {
+                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect) ===");
+                installSafely("HookRemoteOpen[system]", new Runnable() {
+                    @Override public void run() { HookRemoteOpen.installSystem(cl); }
+                });
+            } catch (Throwable t) {
+                MiflowLog.e("XposedEntry system init failed", t);
+            }
+            return;
+        }
+        if (!"com.milink.service".equals(pkgName)) {
             return;
         }
         try {
-            ClassLoader cl = param.getDefaultClassLoader();
-            MiflowLog.i("=== HyperFlow V0.3.11 loaded in " + param.getPackageName()
+            MiflowLog.i("=== HyperFlow V0.3.11 loaded in " + pkgName
                     + " api=" + getApiVersion() + " framework=" + getFrameworkName() + " ===");
 
             installSafely("HookForceTransfer", new Runnable() {
@@ -72,6 +90,18 @@ public class XposedEntry extends XposedModule {
             r.run();
         } catch (Throwable t) {
             MiflowLog.e(name + " failed", t);
+        }
+    }
+
+    /** 写运行态标记（zygote 进程有 root 权限；失败静默，不影响功能） */
+    private static void markLoaded() {
+        try {
+            java.io.File f = new java.io.File("/data/adb/hyperflowplus/xposed_loaded");
+            f.getParentFile().mkdirs();
+            java.io.PrintWriter w = new java.io.PrintWriter(f, "UTF-8");
+            w.println(System.currentTimeMillis());
+            w.close();
+        } catch (Throwable ignored) {
         }
     }
 }

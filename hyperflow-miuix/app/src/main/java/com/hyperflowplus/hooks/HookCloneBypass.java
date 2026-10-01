@@ -1,14 +1,12 @@
 package com.hyperflowplus.hooks;
 
 import android.app.Notification;
-import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 
 import com.hyperflowplus.Config;
 import com.hyperflowplus.MiflowLog;
 import com.hyperflowplus.XposedEntry;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface.Chain;
@@ -16,7 +14,7 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能② 微信/QQ 分身（user 999）通知流转（V0.2 libxposed 重写，V0.2.4 加 user 归一）。
+ * 功能② 微信/QQ 分身（user 999）通知流转（V0.4.43 回退：只放行，不归一、不镜像）。
  *
  * 反编译确认（NotificationHandler）：
  *   private boolean isNotificationValid(StatusBarNotification sbn) {
@@ -24,20 +22,23 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  *       ...
  *   }
  *
- * 拦截 isNotificationValid：通知来自 user 999 且有内容 → 直接返回 true 短路；
- * 否则交给原逻辑。注意流转链路为 isNotificationValid → isDeviceSupported，
- * 亮屏时后者由 HookForceTransfer 覆盖为 true。
+ * 历史教训：
+ *   - V0.2.4 加「user 归一」（反射把 sbn.user 改为主用户 0）后出现重复 bug：
+ *     发送端 systemui 也持有该 sbn，user 被改后主空间通知栏多出一条一样的。
+ *   - V0.4.43 镜像方案（system_server 再造 user 0 镜像通知，学双开通知桥）虽能防重复，
+ *     但复杂度高且需额外作用域。用户实测确认：最初「只放行」方案本就不会让两个微信
+ *     都显示，只是点击打不开分身微信。
  *
- * V0.2.4 修复"有声无影"：仅放行还不够——流转数据仍携带 user 999，
- * 接收端按分身空间处理 → 提示音响但状态栏不显示。
- * 放行时把 sbn 的 user 反射归一为主用户(0)，接收端即按普通通知展示。
+ * V0.4.43 最终方案：只放行、不碰 user——
+ *   分身(999)通知 → isNotificationValid 直接返回 TRUE → 原样流转（数据保留 user 999，
+ *   接收端按分身通知展示，不产生主空间重复）；标题加【分身】前缀供接收端分组。
+ *   点击打开分身（拉到 999 空间微信/QQ）由 HookRemoteOpen（远程打开应用请求拦截）
+ *   单独实现，与本文件解耦。
  */
 public class HookCloneBypass {
 
     /** 自定义标记：分身通知（供第二道兜底 hook 识别，防【分身】前缀在第一道链路丢失） */
     private static final String HF_IS_CLONE = "hf_is_clone";
-
-    /** 分身通知 key 前缀（防与主应用同联系人通知 key 冲突；点击查询时由 HookCloneClick 剥除还原） */
 
     public static void install(ClassLoader cl) {
         try {
@@ -70,20 +71,16 @@ public class HookCloneBypass {
                                 return chain.proceed();
                             }
                             if (sbn.getUser() != null && sbn.getUser().hashCode() == 999) {
-                                // V0.2.4：user 999 → 主用户(0)，让接收端按普通通知展示（否则有声无影）
-                                normalizeUser(sbn);
-                                // V0.2.5：标题加【分身】前缀，接收端可区分主/次（只改回调对象，
-                                // 影响后续流转序列化；发送端已显示的通知由 systemui 持有，不受影响）
-                                // V0.4.7：不加 key 前缀 —— 点击流转通知时发送端按原始 key 查询，
-                                // 前缀会导致查不到；主/分身区分完全靠【分身】标题分组 + extras 双保险
+                                // 只放行，不改 user（归一会导致发送端 systemui 主空间也显示一条）。
+                                // 标题加【分身】前缀（只改流转数据，发送端已显示的通知不受影响）；
+                                // 接收端按分身空间处理原样展示。
                                 markCloneTitle(sbn);
                                 Config.bump(Config.CNT_CLONE);
                                 MiflowLog.d("clone notification released: " + sbn.getPackageName());
                                 return Boolean.TRUE;
                             }
-                            // V0.3.13：普通用户全量放行 —— 电话/短信/所有应用的通知
-                            // 都跳过 mAppNotificationFilter 过滤（默认只处理微信/QQ/短信/电话，
-                            // 其中电话在本地 Voip 支持时被 filterCall 拦截、短信通知被 filterSms 拦截）
+                            // 普通用户全量放行 —— 电话/短信/所有应用的通知
+                            // 都跳过 mAppNotificationFilter 过滤
                             MiflowLog.d("all-app notification released: " + sbn.getPackageName());
                             return Boolean.TRUE;
                         }
@@ -95,8 +92,7 @@ public class HookCloneBypass {
 
         // 第二道兜底：发送端序列化前（buildPlainMessage）强制打【分身】前缀。
         // 即使 isNotificationValid 里的 markCloneTitle 标记在链路中丢失，
-        // 只要 extras 里留有 hf_is_clone 标记，这里也能保证流转数据标题带前缀，
-        // 接收端 App 据此分组，主/分身同联系人消息互不重合。
+        // 只要 extras 里留有 hf_is_clone 标记，这里也能保证流转数据标题带前缀。
         try {
             Class<?> builder = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationBuilder", false, cl);
             for (Method m : builder.getDeclaredMethods()) {
@@ -130,41 +126,6 @@ public class HookCloneBypass {
             }
         } catch (Throwable t) {
             MiflowLog.e("HookCloneBypass[guard] install failed", t);
-        }
-    }
-
-    /** 把 StatusBarNotification 的 user 反射改为主用户(0)，让接收端按普通通知展示 */
-    private static void normalizeUser(StatusBarNotification sbn) {
-        try {
-            Class<?> c = sbn.getClass();
-            Field f = null;
-            // Android 各版本字段名：mUser / mUserHandle
-            try {
-                f = c.getDeclaredField("mUser");
-            } catch (NoSuchFieldException e1) {
-                try {
-                    f = c.getDeclaredField("mUserHandle");
-                } catch (NoSuchFieldException e2) {
-                    // 遍历查找 UserHandle 类型字段（防版本改名）
-                    for (Field cand : c.getDeclaredFields()) {
-                        if (UserHandle.class.isAssignableFrom(cand.getType())) {
-                            f = cand;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (f == null) {
-                MiflowLog.w("normalizeUser: no user field found");
-                return;
-            }
-            f.setAccessible(true);
-            // 精简 android.jar 无 SYSTEM/of 编译期可见，用运行时反射取（Android 17 一定有）
-            Object systemUh = UserHandle.class.getField("SYSTEM").get(null);
-            f.set(sbn, systemUh);
-            MiflowLog.d("clone user normalized to main user");
-        } catch (Throwable t) {
-            MiflowLog.w("normalizeUser failed: " + t.getMessage());
         }
     }
 

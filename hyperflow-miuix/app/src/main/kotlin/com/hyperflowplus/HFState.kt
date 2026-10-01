@@ -257,7 +257,7 @@ object HFState {
             var cfgText: String? = null
             var flowText: String? = null
             var rootRaw = "su 不可用"
-            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devOsCode = ""; var devKsu = "未检测"
+            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devOsCode = ""; var devKsu = "未检测"; var devDisplayId = ""
             try {
                 // 先读本地缓存（渲染素材）
                 val cache = readCache()
@@ -274,7 +274,7 @@ object HFState {
                         + "echo @@ROOT; id -u; echo @@DEV; "
                         + "getprop ro.mi.os.version.name; getprop ro.build.version.release; uname -r; "
                         + "getprop ro.product.marketname; ksud -V 2>/dev/null || echo 'none'; "
-                        + "getprop ro.mi.os.version.code; getprop ro.build.display.id")
+                        + "getprop ro.mi.os.version.code; getprop ro.build.display.id; getprop ro.miui.ui.version.name; getprop ro.build.version.incremental")
                 if (all != null) {
                     val parts = all.split("@@CFG|@@FLOW|@@ROOT|@@DEV".toRegex())
                     if (parts.size > 1) cfgText = parts[1].trim()
@@ -288,6 +288,9 @@ object HFState {
                         if (dev.size > 3) devModel = dev[3].trim()
                         if (dev.size > 4) devKsu = if (dev[4].trim() == "none") "未安装" else dev[4].trim()
                         if (dev.size > 5) devOsCode = dev[5].trim()
+                        if (dev.size > 6) devDisplayId = dev[6].trim()
+                        if (dev.size > 7 && dev[7].trim().isNotEmpty() && devDisplayId.isEmpty()) devDisplayId = dev[7].trim()
+                        if (dev.size > 8 && dev[8].trim().isNotEmpty() && devDisplayId.isEmpty()) devDisplayId = dev[8].trim()
                     }
                 }
             } catch (t: Throwable) {
@@ -297,7 +300,7 @@ object HFState {
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
             val finalDev = "机型：${devModel.ifEmpty { android.os.Build.MANUFACTURER.uppercase() + " " + android.os.Build.MODEL }}（${android.os.Build.MODEL}）\n" +
-                    "澎湃OS：${if (fMiui.isNotEmpty()) fMiui + " " + devOsCode else "未知"}\n" +
+                    "澎湃OS：${if (fMiui.isNotEmpty()) fMiui + " " + devOsCode + (if (devDisplayId.isNotEmpty()) "（" + devDisplayId + "）" else "") else "未知"}\n" +
                     "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
                     "内核：${fKernel.ifEmpty { "未知" }}\n" +
                     "Root：${finalRoot} / KSU ${fKsu}"

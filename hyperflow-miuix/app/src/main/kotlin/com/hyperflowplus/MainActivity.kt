@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Send
@@ -73,6 +72,7 @@ import com.hyperflowplus.ui.GuideType
 import com.hyperflowplus.ui.BarBlurHost
 import com.hyperflowplus.ui.HyperDialog
 import com.hyperflowplus.ui.LiquidNavBar
+import com.hyperflowplus.ui.RoundedIcons
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
@@ -212,8 +212,8 @@ fun HyperFlowApp() {
         // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
         com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
 
-        // BarBlurHost 提供 backdrop；悬浮模式也启用捕获（悬浮胶囊有内容可模糊），玻璃胶囊只模糊内容页
-        BarBlurHost(enabled = state.glassEffect || state.navFloat) {
+        // BarBlurHost 提供 backdrop：只有液态玻璃（悬浮胶囊折射）需要捕获内容页
+        BarBlurHost(enabled = state.glassEffect) {
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
@@ -631,7 +631,7 @@ private fun SortOptionRow(label: String, selected: Boolean, onClick: () -> Unit)
         )
         if (selected) {
             Icon(
-                imageVector = Icons.Filled.CheckCircle,
+                imageVector = RoundedIcons.CheckCircleOutline,
                 contentDescription = null,
                 modifier = Modifier.width(20.dp).height(20.dp),
                 tint = MiuixTheme.colorScheme.primary

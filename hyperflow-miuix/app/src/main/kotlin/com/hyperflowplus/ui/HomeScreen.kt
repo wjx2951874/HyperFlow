@@ -18,9 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,6 +100,8 @@ done
 find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
   echo "==DBX ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"
 done
+echo ==RUNNING;
+cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 echo ==END""") }.getOrNull() else null
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
             if (!out.isNullOrBlank()) {
@@ -113,21 +113,32 @@ echo ==END""") }.getOrNull() else null
                     out.contains("lspd") || out.contains("lsposed"))
             val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
             val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
-            val dbSeg = out?.substringAfter("==DB", "") ?: ""
+            val dbSeg = out?.substringAfter("==DB", "")?.substringBefore("==RUNNING") ?: ""
+            // 运行态双保险：模块被 LSPosed 真正加载时 XposedEntry 会写时间戳。
+            // 配置态（db/scope 文件）在"框架整体关闭/去作用域"时会残留 → 曾误判"环境正常"。
+            // 以最近 48h 内加载过为准（装好后没重启=不加载=如实显示未启用）。
+            val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
+            val runtimeOk = runSeg.toLongOrNull()?.let {
+                System.currentTimeMillis() - it < 48 * 3600 * 1000L
+            } ?: false
             // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）
             val dbHit = dbSeg.contains("==HF_IN_DB")
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
             val modEnabled = (lspInstalled && hasModName(modsSeg)) || dbHit
             val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
+            // 生效判定 = 配置态 && 运行态（模块真的被加载了才算启用/勾选成功）
+            val moduleOkV = modEnabled && runtimeOk
+            val scopeOkV2 = scopeOkV && runtimeOk
+            val lspOkV = lspInstalled && runtimeOk
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")
             }.getOrDefault(false)
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                rootOk = r; ksuOk = k; lspOk = lspInstalled
-                moduleOk = modEnabled; scopeOk = scopeOkV; milinkOk = m
+                rootOk = r; ksuOk = k; lspOk = lspOkV
+                moduleOk = moduleOkV; scopeOk = scopeOkV2; milinkOk = m
                 checking = false
-                state.saveEnvCache(r, k, lspInstalled, modEnabled, scopeOkV, m)
+                state.saveEnvCache(r, k, lspOkV, moduleOkV, scopeOkV2, m)
             }
         }.start()
     }
@@ -199,9 +210,44 @@ echo ==END""") }.getOrNull() else null
             }
         }
 
-        // ===== 环境检测 =====
-        // 全部就绪：折叠为小米风格大对号卡片，点击弹出 6 项详情；未就绪：逐项显示（点击进引导修复）
-        if (allOk) {
+        // ===== 环境检测（三态） =====
+        // ① 无 Root：只显示红色"请授予 root 权限"卡（其他项无 root 也查不到，不再逐项显示）
+        // ② 全部就绪：绿色圆环对勾大卡（点击弹 6 项详情）
+        // ③ 部分未就绪：黄色圆环叹号卡 + "查看更多" → 弹窗红标未成功项 + "去解决" → 步骤弹窗
+        if (!rootOk) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { launchKernelSu() }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    top.yukonga.miuix.kmp.basic.Icon(
+                        imageVector = RoundedIcons.Cancel,
+                        contentDescription = "未授予 Root 权限",
+                        tint = CRed,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "请授予 Root 权限",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CRed
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "未检测到 Root 环境，其余项无法检测\n点击前往 KernelSU 管理器授权",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else if (allOk) {
             var showEnvDetail by remember { mutableStateOf(false) }
             Card(
                 modifier = Modifier
@@ -214,7 +260,7 @@ echo ==END""") }.getOrNull() else null
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     top.yukonga.miuix.kmp.basic.Icon(
-                        imageVector = Icons.Filled.CheckCircle,
+                        imageVector = RoundedIcons.CheckCircleOutline,
                         contentDescription = "环境已就绪",
                         tint = CGreen,
                         modifier = Modifier.size(44.dp)
@@ -239,25 +285,147 @@ echo ==END""") }.getOrNull() else null
                         EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
                         EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
                         EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
-                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink）" to "未勾选推荐作用域")
+                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）")
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
                 }
             }
         } else {
-            EnvItem("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT, onOpenGuide)
-            EnvItem("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU", GuideType.ROOT, onOpenGuide)
-            EnvItem("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED, onOpenGuide)
-            EnvItem("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE, onOpenGuide)
-            EnvItem(
-                "推荐作用域",
-                scopeOk,
-                "已勾选（本 App + milink）" to "未勾选推荐作用域",
-                GuideType.MODULE_SCOPE,
-                onOpenGuide,
-                openLsposedFirst = true
-            )
-            EnvItem("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK, onOpenGuide)
+            // 部分未就绪：黄色圆环叹号卡（与对勾同源的 Rounded 圆环样式）
+            var showMore by remember { mutableStateOf(false) }
+            var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { showMore = true }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    top.yukonga.miuix.kmp.basic.Icon(
+                        imageVector = RoundedIcons.ErrorOutline,
+                        contentDescription = "部分环境未就绪",
+                        tint = CYellow,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "部分环境未就绪",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CYellow
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "$passed/6 项通过",
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            Icons.Rounded.KeyboardArrowRight,
+                            contentDescription = "查看更多",
+                            modifier = Modifier.size(16.dp),
+                            tint = CYellow.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+            // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
+            if (showMore) {
+                HyperDialog(
+                    title = "环境检测",
+                    show = showMore,
+                    onDismiss = { showMore = false }
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        EnvItemRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 权限" to GuideType.ROOT }
+                        EnvItemRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU", GuideType.ROOT) { solveItem = "KSU 内核" to GuideType.ROOT }
+                        EnvItemRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED) { solveItem = "LSPosed 框架" to GuideType.LSPOSED }
+                        EnvItemRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE) { solveItem = "模块已启用" to GuideType.MODULE_SCOPE }
+                        EnvItemRow(
+                            "推荐作用域", scopeOk,
+                            "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）",
+                            GuideType.MODULE_SCOPE
+                        ) { solveItem = "推荐作用域" to GuideType.MODULE_SCOPE }
+                        EnvItemRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK) { solveItem = "小米互联服务" to GuideType.MILINK }
+                    }
+                }
+            }
+            // 去解决：步骤弹窗（打开 KernelSU / LSPosed / 一键写入配置）
+            solveItem?.let { (title, guide) ->
+                val steps: List<String>
+                val actionLabel: String?
+                val action: () -> Unit
+                when (guide) {
+                    GuideType.ROOT -> {
+                        steps = listOf(
+                            "1. 打开 KernelSU 管理器",
+                            "2. 在超级用户列表找到 HyperFlow",
+                            "3. 授予 Root 权限后返回首页重新检测"
+                        )
+                        actionLabel = "打开 KernelSU"
+                        action = { launchKernelSu() }
+                    }
+                    GuideType.LSPOSED -> {
+                        steps = listOf(
+                            "1. 打开 KernelSU 管理器",
+                            "2. 进入「模块」页启用 LSPosed 框架",
+                            "3. 启用后重启设备生效"
+                        )
+                        actionLabel = "打开 KernelSU"
+                        action = { launchKernelSu() }
+                    }
+                    GuideType.MODULE_SCOPE -> {
+                        steps = listOf(
+                            "1. 打开 LSPosed 作用域设置",
+                            "2. 勾选：HyperFlow + 小米互联服务 + Android 系统框架",
+                            "3. 保存后重启设备生效（也可用下方按钮一键写入配置）"
+                        )
+                        actionLabel = "一键写入配置（重启生效）"
+                        action = { fixLsp() }
+                    }
+                    GuideType.MILINK -> {
+                        steps = listOf(
+                            "小米互联服务（com.milink.service）未安装",
+                            "它是澎湃/小米系统自带组件，请确认设备支持互联流转"
+                        )
+                        actionLabel = null
+                        action = {}
+                    }
+                }
+                HyperDialog(
+                    title = title,
+                    show = solveItem != null,
+                    onDismiss = { solveItem = null }
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        steps.forEach { step ->
+                            Text(
+                                step,
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                        if (actionLabel != null) {
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    solveItem = null
+                                    action()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(actionLabel, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ===== 设备信息（大框大标题 + 小卡网格） =====
@@ -347,7 +515,7 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
         verticalAlignment = Alignment.CenterVertically
     ) {
         top.yukonga.miuix.kmp.basic.Icon(
-            imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.Close,
+            imageVector = if (ok) RoundedIcons.CheckCircleOutline else RoundedIcons.Cancel,
             contentDescription = null,
             tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
             modifier = Modifier.size(20.dp)
@@ -360,6 +528,45 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
                 style = MiuixTheme.textStyles.body2,
                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
             )
+        }
+    }
+}
+
+/** 查看更多弹窗内的检测项行：状态图标 + 名称/状态 + 未通过时右侧"去解决"按钮 */
+@Composable
+private fun EnvItemRow(
+    title: String,
+    ok: Boolean,
+    texts: Pair<String, String>,
+    guide: GuideType,
+    onSolve: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        top.yukonga.miuix.kmp.basic.Icon(
+            imageVector = if (ok) RoundedIcons.CheckCircleOutline else RoundedIcons.Cancel,
+            contentDescription = null,
+            tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (ok) texts.first else texts.second,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+        if (!ok) {
+            Button(
+                onClick = onSolve,
+                colors = ButtonDefaults.buttonColors()
+            ) {
+                Text("去解决", fontSize = 13.sp)
+            }
         }
     }
 }
@@ -430,7 +637,7 @@ private fun EnvItem(
             }
             Spacer(Modifier.weight(1f))
             Icon(
-                Icons.Filled.KeyboardArrowRight,
+                Icons.Rounded.KeyboardArrowRight,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.3f)

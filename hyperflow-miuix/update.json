@@ -1,6 +1,6 @@
 {
-  "version": "v0.4.31",
-  "versionCode": 66,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.31/HyperFlow-0.4.31-flashable.zip",
-  "changelog": "·弹窗全面重构：改用引导页同款覆盖层方案，修复全部弹窗闪退（写入系统短信/检测更新/排序/关闭确认）\n·引导页协议卡片布局修复：长文可滑动、按钮固定、不溢出\n·启动秒加载：先渲染上次状态，后台再刷新\n·4 Tab 导航：首页（环境检测红黄绿）/流转（四大开关）/消息/设置\n·设置页重构：主题（悬浮导航栏/液态玻璃）/调试（调试模式/分享日志）/关于\n·完整机型显示（厂商+型号）"
+  "version": "v0.4.43",
+  "versionCode": 78,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.43/HyperFlow-0.4.43-flashable.zip",
+  "changelog": "·分身流转回退「只放行」：主空间不再重复显示分身通知\n·点击分身通知→直接拉起999空间微信/QQ（需勾选android作用域）\n·悬浮导航栏改用InstallerX原版FloatingBottomBar（液态玻璃/模糊/普通三态），修复悬浮空白与闪退\n·首页检测三态：全绿圆环对勾/部分未授权黄色叹号（查看更多→红标+去解决步骤）/无Root仅红色授权卡\n·LSP检测补运行态双保险：模块实际加载才算启用，框架关闭/去作用域不再误判\n·澎湃OS版本串补全（含完整版本标识）+检测图标换Rounded圆环"
 }

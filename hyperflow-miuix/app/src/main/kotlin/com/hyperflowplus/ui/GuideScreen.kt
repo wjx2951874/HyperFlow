@@ -211,8 +211,9 @@ fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules
   if [ -f "${'$'}sc2" ]; then
     grep -qx 'com.hyperflowplus' "${'$'}sc2" || echo 'com.hyperflowplus' >> "${'$'}sc2"
     grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
+    grep -qx 'android' "${'$'}sc2" || echo 'android' >> "${'$'}sc2"
   else
-    { echo 'com.hyperflowplus'; echo 'com.milink.service'; } > "${'$'}sc2"
+    { echo 'com.hyperflowplus'; echo 'com.milink.service'; echo 'android'; } > "${'$'}sc2"
   fi
 done
 chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
