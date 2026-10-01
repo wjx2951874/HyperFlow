@@ -72,25 +72,31 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
             // 一次 su 读全部 LSPosed 配置（兼容 KernelSU 内嵌/模块版不同路径）
             // ==MODULES 段 = 各 modules.list 拼接；==SCOPE 段 = 各 scope 文件拼接
             val out = if (r) runCatching { RootExec.su("""echo ==LSP;
-for d in /data/adb/lspd/config /data/adb/modules/lsposed/config /data/adb/modules/zygisk_lsposed/config /data/adb/lspd; do
+for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/riru/modules/lsposed/config; do
   [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
 done
 echo ==MODULES;
-for f in /data/adb/lspd/config/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/lspd/modules.list; do
+for f in /data/adb/lspd/config/modules.list /data/adb/lspd/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/lsposed/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/riru/modules/lsposed/config/modules.list; do
   [ -f "${'$'}f" ] && cat "${'$'}f"
 done
 echo ==SCOPE;
-for f in /data/adb/lspd/config/scope/* /data/adb/modules/lsposed/config/scope/* /data/adb/modules/zygisk_lsposed/config/scope/* /data/adb/lspd/scope/*; do
+for f in /data/adb/lspd/config/scope/* /data/adb/lspd/scope/* /data/adb/modules/lsposed/config/scope/* /data/adb/modules/lsposed/scope/* /data/adb/modules/zygisk_lsposed/config/scope/* /data/adb/riru/modules/lsposed/config/scope/*; do
   [ -f "${'$'}f" ] && echo "==FILE ${'$'}(basename ${'$'}f)"
 done
 echo ==END""") }.getOrNull() else null
+            // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
+            if (!out.isNullOrBlank()) {
+                runCatching { RootExec.su("mkdir -p /data/adb/hyperflowplus && echo '${'$'}out' > /data/adb/hyperflowplus/detect.log") }
+            }
             // 解析：LSPosed 存在 / 模块已启用（modules.list 内容=模块包名）/ 作用域已勾选（scope 目录下存在本模块文件）
+            // 兼容不同 LSPosed 变体：包名/短名/大小写模糊匹配（用户已启用但检测不到 = 路径或格式差异）
             val lspInstalled = !out.isNullOrBlank() && out.contains("==DIR") && (
                     out.contains("lspd") || out.contains("lsposed"))
             val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
             val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
-            val modEnabled = lspInstalled && (modsSeg.contains("com.hyperflowplus") || modsSeg.contains("hyperflow"))
-            val scopeOkV = lspInstalled && scopeSeg.contains("==FILE com.hyperflowplus")
+            val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
+            val modEnabled = lspInstalled && hasModName(modsSeg)
+            val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true))
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")

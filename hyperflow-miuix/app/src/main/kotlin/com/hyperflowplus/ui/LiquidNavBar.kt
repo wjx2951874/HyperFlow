@@ -430,7 +430,7 @@ private fun RowLiquidBar(
     }
 }
 
-// ===== 悬浮模式 + 液态玻璃（核心效果） =====
+// ===== 悬浮模式 + 液态玻璃（稳定版：Miuix 原生组件 + 玻璃背景） =====
 
 @Composable
 private fun FloatingLiquidBar(
@@ -439,15 +439,11 @@ private fun FloatingLiquidBar(
     items: List<Pair<ImageVector, String>>,
     backdrop: Backdrop,
 ) {
+    // 稳定版悬浮液态：Miuix FloatingNavigationBar（原生组件）+ 外层 drawBackdrop 玻璃背景
+    // 弃用 layerBackdrop / CombinedBackdrop 复杂绘制链（悬浮+液态组合首次真正执行时曾导致运行时崩溃）
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
-    val pillShape = CircleShape
+    val pillShape = RoundedCornerShape(28.dp)
     val containerColor = MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
-    val tabContentColor = MiuixTheme.colorScheme.onSurface
-    val density = LocalDensity.current
-    val tabsBackdrop = rememberLayerBackdrop()
-    val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
-    var totalWidthPx by remember { mutableFloatStateOf(0f) }
-    var tabWidthPx by remember { mutableFloatStateOf(0f) }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(
@@ -456,15 +452,8 @@ private fun FloatingLiquidBar(
             .padding(bottom = 12.dp + navBottom),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .width(androidx.compose.foundation.layout.IntrinsicSize.Min)
-                .selectableGroup()
-                .onGloballyPositioned { coordinates ->
-                    totalWidthPx = coordinates.size.width.toFloat()
-                    tabWidthPx = ((totalWidthPx - with(density) { 8.dp.toPx() }) / items.size)
-                        .coerceAtLeast(0f)
-                }
                 .dropShadow(
                     shape = pillShape,
                     shadow = Shadow(
@@ -484,68 +473,17 @@ private fun FloatingLiquidBar(
                     highlight = { IndicatorSpecular.copy(alpha = 0.75f) },
                     onDrawSurface = { drawRect(containerColor) },
                 )
-                .height(64.dp)
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items.forEachIndexed { i, (icon, label) ->
-                Column(
-                    modifier = Modifier
-                        .selectable(
-                            selected = selectedTabIndex == i,
-                            interactionSource = null,
-                            indication = null,
-                            onClick = { onTabSelected(i) },
-                        )
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(horizontal = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                ) {
-                    Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp))
-                    Text(
-                        label,
-                        fontSize = 11.sp,
-                        color = tabContentColor,
-                        maxLines = 1,
+            top.yukonga.miuix.kmp.basic.FloatingNavigationBar {
+                items.forEachIndexed { i, (icon, label) ->
+                    top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem(
+                        selected = selectedTabIndex == i,
+                        onClick = { onTabSelected(i) },
+                        icon = icon,
+                        label = label,
                     )
                 }
             }
-        }
-
-        // 选中指示器：液态胶囊（折射 + 色散 + 高光）
-        if (tabWidthPx > 0f) {
-            Box(
-                modifier = Modifier
-                    .graphicsLayer {
-                        val offset = selectedTabIndex * tabWidthPx
-                        translationX = offset + (tabWidthPx / 2f) - (tabWidthPx - 8.dp.toPx()) / 2f
-                    }
-                    .layerBackdrop(tabsBackdrop)
-                    .drawBackdrop(
-                        backdrop = combinedBackdrop,
-                        shape = { pillShape },
-                        effects = {
-                            lens(
-                                refractionHeight = 10.dp.toPx(),
-                                refractionAmount = 14.dp.toPx(),
-                                depthEffect = true,
-                                chromaticAberration = 0.5f,
-                            )
-                        },
-                        highlight = { IndicatorSpecular.copy(alpha = 1f) },
-                        onDrawSurface = {
-                            drawRect(
-                                color = if (isDark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f)
-                                else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.1f),
-                            )
-                            drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.03f))
-                        },
-                    )
-                    .height(56.dp)
-                    .width(with(density) { tabWidthPx.toDp() }),
-            )
         }
     }
 }
