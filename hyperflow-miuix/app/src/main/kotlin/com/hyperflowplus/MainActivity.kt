@@ -92,6 +92,7 @@ fun HyperFlowApp() {
     val controller = remember { ThemeController(ColorSchemeMode.System) }
     MiuixTheme(controller = controller) {
         val state = HFState
+        val ctx = LocalContext.current
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
@@ -202,7 +203,6 @@ fun HyperFlowApp() {
                     }
                 }
             ) { padding ->
-                val ctx = LocalContext.current
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
