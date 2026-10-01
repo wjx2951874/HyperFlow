@@ -167,20 +167,34 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
             onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
-        // 关闭 App 内消息：自由选择是否保留本地记录（两个按钮都执行关闭，只是保留与否不同）
+        // 关闭 App 内消息：第一层=勾选框（勾选才清空本地数据）+ 蓝色"继续"；
+        // 勾选后点继续 → 第二层"确定删除/保留数据"二次确认
         "archive_off" -> ConfirmDialog(
             show = true,
             title = "关闭 App 内消息？",
-            content = "关闭后消息页不再显示流转短信。已存储在本地的短信记录如何处理？",
-            cancelText = "保留记录",
-            confirmText = "清除记录",
-            onConfirm = {
-                state.set(Config.KEY_ARCHIVE_APP, false)
-                state.clearHistory()
-                pendingToggle = null
+            content = "关闭后消息页不再显示流转短信。本地保存的历史记录默认保留，重新开启后仍可查看。",
+            checkboxText = "同时清除本地保存的历史记录（删除后不可恢复）",
+            singleConfirmText = "继续",
+            onCheckedConfirm = { del ->
+                if (del) pendingToggle = "archive_del"   // 勾选清除 → 二次确认
+                else {
+                    state.set(Config.KEY_ARCHIVE_APP, false)   // 未勾选 → 直接关闭，保留本地
+                    pendingToggle = null
+                }
             },
+            onDismiss = { pendingToggle = null }
+        )
+        // 第二层：左白"确定删除"（关闭+清空）/ 右蓝"保留数据"（只关闭，保留本地）
+        "archive_del" -> ConfirmDialog(
+            show = true,
+            title = "确定要删除本地数据？",
+            content = "删除后本地保存的历史短信记录将无法恢复（不影响小米互联端的数据）。",
+            cancelText = "确定删除",
+            confirmText = "保留数据",
+            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, false); pendingToggle = null },   // 蓝：只关闭
             onCancel = {
                 state.set(Config.KEY_ARCHIVE_APP, false)
+                state.clearHistory()   // 白：关闭 + 清空本地
                 pendingToggle = null
             },
             onDismiss = { pendingToggle = null }
