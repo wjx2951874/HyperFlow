@@ -28,9 +28,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
-import androidx.compose.foundation.isSystemInDarkTheme
-import android.app.WallpaperManager
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -57,8 +54,6 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
-import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.MessagesScreen
@@ -82,25 +77,9 @@ fun HyperFlowApp() {
     val ctx = LocalContext.current
     // 上次闪退日志：启动自动读取展示（无需终端抓日志）
     var crashLog by remember { mutableStateOf(readCrashLog(ctx)) }
-    val keyColor = remember(ctx) { wallpaperKeyColor(ctx) }   // 壁纸主色（Monet 种子）
-    val palette = when (HFState.paletteStyle) {
-        "neutral" -> ThemePaletteStyle.Neutral
-        "vibrant" -> ThemePaletteStyle.Vibrant
-        "expressive" -> ThemePaletteStyle.Expressive
-        "fruit_salad" -> ThemePaletteStyle.FruitSalad
-        "monochrome" -> ThemePaletteStyle.Monochrome
-        else -> ThemePaletteStyle.TonalSpot
-    }
-    val controller = remember(keyColor, palette) {
-        runCatching {
-            ThemeController(
-                colorSchemeMode = ColorSchemeMode.MonetSystem,   // 壁纸动态取色（MaterialKolor）
-                keyColor = keyColor,
-                paletteStyle = palette,
-                colorSpec = ThemeColorSpec.Spec2025
-            )
-        }.getOrElse { ThemeController(ColorSchemeMode.System) }   // 取色失败退回系统默认主题，绝不让 App 崩溃
-    }
+    // 主题：纯 Miuix 默认主题（跟随系统深浅色），不做壁纸取色、不做 App 内玻璃
+    // 液态玻璃是系统级效果（HyperLight 等模块实现），App 内保持 HyperOS 原生观感
+    val controller = remember { ThemeController(ColorSchemeMode.System) }
     MiuixTheme(controller = controller) {
         val state = HFState
         val ctx = LocalContext.current
@@ -438,26 +417,6 @@ private fun CustomTopBar(
         )
         actions()
     }
-}
-
-/** 从系统壁纸提取主色（平均色）作为 Monet 动态配色种子 */
-private fun wallpaperKeyColor(ctx: android.content.Context): Color {
-    val d = runCatching { WallpaperManager.getInstance(ctx).drawable }.getOrNull() ?: return Color(0xFF0A84FF)
-    val bmp = (d as? BitmapDrawable)?.bitmap
-    if (bmp == null) return Color(0xFF0A84FF)
-    return runCatching {
-        val sm = android.graphics.Bitmap.createScaledBitmap(bmp, 8, 8, true)
-        var r = 0L; var g = 0L; var b = 0L; var n = 0
-        for (x in 0 until 8) for (y in 0 until 8) {
-            val c = sm.getPixel(x, y)
-            r += android.graphics.Color.red(c)
-            g += android.graphics.Color.green(c)
-            b += android.graphics.Color.blue(c)
-            n++
-        }
-        sm.recycle()
-        Color((r / n).toInt(), (g / n).toInt(), (b / n).toInt())
-    }.getOrElse { Color(0xFF0A84FF) }
 }
 
 /** 读取并清空上次闪退日志（无则 null） */

@@ -68,8 +68,6 @@ object HFState {
     val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", true)
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val archiveApp: Boolean get() = cfg.optBoolean("archive_app", true)
-    /** 配色风格：tonal_spot/neutral/vibrant/expressive/fruit_salad/monochrome（Monet 取色风格，默认鲜艳） */
-    val paletteStyle: String get() = cfg.optString("palette_style", "vibrant")
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
