@@ -1,0 +1,2 @@
+# 全仓库禁用换行转换（CRLF 会破坏 shell 脚本/module.prop）
+* -text

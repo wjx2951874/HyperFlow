@@ -1,0 +1,6 @@
+{
+  "version": "v0.4.9",
+  "versionCode": 44,
+  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.9/HyperFlow-0.4.9-flashable.zip",
+  "changelog": "·液态玻璃重做：iOS 26 Liquid Glass 安卓实现（lens 折射+深度效果+色散光效+高斯模糊+边缘暗调），顶栏/底栏跟随壁纸实时折射，对标 AndroidLiquidGlass\n·消息列表排序（发送人 A→Z / Z→A / 最近 / 最早）+ 正文排序独立设置\n·机型英文原样显示、Root 动态刷新\n·两步引导 + 酷安互关入口\n·自定义大标题顶栏"
+}

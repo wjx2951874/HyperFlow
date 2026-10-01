@@ -1,0 +1,6 @@
+minApiVersion=101
+targetApiVersion=102
+exceptionMode=protective
+name=HyperFlow
+description=小米澎湃互联Plus：亮屏流转/分身流转/短信持久化/一键更新
+author=酷安@翰德姆
