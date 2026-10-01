@@ -1,12 +1,6 @@
 {
- "version": "v0.4.42",
- "versionCode": 77,
- "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.42/HyperFlow-0.4.42-flashable.zip",
- "changelog": "·弹窗改为窗口层 Popup（与引导页同层级），不再被悬浮/导航栏遮挡；开悬浮/玻璃时自动再上移
-·液态玻璃 backdrop 只捕获内容页（对齐 InstallerX/KernelSU），悬浮开启不再空白、玻璃胶囊模糊真实内容
-·首页环境检测改 6 项（Root/KSU内核/LSPosed/模块/作用域/小米互联），全绿时折叠为小米风格大对号，点击弹详情；进入首页先显示上次检测结果（不再红→绿跳变）
-·修复机型显示错误：正确显示 Xiaomi 15，澎湃OS 补完整版本号
-·消息排序默认改为从新到旧；会话页排序改为点击直接切换（最新在前/最早在前）+ 返回箭头
-·消息去重按分钟级时间戳+正文，本地与云端同一条短信不再重复显示
-·悬浮/液态玻璃重写为三层结构（基础层+透明捕获层+组合折射指示器，与 InstallerX/KernelSU 同源），修复开启后空白/无玻璃效果\n·LSP 检测修复：新版 LSPosed（含 KernelSU 内嵌版）启用状态存 SQLite 数据库 modules_config.db，检测已接入\n·消息页去重：本地与云端重复消息只显示云端，本地独有消息加（本地）标注\n·消息排序改为右上角下拉菜单（KSU 风格：发送人/时间维度 + 倒序开关）\n·首页设备信息拆分卡片：机型大框 + 型号/澎湃OS/Android/内核/Root 小卡\n·App 内下载改调用系统浏览器（通知栏进度条），更新通道换 gh-proxy.com（国内可达）\n·弹窗统一下移贴底 40dp、浅色遮罩，引导「退出」直接关闭应用\n·移除「由衷感谢」「含来电在线接听」等文案"
+  "version": "v0.4.43",
+  "versionCode": 78,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.43/HyperFlow-0.4.43-flashable.zip",
+  "changelog": "·分身流转回退「只放行」：主空间不再重复显示分身通知\n·点击分身通知→直接拉起999空间微信/QQ（需勾选android作用域）\n·悬浮导航栏改用InstallerX原版FloatingBottomBar（液态玻璃/模糊/普通三态），修复悬浮空白与闪退\n·首页检测三态：全绿圆环对勾/部分未授权黄色叹号（查看更多→红标+去解决步骤）/无Root仅红色授权卡\n·LSP检测补运行态双保险：模块实际加载才算启用，框架关闭/去作用域不再误判\n·澎湃OS版本串补全（含完整版本标识）+检测图标换Rounded圆环"
 }
