@@ -127,6 +127,14 @@ fun OnboardingScreen(state: HFState) {
                     onDone = {
                         state.markFirstRunDone()
                         state.showOnboarding = false
+                    },
+                    onSkip = { stage = 4 }
+                )
+                4 -> StageFeedback(
+                    ctx = ctx,
+                    onDone = {
+                        state.markFirstRunDone()
+                        state.showOnboarding = false
                     }
                 )
             }
@@ -373,11 +381,12 @@ private fun StageDiagnosis(
     }
 }
 
-/** 阶段3：酷安互关卡片 */
+/** 阶段3：酷安互关卡片（跳过则进入阶段4 反馈提醒） */
 @Composable
 private fun StageCoolapk(
     ctx: android.content.Context,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onSkip: () -> Unit
 ) {
     Text(
         "来酷安关注作者",
@@ -401,7 +410,7 @@ private fun StageCoolapk(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
-            onClick = onDone,
+            onClick = onSkip,
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors()
         ) {
@@ -416,6 +425,60 @@ private fun StageCoolapk(
             colors = ButtonDefaults.buttonColorsPrimary()
         ) {
             Text("去酷安看看")
+        }
+    }
+}
+
+/** 阶段4：反馈提醒卡片（跳过酷安后提示后期如何找到作者；"我知道了"需等待 10s 才可点） */
+@Composable
+private fun StageFeedback(
+    ctx: android.content.Context,
+    onDone: () -> Unit
+) {
+    var countdown by remember { mutableIntStateOf(10) }
+    LaunchedEffect(Unit) {
+        while (countdown > 0) {
+            kotlinx.coroutines.delay(1000)
+            countdown--
+        }
+    }
+    Text(
+        "后期反馈去哪里",
+        style = MiuixTheme.textStyles.title1,
+        fontWeight = FontWeight.Bold
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "后期遇到任何问题，欢迎来酷安找作者反馈——\n" +
+                "更新、反馈、催更都在酷安，咱们一起把 HyperFlow 做得更好~",
+        style = MiuixTheme.textStyles.body2,
+        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        textAlign = TextAlign.Center
+    )
+    Spacer(Modifier.height(26.dp))
+
+    // 按钮左右排布：左白（我知道了，倒计时 10s 后可点）/ 右蓝（我现在关注，随时可点）
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Button(
+            enabled = countdown <= 0,
+            onClick = onDone,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors()
+        ) {
+            Text(if (countdown > 0) "我知道了（$countdown）" else "我知道了")
+        }
+        Button(
+            onClick = {
+                openCoolapk(ctx)
+                onDone()
+            },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColorsPrimary()
+        ) {
+            Text("我现在关注")
         }
     }
 }
