@@ -33,20 +33,15 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * HyperFlow 通用弹窗容器（MIUI/HyperOS 风格卡片，App 内覆盖层实现）。
+ * HyperFlow 通用弹窗容器（MIUI/HyperOS 风格卡片，App 内 Box 覆盖层实现）。
  *
- * 实现说明：与引导页同款方案——全屏 Box 遮罩 + 圆角卡片，不创建独立 Window，
- * 不依赖 miuix WindowDialog/OverlayDialog/系统 Dialog（这些在部分 KernelSU 环境会闪退，
- * 用户多轮实测：凡弹窗相关均闪退，仅引导页覆盖层稳定）。故全部弹窗统一走本组件。
+ * 实现说明：全屏 Box 遮罩 + 圆角卡片，不创建独立 Window，不依赖系统 Dialog
+ * （部分 KernelSU 环境会闪退，用户多轮实测：仅 App 内覆盖层稳定）。
+ * 显隐由 AnimatedVisibility(visible = show) 正确驱动 enter/exit，多弹窗切换不再卡死。
  *
- * 视觉：框体**从屏幕底部往上弹出**（BottomCenter 靠下 + 底部滑入动画），
- * 标题/正文**居中**显示；遮罩轻黑（0.35），参考 HyperModifier 版本弹窗。
+ * 视觉：框体从屏幕底部往上弹出，标题/正文居中；遮罩轻黑 0.35；
+ * 黑色模式卡片浅黑（0xFF262626，非纯黑）。
  * 交互：点击卡片外遮罩区 = onDismiss；卡片内点击不冒泡。
- *
- * 用法：
- *   HyperDialog(show = visible, title = "标题", summary = "说明", onDismiss = { visible = false }) {
- *       Row { Button(...) "取消" ; Button(...) "确定" }   // 按钮区由调用方自由摆放
- *   }
  */
 @Composable
 fun HyperDialog(
@@ -57,21 +52,20 @@ fun HyperDialog(
     bottomInset: Dp = 48.dp,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    if (!show) return
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.35f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onDismiss() },
-        contentAlignment = Alignment.BottomCenter
+    AnimatedVisibility(
+        visible = show,
+        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(280)) + fadeIn(),
+        exit = fadeOut(tween(150))
     ) {
-        AnimatedVisibility(
-            visible = true,
-            enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(280)) + fadeIn(),
-            exit = fadeOut(tween(150))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = Alignment.BottomCenter
         ) {
             Column(
                 modifier = Modifier

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Button
@@ -49,6 +50,7 @@ fun ConfirmDialog(
     countdownSec: Int = 0,
     checkboxText: String? = null,
     singleConfirmText: String? = null,
+    bottomInset: Dp = 120.dp,
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit,
     onCancel: () -> Unit = onDismiss,
@@ -77,6 +79,7 @@ fun ConfirmDialog(
         title = title,
         summary = content,
         show = show,
+        bottomInset = bottomInset,
         onDismiss = { onDismiss() }
     ) {
         // 勾选框（可选项，Miuix Checkbox 同引导页）：点击整行切换

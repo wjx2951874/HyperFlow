@@ -26,12 +26,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.GraphicsLayerScope
@@ -65,8 +69,11 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.runtimeShaderEffect
+import com.hyperflowplus.ui.liquid.innerShadow
+import com.hyperflowplus.ui.liquid.lens
+import com.hyperflowplus.ui.liquid.rememberCombinedBackdrop
+import com.hyperflowplus.ui.liquid.vibrancy
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-
 // ===== 背景捕获宿主：液态玻璃需要先捕获整页内容作 backdrop =====
 
 val LocalLiquidBackdrop = compositionLocalOf<Backdrop?> { null }
@@ -86,163 +93,6 @@ fun BarBlurHost(enabled: Boolean, content: @Composable () -> Unit) {
     }
     CompositionLocalProvider(LocalLiquidBackdrop provides backdrop) { content() }
 }
-
-// ===== 液态效果：鲜艳度 + 模糊 + 折射透镜 =====
-
-internal fun BackdropEffectScope.vibrancy() {
-    colorControls(brightness = 0f, contrast = 1f, saturation = 1.5f)
-}
-
-internal fun BackdropEffectScope.lens(
-    refractionHeight: Float,
-    refractionAmount: Float,
-    depthEffect: Boolean = false,
-    chromaticAberration: Float = 0f,
-) {
-    if (!isRuntimeShaderSupported() || refractionHeight <= 0f || refractionAmount <= 0f) return
-    if (padding < refractionAmount) padding = refractionAmount
-    val radii = roundedRectCornerRadii() ?: return
-    val hasDispersion = chromaticAberration > 0f
-    val scale = downscaleFactor.coerceAtLeast(1).toFloat()
-    runtimeShaderEffect(
-        key = if (hasDispersion) "HyperFlowLiquidLensDispersion" else "HyperFlowLiquidLens",
-        shaderString = if (hasDispersion) RefractionWithDispersionShader else RefractionShader,
-        uniformShaderName = "content",
-    ) {
-        setFloatUniform("size", size.width / scale, size.height / scale)
-        setFloatUniform("offset", -padding / scale, -padding / scale)
-        setFloatUniform("cornerRadii", FloatArray(radii.size) { radii[it] / scale })
-        setFloatUniform("refractionHeight", refractionHeight / scale)
-        setFloatUniform("refractionAmount", -refractionAmount / scale)
-        setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
-        if (hasDispersion) setFloatUniform("chromaticAberration", chromaticAberration)
-    }
-}
-
-private fun BackdropEffectScope.roundedRectCornerRadii(): FloatArray? {
-    val corners = shape as? CornerBasedShape ?: return null
-    val maximum = size.minDimension / 2f
-    val leftToRight = layoutDirection == LayoutDirection.Ltr
-    val topLeft = if (leftToRight) corners.topStart else corners.topEnd
-    val topRight = if (leftToRight) corners.topEnd else corners.topStart
-    val bottomRight = if (leftToRight) corners.bottomEnd else corners.bottomStart
-    val bottomLeft = if (leftToRight) corners.bottomStart else corners.bottomEnd
-    return floatArrayOf(
-        topLeft.toPx(size, this).fastCoerceAtMost(maximum),
-        topRight.toPx(size, this).fastCoerceAtMost(maximum),
-        bottomRight.toPx(size, this).fastCoerceAtMost(maximum),
-        bottomLeft.toPx(size, this).fastCoerceAtMost(maximum),
-    )
-}
-
-private val RoundedRectSdf = """
-float radiusAt(float2 coord, float4 radii) {
-    if (coord.x >= 0.0) {
-        if (coord.y <= 0.0) return radii.y;
-        else return radii.z;
-    } else {
-        if (coord.y <= 0.0) return radii.x;
-        else return radii.w;
-    }
-}
-
-float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    float outside = length(max(cornerCoord, 0.0)) - radius;
-    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
-    return outside + inside;
-}
-
-float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        return sign(coord) * normalize(max(cornerCoord, 0.0));
-    } else {
-        float gradX = step(cornerCoord.y, cornerCoord.x);
-        return sign(coord) * float2(gradX, 1.0 - gradX);
-    }
-}
-"""
-
-private val RefractionShader = """
-uniform shader content;
-uniform float2 size;
-uniform float2 offset;
-uniform float4 cornerRadii;
-uniform float refractionHeight;
-uniform float refractionAmount;
-uniform float depthEffect;
-
-$RoundedRectSdf
-
-float circleMap(float x) { return 1.0 - sqrt(1.0 - x * x); }
-
-half4 main(float2 coord) {
-    float2 halfSize = size * 0.5;
-    float2 centeredCoord = (coord + offset) - halfSize;
-    float radius = radiusAt(coord, cornerRadii);
-    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    if (-sd >= refractionHeight) return content.eval(coord);
-    sd = min(sd, 0.0);
-    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
-    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(
-        gradSdRoundedRect(centeredCoord, halfSize, gradRadius) +
-        depthEffect * normalize(centeredCoord)
-    );
-    return content.eval(coord + d * grad);
-}
-"""
-
-private val RefractionWithDispersionShader = """
-uniform shader content;
-uniform float2 size;
-uniform float2 offset;
-uniform float4 cornerRadii;
-uniform float refractionHeight;
-uniform float refractionAmount;
-uniform float depthEffect;
-uniform float chromaticAberration;
-
-$RoundedRectSdf
-
-float circleMap(float x) { return 1.0 - sqrt(1.0 - x * x); }
-
-half4 main(float2 coord) {
-    float2 halfSize = size * 0.5;
-    float2 centeredCoord = (coord + offset) - halfSize;
-    float radius = radiusAt(coord, cornerRadii);
-    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    if (-sd >= refractionHeight) return content.eval(coord);
-    sd = min(sd, 0.0);
-    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
-    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(
-        gradSdRoundedRect(centeredCoord, halfSize, gradRadius) +
-        depthEffect * normalize(centeredCoord)
-    );
-    float2 refractedCoord = coord + d * grad;
-    float intensity = chromaticAberration *
-        ((centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y));
-    float2 dispersion = d * grad * intensity;
-    half4 color = half4(0.0);
-    half4 red = content.eval(refractedCoord + dispersion);
-    color.r += red.r / 3.5; color.a += red.a / 7.0;
-    half4 orange = content.eval(refractedCoord + dispersion * (2.0 / 3.0));
-    color.r += orange.r / 3.5; color.g += orange.g / 7.0; color.a += orange.a / 7.0;
-    half4 yellow = content.eval(refractedCoord + dispersion * (1.0 / 3.0));
-    color.r += yellow.r / 3.5; color.g += yellow.g / 3.5; color.a += yellow.a / 7.0;
-    half4 green = content.eval(refractedCoord);
-    color.g += green.g / 3.5; color.a += green.a / 7.0;
-    half4 cyan = content.eval(refractedCoord - dispersion * (1.0 / 3.0));
-    color.g += cyan.g / 3.5; color.b += cyan.b / 3.0; color.a += cyan.a / 7.0;
-    half4 blue = content.eval(refractedCoord - dispersion * (2.0 / 3.0));
-    color.b += blue.b / 3.0; color.a += blue.a / 7.0;
-    half4 purple = content.eval(refractedCoord - dispersion);
-    color.r += purple.r / 7.0; color.b += purple.b / 3.0; color.a += purple.a / 7.0;
-    return color;
-}
-"""
 
 // ===== 高光材质（双光源描边） =====
 
@@ -430,7 +280,7 @@ private fun RowLiquidBar(
     }
 }
 
-// ===== 悬浮模式 + 液态玻璃（稳定版：Miuix 原生组件 + 玻璃背景） =====
+// ===== 悬浮模式 + 液态玻璃（InstallerX/KernelSU 同源三层结构：compose-miuix-ui IosLiquidGlassNavigationBar） =====
 
 @Composable
 private fun FloatingLiquidBar(
@@ -439,12 +289,22 @@ private fun FloatingLiquidBar(
     items: List<Pair<ImageVector, String>>,
     backdrop: Backdrop,
 ) {
-    // 稳定版悬浮液态：Miuix FloatingNavigationBar（原生组件）+ 外层 drawBackdrop 玻璃背景
-    // 弃用 layerBackdrop / CombinedBackdrop 复杂绘制链（悬浮+液态组合首次真正执行时曾导致运行时崩溃）
+    // 三层结构：基础层（可交互 tab + 玻璃胶囊）/ 透明层（捕获选中内容到 tabsBackdrop）/ 指示器层（combinedBackdrop 折射胶囊跟随选中项）
+    // 光效 = Miuix drawBackdrop + vibrancy 鲜艳度 + blur 模糊 + lens 折射 + innerShadow 内阴影（与 LSPosed Manager / InstallerX 同源）
     val isDark = MiuixTheme.colorScheme.background.luminance() < 0.5f
     val pillShape = RoundedCornerShape(28.dp)
     val containerColor = MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val tabsBackdrop = rememberLayerBackdrop()
+    val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
+    val density = LocalDensity.current
+    var totalWidthPx by remember { mutableFloatStateOf(0f) }
+    var tabWidthPx by remember { mutableFloatStateOf(0f) }
+    val indicatorAnim by animateFloatAsState(
+        targetValue = selectedTabIndex.toFloat(),
+        animationSpec = tween(320),
+        label = "flIndicator"
+    )
 
     Box(
         modifier = Modifier
@@ -452,8 +312,13 @@ private fun FloatingLiquidBar(
             .padding(bottom = 12.dp + navBottom),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
+        // ===== 基础层：玻璃胶囊 + 可交互 tab =====
+        Row(
             modifier = Modifier
+                .onGloballyPositioned { coords ->
+                    totalWidthPx = coords.size.width.toFloat()
+                    tabWidthPx = (totalWidthPx - with(density) { 8.dp.toPx() }) / items.size.coerceAtLeast(1)
+                }
                 .dropShadow(
                     shape = pillShape,
                     shadow = Shadow(
@@ -468,22 +333,107 @@ private fun FloatingLiquidBar(
                     effects = {
                         vibrancy()
                         blur(4.dp.toPx(), 4.dp.toPx())
-                        lens(24.dp.toPx(), 24.dp.toPx())
+                        lens(refractionHeight = 24.dp.toPx(), refractionAmount = 24.dp.toPx())
                     },
                     highlight = { IndicatorSpecular.copy(alpha = 0.75f) },
                     onDrawSurface = { drawRect(containerColor) },
                 )
+                .innerShadow(shape = pillShape) {
+                    com.hyperflowplus.ui.liquid.InnerShadow(radius = 8.dp)
+                }
+                .height(64.dp)
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            top.yukonga.miuix.kmp.basic.FloatingNavigationBar {
-                items.forEachIndexed { i, (icon, label) ->
-                    top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem(
-                        selected = selectedTabIndex == i,
-                        onClick = { onTabSelected(i) },
-                        icon = icon,
-                        label = label,
+            items.forEachIndexed { i, (icon, label) ->
+                val selected = selectedTabIndex == i
+                Column(
+                    modifier = Modifier
+                        .width(with(density) { tabWidthPx.toDp() }.coerceAtLeast(56.dp))
+                        .clickable { onTabSelected(i) }
+                        .padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (selected) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        label,
+                        fontSize = 11.sp,
+                        color = if (selected) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
+        }
+        // ===== 透明层：捕获选中 tab 内容（供指示器层 combinedBackdrop 折射） =====
+        Row(
+            modifier = Modifier
+                .alpha(0f)
+                .layerBackdrop(tabsBackdrop)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { pillShape },
+                    effects = {
+                        vibrancy()
+                        blur(4.dp.toPx(), 4.dp.toPx())
+                        lens(refractionHeight = 24.dp.toPx(), refractionAmount = 24.dp.toPx())
+                    },
+                    onDrawSurface = { drawRect(containerColor) },
+                )
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items.forEachIndexed { i, (icon, label) ->
+                Column(
+                    modifier = Modifier
+                        .width(with(density) { tabWidthPx.toDp() }.coerceAtLeast(56.dp))
+                        .padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(label, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurface)
+                }
+            }
+        }
+        // ===== 指示器层：跟随选中 tab 的折射胶囊（lens 深度/色差 + 内阴影） =====
+        if (tabWidthPx > 0f) {
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .graphicsLayer { translationX = indicatorAnim * tabWidthPx }
+                    .drawBackdrop(
+                        backdrop = combinedBackdrop,
+                        shape = { pillShape },
+                        effects = {
+                            lens(
+                                refractionHeight = 10.dp.toPx(),
+                                refractionAmount = 14.dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = 0.5f,
+                            )
+                        },
+                        highlight = { IndicatorSpecular.copy(alpha = 0.9f) },
+                        onDrawSurface = { drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.03f)) },
+                    )
+                    .innerShadow(shape = pillShape) {
+                        com.hyperflowplus.ui.liquid.InnerShadow(radius = 8.dp)
+                    }
+                    .width(with(density) { tabWidthPx.toDp() })
+                    .height(56.dp)
+            ) {}
         }
     }
 }

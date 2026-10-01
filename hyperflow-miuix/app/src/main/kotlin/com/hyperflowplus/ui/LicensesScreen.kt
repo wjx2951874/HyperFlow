@@ -187,6 +187,7 @@ fun LicensesScreen(onBack: () -> Unit) {
             show = true,
             title = lib.name,
             summary = "许可证：${lib.license}",
+            bottomInset = 120.dp,
             onDismiss = { selected = null }
         ) {
             Column(

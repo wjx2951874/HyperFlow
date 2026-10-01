@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -63,7 +64,11 @@ fun OnboardingScreen(state: HFState) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f)),
+            .background(
+                if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
+                    Color(0xFF1A1A1A).copy(alpha = 0.85f)   // 黑色模式：浅黑（非纯黑）
+                else Color.Black.copy(alpha = 0.45f)
+            ),
         contentAlignment = Alignment.BottomCenter
     ) {
         val maxCardH = LocalConfiguration.current.screenHeightDp.dp * 0.78f
@@ -74,7 +79,11 @@ fun OnboardingScreen(state: HFState) {
                 .padding(bottom = 40.dp)
                 .heightIn(max = maxCardH)
                 .clip(RoundedCornerShape(24.dp))
-                .background(MiuixTheme.colorScheme.surface)
+                .background(
+                    if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
+                        Color(0xFF262626)
+                    else MiuixTheme.colorScheme.surface
+                )
                 .border(
                     0.5.dp,
                     MiuixTheme.colorScheme.onBackground.copy(alpha = 0.08f),

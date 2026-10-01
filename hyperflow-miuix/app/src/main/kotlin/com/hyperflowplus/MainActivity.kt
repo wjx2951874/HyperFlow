@@ -265,7 +265,7 @@ fun HyperFlowApp() {
         if (showSort) {
             HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                title = "排序",
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                title = "排序",
                 show = showSort,
                 onDismiss = { showSort = false }
             ) {
@@ -340,7 +340,7 @@ fun HyperFlowApp() {
             when (updPhase) {
                 "checking" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "检查更新",
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                    title = "检查更新",
                     summary = "正在检查更新…",
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -354,7 +354,7 @@ fun HyperFlowApp() {
                 }
                 "new" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
                     title = "更新日志",
                     summary = updVer,
                     show = showUpd,
@@ -397,7 +397,7 @@ fun HyperFlowApp() {
                 }
                 "busy" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "正在检查更新",
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                    title = "正在检查更新",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -410,7 +410,7 @@ fun HyperFlowApp() {
                 }
                 "none" -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "已是最新版本",
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                    title = "已是最新版本",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -423,7 +423,7 @@ fun HyperFlowApp() {
                 }
                 else -> HyperDialog(
 
-                    bottomInset = if (state.navFloat) 120.dp else 88.dp,                    title = "检查更新失败",
+                    bottomInset = if (state.navFloat) 160.dp else 120.dp,                    title = "检查更新失败",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -441,7 +441,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "选择更新方式",
                 summary = "① 直接下载更新包：稍后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
-                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                bottomInset = if (state.navFloat) 160.dp else 120.dp,
                 show = updMethod,
                 onDismiss = { updMethod = false }
             ) {
@@ -481,7 +481,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "正在下载更新包",
                 summary = "正在从镜像通道下载，请稍候…",
-                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                bottomInset = if (state.navFloat) 160.dp else 120.dp,
                 show = updDownloading,
                 onDismiss = { updDownloading = false }
             ) {
@@ -499,7 +499,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "更新包已下载",
                 summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
-                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                bottomInset = if (state.navFloat) 160.dp else 120.dp,
                 show = true,
                 onDismiss = { updDownloaded = null }
             ) {
@@ -529,7 +529,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "下载失败",
                 summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
-                bottomInset = if (state.navFloat) 120.dp else 88.dp,
+                bottomInset = if (state.navFloat) 160.dp else 120.dp,
                 show = true,
                 onDismiss = { updDlError = null }
             ) {
