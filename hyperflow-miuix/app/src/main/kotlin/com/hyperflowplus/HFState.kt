@@ -29,7 +29,9 @@ object HFState {
 
     private var pollingStarted = false
 
-    /** 归档实时刷新：每 5 秒重读 flow provider，有变化立即更新消息页（流转到达即显示） */
+    /** 归档实时刷新：每 5 秒重读 flow provider，有变化立即更新消息页（流转到达即显示）。
+     *  App 内消息开启时：每次读取合并去重保存到本机（hf_flow_history.txt），
+     *  显示值 = 历史 + 实时 合并结果（互联端记录被清空后历史短信仍可查看）。 */
     fun startFlowPolling() {
         if (pollingStarted) return
         pollingStarted = true
@@ -40,10 +42,19 @@ object HFState {
                     val f = runCatching {
                         RootExec.su("content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60")
                     }.getOrNull()
+                    var display: String? = null
                     if (f != null && f.isNotBlank()) {
-                        handler.post {
-                            if (f != flow) flow = f
+                        if (archiveApp) {
+                            val hist = readHistory()
+                            display = if (hist != null) mergeFlow(hist, f) else f
+                            persistHistory(f)
+                        } else {
+                            display = f
                         }
+                    }
+                    val finalDisplay = display
+                    handler.post {
+                        if (finalDisplay != null && finalDisplay != flow) flow = finalDisplay
                     }
                     // 顺带刷新 root 状态（用户后授权也能即时反映，设备信息不用重进 App）
                     val uid = runCatching { RootExec.su("id -u") }.getOrNull()?.trim()
@@ -63,11 +74,16 @@ object HFState {
     private val cacheFile: java.io.File?
         get() = ctx?.getFileDir("hf_cache.txt")
 
+    /** 本地短信历史文件（App 内消息开启期间累积保存；关闭时可选择保留/清除） */
+    private val historyFile: java.io.File?
+        get() = ctx?.getFileDir("hf_flow_history.txt")
+
     // ===== 开关状态（与 Config.java 的 key 一致） =====
-    val forceTransfer: Boolean get() = cfg.optBoolean("force_transfer", true)
-    val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", true)
+    // 首次安装全部默认关闭，用户进首页自行开启（V0.4.28 起）
+    val forceTransfer: Boolean get() = cfg.optBoolean("force_transfer", false)
+    val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", false)
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
-    val archiveApp: Boolean get() = cfg.optBoolean("archive_app", true)
+    val archiveApp: Boolean get() = cfg.optBoolean("archive_app", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "name_asc")
@@ -122,6 +138,71 @@ object HFState {
         }
     }
 
+    // ===== 本地短信历史（App 内消息开启期间累积，互联端读不到也能显示） =====
+    /** 合并两段 flow 文本：按 content_notification_ui_id 或整行去重，实时行覆盖历史行 */
+    private fun mergeFlow(history: String, realtime: String): String {
+        val map = LinkedHashMap<String, String>()
+        for (line in (history + "\n" + realtime).lines()) {
+            if (line.isBlank()) continue
+            var key: String? = null
+            for (seg in line.split(", ")) {
+                if (seg.startsWith("content_notification_ui_id=")) {
+                    val v = seg.substringAfter("=").trim()
+                    if (v.isNotEmpty()) key = "id:" + v
+                    break
+                }
+            }
+            map[key ?: "line:" + line.hashCode()] = line
+        }
+        return map.values.joinToString("\n")
+    }
+
+    /** 读取本地历史（App 内消息关闭后仍保留的文件） */
+    fun readHistory(): String? {
+        val f = historyFile ?: return null
+        return try {
+            if (f.exists()) f.readText() else null
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    /** 保存实时数据到本地历史（去重累积） */
+    private fun persistHistory(realtime: String) {
+        val f = historyFile ?: return
+        try {
+            val old = if (f.exists()) f.readText() else ""
+            val merged = mergeFlow(old, realtime)
+            if (merged.isNotBlank()) {
+                f.parentFile?.mkdirs()
+                f.writeText(merged)
+            }
+        } catch (t: Throwable) {
+        }
+    }
+
+    /** 清除本地历史（关闭 App 内消息时选择"清除记录"） */
+    fun clearHistory() {
+        try {
+            historyFile?.delete()
+        } catch (t: Throwable) {
+        }
+        refreshFlow()
+    }
+
+    /** 重读一次实时 flow（清除历史后立即恢复实时显示） */
+    fun refreshFlow() {
+        Thread {
+            val f = runCatching {
+                RootExec.su("content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60")
+            }.getOrNull()
+            val finalF = f
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (finalF != null && finalF != flow) flow = finalF
+            }
+        }.start()
+    }
+
     /** 一次 su 会话读全部数据 + 写缓存（App 秒开）。
      *  注意：Compose 状态只能在主线程赋值，后台线程只算数据，最后 post 回主线程。 */
     fun loadAll() {
@@ -167,9 +248,18 @@ object HFState {
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
             saveCache(finalCfg, finalFlow)   // 文件 IO 留在后台线程
+            val mergedFlow = if (finalFlow != null) {
+                if (finalCfg != null && runCatching { JSONObject(finalCfg).optBoolean("archive_app", false) }.getOrDefault(false)) {
+                    val hist = readHistory()
+                    if (hist != null) mergeFlow(hist, finalFlow) else finalFlow
+                } else {
+                    finalFlow
+                }
+            } else null
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 cfg = runCatching { JSONObject(finalCfg ?: "") }.getOrDefault(JSONObject())
-                if (finalFlow != null) flow = finalFlow
+                if (mergedFlow != null) flow = mergedFlow
+                else if (finalFlow != null) flow = finalFlow
                 rootInfo = finalRoot
                 miuiOsVersion = fMiui
                 androidVersion = fAndroid

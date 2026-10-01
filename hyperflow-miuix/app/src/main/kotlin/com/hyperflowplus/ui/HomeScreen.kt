@@ -2,9 +2,6 @@ package com.hyperflowplus.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,8 +20,6 @@ import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -45,6 +40,9 @@ fun GroupTitle(text: String) {
 fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
 
+    // 待确认的开关弹窗：null=无；其余为弹窗标识
+    var pendingToggle by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -59,18 +57,24 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                     title = "亮屏流转",
                     summary = "亮屏时强制模拟锁屏放行通知",
                     checked = state.forceTransfer,
-                    onCheckedChange = { state.set("force_transfer", it) }
+                    onCheckedChange = { want ->
+                        if (want) pendingToggle = "force"   // 开启需确认
+                        else state.set("force_transfer", false)
+                    }
                 )
                 SwitchPreference(
                     title = "分身流转",
                     summary = "微信/QQ 分身通知流转（标题带【分身】）",
                     checked = state.cloneTransfer,
-                    onCheckedChange = { state.set("clone_transfer", it) }
+                    onCheckedChange = { want ->
+                        if (want) pendingToggle = "clone"
+                        else state.set("clone_transfer", false)
+                    }
                 )
             }
         }
 
-        // 短信持久化：默认展开子层（两个内联开关，不用弹窗，避免点击闪退）
+        // 短信持久化：默认展开子层（两个内联开关）
         GroupTitle("短信持久化")
 
         Card(Modifier.fillMaxWidth()) {
@@ -79,13 +83,19 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                     title = "App 内消息",
                     summary = if (state.archiveApp) "流转短信显示在消息页" else "关闭后消息页不显示流转短信",
                     checked = state.archiveApp,
-                    onCheckedChange = { state.set(Config.KEY_ARCHIVE_APP, it) }
+                    onCheckedChange = { want ->
+                        if (want) pendingToggle = "archive"
+                        else pendingToggle = "archive_off"   // 关闭时选择是否保留本地记录
+                    }
                 )
                 SwitchPreference(
                     title = "写入系统短信",
                     summary = "写入系统收件箱（默认关闭：可能回环/被拦截，建议用 App 内消息）",
                     checked = state.smsPersist,
-                    onCheckedChange = { state.set(Config.KEY_SMS_PERSIST, it) }
+                    onCheckedChange = { want ->
+                        if (want) pendingToggle = "sms"   // 10 秒倒计时确认
+                        else state.set(Config.KEY_SMS_PERSIST, false)
+                    }
                 )
             }
         }
@@ -124,6 +134,56 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
+    }
 
+    // ===== 开启/关闭确认弹窗（Miuix WindowDialog；开启确认后才更新状态，关闭无弹窗直接生效） =====
+    when (pendingToggle) {
+        "force" -> ConfirmDialog(
+            show = true,
+            title = "你确定要开启亮屏流转嘛？",
+            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（来电、短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
+            onConfirm = { state.set("force_transfer", true); pendingToggle = null },
+            onDismiss = { pendingToggle = null }
+        )
+        "clone" -> ConfirmDialog(
+            show = true,
+            title = "你确定要开启分身流转嘛？",
+            content = "开启后，在小米互联中已开启通知流转的分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
+            onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
+            onDismiss = { pendingToggle = null }
+        )
+        "archive" -> ConfirmDialog(
+            show = true,
+            title = "你确定要开启 App 内消息嘛？",
+            content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
+            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); pendingToggle = null },
+            onDismiss = { pendingToggle = null }
+        )
+        "sms" -> ConfirmDialog(
+            show = true,
+            title = "你确定要写入系统短信嘛？",
+            content = "开启后，流转短信会写入系统收件箱。可能存在错误显示、重复互联等问题（测试多次复现），遇到异常请及时关闭。",
+            countdownSec = 10,
+            onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
+            onDismiss = { pendingToggle = null }
+        )
+        // 关闭 App 内消息：自由选择是否保留本地记录（两个按钮都执行关闭，只是保留与否不同）
+        "archive_off" -> ConfirmDialog(
+            show = true,
+            title = "关闭 App 内消息？",
+            content = "关闭后消息页不再显示流转短信。已存储在本地的短信记录如何处理？",
+            cancelText = "保留记录",
+            confirmText = "清除记录",
+            onConfirm = {
+                state.set(Config.KEY_ARCHIVE_APP, false)
+                state.clearHistory()
+                pendingToggle = null
+            },
+            onCancel = {
+                state.set(Config.KEY_ARCHIVE_APP, false)
+                pendingToggle = null
+            },
+            onDismiss = { pendingToggle = null }
+        )
     }
 }

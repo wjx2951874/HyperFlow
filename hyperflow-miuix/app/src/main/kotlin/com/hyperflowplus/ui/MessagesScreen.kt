@@ -3,43 +3,78 @@ package com.hyperflowplus.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 消息页：短信 App 风格的会话列表。
  * 每条 = 发送人（加粗） + 最新正文预览 + 右侧时间；点击进入会话详情。
+ * App 内消息未开启时：大提示 + 「立即开始」按钮（点击弹开启确认窗）。
  */
 @Composable
 fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
-    // App 内消息归档关闭：消息页直接隐藏内容
+    // App 内消息归档关闭：大提示 + 立即开始按钮
     if (!state.archiveApp) {
+        var showStartDialog by remember { mutableStateOf(false) }
         Column(
             modifier = modifier
                 .fillMaxSize()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("App 内消息已关闭", style = MiuixTheme.textStyles.body1)
             Text(
-                "在 首页 → 短信持久化 → App 内消息 中重新开启",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                "App 内消息未开启",
+                style = MiuixTheme.textStyles.title1,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 120.dp)
             )
+            Text(
+                "流转的短信会在这里按发送人显示",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Button(
+                onClick = { showStartDialog = true },
+                colors = ButtonDefaults.buttonColorsPrimary(),
+                modifier = Modifier
+                    .padding(top = 24.dp)
+                    .width(160.dp)
+            ) {
+                Text("立即开始")
+            }
         }
+        ConfirmDialog(
+            show = showStartDialog,
+            title = "你确定要开启 App 内消息嘛？",
+            content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
+            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); showStartDialog = false },
+            onDismiss = { showStartDialog = false }
+        )
         return
     }
     val convos = remember(state.flow, state.archiveSort, state.sortVersion) {
