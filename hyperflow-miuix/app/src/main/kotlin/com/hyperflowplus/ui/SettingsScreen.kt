@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -103,10 +107,17 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
+                var hiddenClicks by remember { mutableIntStateOf(0) }
                 ArrowPreference(
                     title = "HyperFlow",
                     summary = "v${BuildConfig.VERSION_NAME} · 澎湃OS 互联通知流转增强",
-                    onClick = {}
+                    onClick = {
+                        hiddenClicks++
+                        if (hiddenClicks >= 3) {
+                            hiddenClicks = 0
+                            MainHolder.onReopenOnboarding()   // 连点 3 次：重进引导页
+                        }
+                    }
                 )
                 ArrowPreference(
                     title = "作者",
@@ -147,4 +158,5 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 object MainHolder {
     var onCheckUpdate: () -> Unit = {}
     var onOpenLicenses: () -> Unit = {}
+    var onReopenOnboarding: () -> Unit = {}
 }

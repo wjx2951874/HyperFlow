@@ -60,6 +60,8 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.FlowScreen
 import com.hyperflowplus.ui.HomeScreen
+import com.hyperflowplus.ui.GuideScreen
+import com.hyperflowplus.ui.GuideType
 import com.hyperflowplus.ui.HyperDialog
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
@@ -94,6 +96,7 @@ fun HyperFlowApp() {
         var showSort by remember { mutableStateOf(false) }
         var showUpd by remember { mutableStateOf(false) }
         var showLicenses by remember { mutableStateOf(false) }
+        var guideType by remember { mutableStateOf<GuideType?>(null) }
         var updVer by remember { mutableStateOf("") }
         var updUrl by remember { mutableStateOf("") }
         var updLog by remember { mutableStateOf("") }
@@ -103,6 +106,7 @@ fun HyperFlowApp() {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
             MainHolder.onOpenLicenses = { showLicenses = true }
+            MainHolder.onReopenOnboarding = { state.showOnboarding = true }
             MainHolder.onCheckUpdate = {
                 // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示
                 updPhase = "checking"
@@ -136,8 +140,8 @@ fun HyperFlowApp() {
                 )
             }
         }
-        // 引导判断：首次（App 私有标记，root 无关）显示引导页
-        LaunchedEffect(state.cfg) {
+        // 引导判断：首次（App 私有标记，root 无关）显示引导页；连点"关于-HyperFlow"3 次可重开
+        LaunchedEffect(Unit) {
             state.showOnboarding = !state.firstRunDone
         }
 
@@ -160,6 +164,15 @@ fun HyperFlowApp() {
             BackHandler { state.currentConversation = null }
             Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
                 ConversationScreen(state, conversation.first, conversation.second)
+            }
+            return@MiuixTheme
+        }
+        // 环境引导覆盖页（首页检测项点击进入，Miuix 返回）
+        val gt = guideType
+        if (gt != null) {
+            BackHandler { guideType = null }
+            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+                GuideScreen(gt, onBack = { guideType = null })
             }
             return@MiuixTheme
         }
@@ -217,7 +230,7 @@ fun HyperFlowApp() {
                 // 内容区保持主题色不透明（玻璃只作用于顶栏/底栏）
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
                     when (tab) {
-                        0 -> HomeScreen(state, contentMod)
+                        0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
                         1 -> FlowScreen(state, contentMod)
                         2 -> MessagesScreen(state, contentMod)
                         3 -> SettingsScreen(state, contentMod)

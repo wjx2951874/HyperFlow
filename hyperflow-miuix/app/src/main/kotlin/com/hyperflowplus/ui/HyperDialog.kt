@@ -1,5 +1,10 @@
 package com.hyperflowplus.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Text
@@ -31,7 +37,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 不依赖 miuix WindowDialog/OverlayDialog/系统 Dialog（这些在部分 KernelSU 环境会闪退，
  * 用户多轮实测：凡弹窗相关均闪退，仅引导页覆盖层稳定）。故全部弹窗统一走本组件。
  *
- * 交互：点击卡片外遮罩区 = onDismiss（同 MIUI 弹窗点外部关闭）；卡片内点击不冒泡。
+ * 视觉：框体**从屏幕底部往上弹出**（BottomCenter 靠下 + 底部滑入动画），
+ * 标题/正文**居中**显示；遮罩轻黑（0.35），参考 HyperModifier 版本弹窗。
+ * 交互：点击卡片外遮罩区 = onDismiss；卡片内点击不冒泡。
  *
  * 用法：
  *   HyperDialog(show = visible, title = "标题", summary = "说明", onDismiss = { visible = false }) {
@@ -50,44 +58,56 @@ fun HyperDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(Color.Black.copy(alpha = 0.35f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) { onDismiss() },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.BottomCenter
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MiuixTheme.colorScheme.surface)
-                // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {}
-                .padding(horizontal = 22.dp, vertical = 22.dp)
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(280)) + fadeIn(),
+            exit = fadeOut(tween(150))
         ) {
-            if (title != null) {
-                Text(
-                    title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MiuixTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MiuixTheme.colorScheme.surface)
+                    // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {}
+                    .padding(horizontal = 22.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (title != null) {
+                    Text(
+                        title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+                if (summary != null) {
+                    Text(
+                        summary,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(20.dp))
+                }
+                content()
             }
-            if (summary != null) {
-                Text(
-                    summary,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                )
-                Spacer(Modifier.height(20.dp))
-            }
-            content()
         }
     }
 }
