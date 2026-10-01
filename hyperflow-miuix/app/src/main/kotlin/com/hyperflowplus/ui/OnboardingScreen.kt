@@ -101,6 +101,8 @@ fun OnboardingScreen(state: HFState) {
                     onExit = {
                         state.markFirstRunDone()
                         state.showOnboarding = false
+                        // 点「退出」直接关闭应用（引导不再显示，下次启动直达主页）
+                        (ctx as? android.app.Activity)?.finish()
                     }
                 )
                 2 -> StageCoolapk(
@@ -218,14 +220,6 @@ private fun StageAgreement(
         }
         Spacer(Modifier.height(12.dp))
 
-        // 致谢
-        Text(
-            "由衷感谢 KernelSU、LSPosed 与 Miuix 开源社区",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
         Spacer(Modifier.height(14.dp))
     }
 

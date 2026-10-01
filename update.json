@@ -1,6 +1,6 @@
 {
- "version": "v0.4.39",
- "versionCode": 74,
- "zipUrl": "https://ghfast.top/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.39/HyperFlow-0.4.39-flashable.zip",
- "changelog": "·修复更新检测：App 并行收集所有通道结果，取版本号最大者（此前镜像缓存旧版会误判\"已是最新\"），并在弹窗显示命中通道\n·修复 update.json 不同步：版本号/下载地址/更新日志现已与 Release 完全同步（此前 zipUrl 停留在 v0.4.36 导致 KSU 下载失败）\n·KSU 通道换 ghfast.top（实测实时返回最新版，ghproxy.net 缓存顽固已弃用）\n·悬浮液态玻璃三层结构（InstallerX/KernelSU 同源）：vibrancy+lens 折射+innerShadow+高光，与 LSPosed Manager 一致\n·弹窗位置统一上移（悬浮 160dp/普通 120dp），深色模式浅黑化"
+ "version": "v0.4.40",
+ "versionCode": 75,
+ "zipUrl": "https://ghfast.top/https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.40/HyperFlow-0.4.40-flashable.zip",
+ "changelog": "·修复悬浮液态：单层稳定版（弃用组合捕获，此前部分设备开启悬浮后底部空白）\n·修复 LSP 检测：find 全盘遍历 modules.list/scope（覆盖全部 LSPosed 变体路径），结果写 detect.log\n·弹窗位置靠下：学引导页贴底遮住导航栏（此前上移过高）\n·引导页「退出」直接关闭应用\n·移除页面\"由衷感谢\"字样\n·普通液态玻璃增强 innerShadow"
 }

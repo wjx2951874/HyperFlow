@@ -1,7 +1,7 @@
 id=hyperflow
 name=HyperFlow
-version=0.4.39
-versionCode=74
+version=0.4.40
+versionCode=75
 author=酷安@翰德姆
 description=小米澎湃互联通知流转增强模块（设备互联通知/分身/短信流转）
 detail=面向小米澎湃 OS 的互联通知流转增强模块，让通知与短信在设备间顺畅流转。作者：酷安@翰德姆

@@ -121,7 +121,7 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
         HyperDialog(
             title = "正文排序",
             show = showSort,
-            bottomInset = if (state.navFloat) 160.dp else 120.dp,
+            bottomInset = if (state.navFloat) 56.dp else 24.dp,
             onDismiss = { showSort = false }
         ) {
             Column(Modifier.padding(horizontal = 8.dp)) {

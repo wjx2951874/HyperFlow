@@ -76,12 +76,19 @@ for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /
   [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
 done
 echo ==MODULES;
+# 标准路径 + find 全盘遍历（覆盖所有 LSPosed 变体，如 KernelSU 内嵌版的不同目录）
 for f in /data/adb/lspd/config/modules.list /data/adb/lspd/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/lsposed/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/riru/modules/lsposed/config/modules.list; do
-  [ -f "${'$'}f" ] && cat "${'$'}f"
+  [ -f "${'$'}f" ] && { echo "==ML ${'$'}f"; cat "${'$'}f"; }
+done
+find /data/adb -maxdepth 6 -name "modules.list" -type f 2>/dev/null | while read f; do
+  case "${'$'}f" in *lspd*|*lsposed*) echo "==MLX ${'$'}f"; cat "${'$'}f";; esac
 done
 echo ==SCOPE;
 for f in /data/adb/lspd/config/scope/* /data/adb/lspd/scope/* /data/adb/modules/lsposed/config/scope/* /data/adb/modules/lsposed/scope/* /data/adb/modules/zygisk_lsposed/config/scope/* /data/adb/riru/modules/lsposed/config/scope/*; do
   [ -f "${'$'}f" ] && echo "==FILE ${'$'}(basename ${'$'}f)"
+done
+find /data/adb -maxdepth 7 -path "*scope*" -type f 2>/dev/null | while read f; do
+  case "${'$'}f" in *lspd*|*lsposed*) echo "==FILEX ${'$'}(basename ${'$'}f)";; esac
 done
 echo ==END""") }.getOrNull() else null
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
