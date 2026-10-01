@@ -1,6 +1,1 @@
-{
-  "version": "0.4.15",
-  "versionCode": 50,
-  "zipUrl": "https://github.com/wjx2951874/HyperFlow/releases/download/v0.4.15/HyperFlow-0.4.15-flashable.zip",
-  "changelog": "v0.4.15：全局崩溃捕获（闪退自动记录，重启 App 自动弹出崩溃原因，无需终端日志）"
-}
+{"version": "0.4.17", "versionCode": 52, "zipUrl": "https://cdn.jsdelivr.net/gh/wjx2951874/HyperFlow@main/releases/HyperFlow-0.4.17-flashable.zip", "changelog": "v0.4.17：① 关闭壁纸取色，恢复 Miuix 默认主题（跟随系统深浅色）；② 删除全部确认弹窗，修复点击开关/短信持久化闪退；③ 短信持久化在首页默认展开子开关（App 内消息 / 写入系统短信）；④ 更新检测多通道（jsDelivr 双域名 + GitHub）；⑤ 更新下载改走 jsDelivr，国内可直接下载安装。"}
