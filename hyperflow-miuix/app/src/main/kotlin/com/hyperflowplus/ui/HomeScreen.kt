@@ -18,6 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,6 +111,13 @@ done
 echo ==RUNNING;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 cat /data/user/0/com.hyperflowplus/files/xposed_loaded 2>/dev/null
+echo ==MAPS;
+# 运行态最强证据：模块 APK 被 LSPosed 真正 mmap 进进程（zygote 作用域进程 maps 里含模块路径）。
+# 覆盖"模块由非 root 进程（如小米互联服务）加载、写不进 /data/adb 时间戳"的场景：
+# 此前 milink 加载模块却无法写时间戳 → 重启生效后仍误报"请重启"。
+for p in /proc/[0-9]*; do
+  grep -q "modules/hyperflowplus" "${'$'}p/maps" 2>/dev/null && echo "==LOADED ${'$'}{p##*/}"
+done
 echo ==END""") }.getOrNull() else null
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
             if (!out.isNullOrBlank()) {
@@ -126,10 +135,14 @@ echo ==END""") }.getOrNull() else null
             // 以最近 48h 内加载过为准（装好后没重启=不加载=如实显示未启用）。
             val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
             // 双路径任一最近 48h 内加载过即生效（/data/adb=root 进程写入，/data/user/0/<app>=App 进程写入）
+            // 补充 MAPS 证据：非 root 作用域进程（milink 等）加载模块时写不进 /data/adb 时间戳，
+            // 但 /proc/*/maps 里能看到模块 APK 已被 mmap —— 命中即视为已生效，
+            // 消除"模块由 milink 加载生效但时间戳缺失 → 重启后仍误报'请重启'"的问题。
+            val mapsHit = runSeg.contains("==LOADED")
             val runStamp = runSeg.lines().mapNotNull { it.trim().toLongOrNull() }.maxOrNull()
-            val runtimeOkLocal = runStamp?.let {
+            val runtimeOkLocal = mapsHit || (runStamp?.let {
                 System.currentTimeMillis() - it < 48 * 3600 * 1000L
-            } ?: false
+            } ?: false)
             // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）
             val dbHit = dbSeg.contains("==HF_IN_DB")
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
@@ -288,12 +301,7 @@ echo ==END""") }.getOrNull() else null
                     modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    top.yukonga.miuix.kmp.basic.Icon(
-                        imageVector = RoundedIcons.CheckCircleOutline,
-                        contentDescription = "环境已就绪",
-                        tint = CGreen,
-                        modifier = Modifier.size(44.dp)
-                    )
+                    StatusBadge(ok = true, size = 44.dp)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "环境已就绪",
@@ -320,7 +328,7 @@ echo ==END""") }.getOrNull() else null
                 }
             }
         } else {
-            // 部分未就绪：黄色圆环叹号卡（与对勾同源的 Rounded 圆环样式）
+            // 部分未就绪：黄色圆环叹号卡（与绿色 CheckCircle 同源 Material 圆环样式）
             var showMore by remember { mutableStateOf(false) }
             var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
             Card(
@@ -536,19 +544,14 @@ echo ==END""") }.getOrNull() else null
     }
 }
 
-/** 检测项行：状态圆点（绿=通过 红=未通过）+ 名称 + 状态文案 */
+/** 检测项行：状态图标（谷歌 Material CheckCircle 绿勾=通过 红叉=未通过）+ 名称 + 状态文案 */
 @Composable
 private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        top.yukonga.miuix.kmp.basic.Icon(
-            imageVector = if (ok) RoundedIcons.CheckCircleOutline else RoundedIcons.Cancel,
-            contentDescription = null,
-            tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
-            modifier = Modifier.size(20.dp)
-        )
+        StatusBadge(ok)
         Spacer(Modifier.width(10.dp))
         Column {
             Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
@@ -559,6 +562,22 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
             )
         }
     }
+}
+
+/**
+ * 环境状态图标（v0.5.8）：改用谷歌官方 Material 图标
+ * —— 通过 = Icons.Filled.CheckCircle（实心圆对勾，与系统/其他 App 常见选中样式一致），
+ * 未通过 = Icons.Filled.ErrorOutline（红色圆环叹号，与黄色"部分未就绪"大卡同源）。
+ * 此前用的是手写 path 的 RoundedIcons 空心圆环勾，用户反馈渲染样式不是标准谷歌图标。
+ */
+@Composable
+private fun StatusBadge(ok: Boolean, size: androidx.compose.ui.unit.Dp = 20.dp) {
+    Icon(
+        imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+        contentDescription = null,
+        tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
+        modifier = Modifier.size(size)
+    )
 }
 
 /** 查看更多弹窗内的检测项行：状态图标 + 名称/状态 + 未通过时右侧"去解决"按钮 */
@@ -574,12 +593,7 @@ private fun EnvItemRow(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        top.yukonga.miuix.kmp.basic.Icon(
-            imageVector = if (ok) RoundedIcons.CheckCircleOutline else RoundedIcons.Cancel,
-            contentDescription = null,
-            tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
-            modifier = Modifier.size(20.dp)
-        )
+        StatusBadge(ok)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)

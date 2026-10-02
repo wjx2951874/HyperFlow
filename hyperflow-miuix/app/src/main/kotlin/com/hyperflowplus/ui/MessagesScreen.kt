@@ -1,15 +1,23 @@
 package com.hyperflowplus.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,14 +25,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -33,6 +44,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 每条 = 发送人（加粗） + 最新正文预览 + 右侧时间；点击进入会话详情。
  * App 内消息未开启时：大提示 + 「立即开始」按钮（点击弹开启确认窗）。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     // App 内消息归档关闭：大提示 + 立即开始按钮
@@ -97,11 +109,81 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         }
         return
     }
+    // 搜索框：按发送人或正文实时过滤（v0.5.8 新增）
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val filtered = remember(convos, q) {
+        if (q.isEmpty()) convos
+        else convos.filter { (sender, rows) ->
+            sender.contains(q, ignoreCase = true) ||
+                rows.any { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }
+        }
+    }
+    // 会话删除确认（长按会话）
+    var delTarget by remember { mutableStateOf<Pair<String, List<Array<String>>>?>(null) }
     // 小米端读不到数据：当前显示的是本地保存的历史记录（避免误以为小米互联还有数据）
     val localOnly = convos.isNotEmpty() && !state.liveAvailable
     LazyColumn(modifier.fillMaxSize()) {
+        // 搜索框固定在列表顶部
+        item(key = "search") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onBackground
+                    ),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MiuixTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                                .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "搜索",
+                                tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Box(Modifier.weight(1f)) {
+                                if (query.isEmpty()) {
+                                    Text(
+                                        "搜索发送人或内容",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                    )
+                                }
+                                inner()
+                            }
+                            if (query.isNotEmpty()) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "清空",
+                                    tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clickable { query = "" }
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+        }
         if (localOnly) {
-            item {
+            item(key = "localOnly") {
                 Text(
                     "小米端暂无可读数据，以下为本地保存的历史记录",
                     style = MiuixTheme.textStyles.body2,
@@ -112,14 +194,30 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
-        items(convos, key = { it.first }) { (sender, rows) ->
+        if (filtered.isEmpty()) {
+            item(key = "noMatch") {
+                Text(
+                    "没有匹配「${q}」的消息",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        items(filtered, key = { it.first }) { (sender, rows) ->
             val latest = rows.maxByOrNull { timeToEpoch(it[0]) } ?: return@items
             val devTag = if (latest[1].isNotEmpty()) "｜来自" + latest[1] else ""
             val localTag = if (latest.getOrNull(3) == "local") "（本地）" else ""
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { state.currentConversation = sender to rows }
+                    .combinedClickable(
+                        onClick = { state.currentConversation = sender to rows },
+                        onLongClick = { delTarget = sender to rows }
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 // 行 1：发送人名称（左，加粗）+ 最近时间｜来自设备（右，灰色小字，短信 App 样式）
@@ -152,6 +250,20 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
+    }
+    // 会话删除确认（长按会话 → 删除该会话全部消息）
+    delTarget?.let { (sender, rows) ->
+        ConfirmDialog(
+            show = true,
+            bottomInset = 40.dp,
+            title = "删除与「$sender」的 ${rows.size} 条消息？",
+            content = "删除后本地保存的记录将一并移除（小米端实时流转的消息可能在下次轮询后重新出现）。",
+            onConfirm = {
+                state.deleteFlowRows(rows)
+                delTarget = null
+            },
+            onDismiss = { delTarget = null }
+        )
     }
 }
 
@@ -186,28 +298,28 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src, title))
     }
     // 去重：本地归档与小米端（云端）同一条短信重复显示 → 云端优先，本地隐藏；
-    // 同会话内以「时间戳+正文」为唯一键，live 记录保留、local 记录丢弃（本地独有的仍保留并带 hf_source=local 标记）
+    // 同会话内以「时间窗+正文」为唯一键（2 分钟窗口：本地归档与小米流转的时间戳
+    // 可能相差几十秒/几分钟，原 1 分钟键会导致同一消息不去重而重复显示）。
+    // 先收集全部 live 键再过滤 local，顺序无关（原实现 local 先出现、live 后到时两者都会保留）。
     for ((_, rows) in groups) {
-        val seen = HashMap<String, Boolean>()
-        // 第一遍：统计哪些唯一键存在带【分身】前缀的 live 条目
+        fun keyOf(r: Array<String>): String =
+            (timeToEpoch(r[0]) / 120000).toString() + "|" + r[2]
+        val liveKeys = HashSet<String>()
         val prefer = HashSet<String>()
         for (r in rows) {
-            if (r.getOrNull(3) != "local" && r.getOrNull(4)?.startsWith("【分身】") == true) {
-                val minTs = timeToEpoch(r[0]) / 60000
-                prefer.add(minTs.toString() + "|" + r[2])
+            if (r.getOrNull(3) != "local") {
+                liveKeys.add(keyOf(r))
+                if (r.getOrNull(4)?.startsWith("【分身】") == true) prefer.add(keyOf(r))
             }
         }
-        // 第二遍：同键去重 —— 有带前缀版本时隐藏不带前缀的；本地(local)遇 live 隐藏
         rows.removeAll { r ->
-            val minTs = timeToEpoch(r[0]) / 60000
-            val k = minTs.toString() + "|" + r[2]
-            val isLive = r.getOrNull(3) != "local"
-            if (isLive) {
-                val prefixed = r.getOrNull(4)?.startsWith("【分身】") == true
-                val keep = !(prefer.contains(k) && !prefixed)
-                if (keep) { seen[k] = true; false } else { true }
+            if (r.getOrNull(3) == "local") {
+                // 本地遇小米端同内容 → 隐藏本地（不加（本地）括号）；小米端缺失时本地保留并带标记
+                liveKeys.contains(keyOf(r))
             } else {
-                seen[k] ?: false
+                // live 有带【分身】前缀版本时隐藏不带前缀的
+                val prefixed = r.getOrNull(4)?.startsWith("【分身】") == true
+                prefer.contains(keyOf(r)) && !prefixed
             }
         }
     }

@@ -235,6 +235,66 @@ object HFState {
         refreshFlow()
     }
 
+    // ===== 消息删除（长按/多选，v0.5.8 新增） =====
+    /** 删除指定消息：从本地历史文件持久移除，同时从当前 flow 显示移除。
+     *  @param keys 每条为 flow 行数组 [time, device, body, src, title]（与 parseFlow 一致）。
+     *  匹配规则：正文必匹配；标题按原始/【分身】前缀两种写法匹配；时间窗 2 分钟内匹配。
+     *  注意：live（小米端实时）行删除后，下一次轮询会从 provider 重新拉回，属预期行为；
+     *  本地历史（hf_source=local）行为持久删除。 */
+    fun deleteFlowRows(keys: List<Array<String>>) {
+        Thread {
+            fun matchRow(line: String, r: Array<String>): Boolean {
+                if (line.isBlank()) return false
+                val body = r.getOrNull(2).orEmpty()
+                val title = r.getOrNull(4).orEmpty()
+                val time = r.getOrNull(0).orEmpty()
+                if (body.isNotEmpty() && !line.contains(body)) return false
+                if (title.isNotEmpty()) {
+                    val plain = "content_title=" + title
+                    val prefixed = "content_title=【分身】" + title
+                    if (!line.contains(plain) && !line.contains(prefixed)) return false
+                }
+                if (time.isNotEmpty()) {
+                    val m = Regex("content_time=([^,\\s]+)").find(line)?.groupValues?.get(1)
+                    if (m != null) {
+                        val d = kotlin.math.abs((parseTs(m) - parseTs(time)))
+                        if (d > 120000L) return false
+                    }
+                }
+                return true
+            }
+            fun parseTs(s: String): Long {
+                val fmt1 = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.US)
+                fmt1.isLenient = false
+                val fmt2 = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                fmt2.isLenient = false
+                val fmt3 = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.US)
+                fmt3.isLenient = false
+                return runCatching { fmt1.parse(s)?.time ?: 0L }.getOrElse {
+                    runCatching { fmt2.parse(s)?.time ?: 0L }.getOrElse {
+                        runCatching { fmt3.parse(s)?.time ?: 0L }.getOrDefault(0L)
+                    }
+                }
+            }
+            // 1) 本地历史文件持久删除
+            val f = historyFile
+            if (f != null && f.exists()) {
+                try {
+                    val newText = f.readText().lines()
+                        .filterNot { line -> keys.any { matchRow(line, it) } }
+                        .joinToString("\n")
+                    f.writeText(newText)
+                } catch (t: Throwable) {
+                }
+            }
+            // 2) 当前 flow 显示移除（主线程改 state）
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                flow = flow.lines().filterNot { line -> keys.any { matchRow(line, it) } }
+                    .joinToString("\n")
+            }
+        }.start()
+    }
+
     /** 重读一次实时 flow（清除历史后立即恢复实时显示） */
     fun refreshFlow() {
         Thread {

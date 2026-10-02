@@ -1,17 +1,24 @@
 package com.hyperflowplus.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -24,13 +31,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import com.hyperflowplus.ui.HyperDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -44,6 +56,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * [ConversationTopBar]，使底部导航栏在会话详情页保留不消失）。
  * @param modifier 由调用方传入 Scaffold 内容区 padding 后的 Modifier。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationScreen(
     state: HFState,
@@ -53,6 +66,11 @@ fun ConversationScreen(
 ) {
     var showSort by remember { mutableStateOf(false) }
     val desc = state.detailSort != "asc"
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // 多选模式：长按消息进入，顶部操作栏复制/删除；点击切换选中，空选自动退出
+    var selectionMode by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(setOf<Int>()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     /** 本地私有解析（与消息页同规则）：正文列表首列 M/dd HH:mm 转毫秒时间戳，用于排序 */
     fun timeToEpoch(raw: String): Long {
@@ -69,15 +87,49 @@ fun ConversationScreen(
             if (desc) (tb - ta).toInt() else (ta - tb).toInt()
         }
     }
+    val selectedRows = remember(sorted, selected) {
+        selected.sorted().map { sorted[it] }
+    }
     // 页面底 = 主题 surface（浅 #F7F7F7 / 暗 #000000）＝ 真实短信详情页底色
     Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+        // 多选操作栏：已选 N 条 + 复制 / 删除 / 取消（系统短信长按多选同款交互）
+        if (selectionMode) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "已选 ${selected.size} 条",
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    if (selectedRows.isNotEmpty()) {
+                        runCatching {
+                            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                            cm.setPrimaryClip(
+                                android.content.ClipData.newPlainText(
+                                    "HyperFlow",
+                                    selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
+                                )
+                            )
+                            Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text("复制") }
+                TextButton(onClick = { if (selectedRows.isNotEmpty()) showDeleteConfirm = true }) { Text("删除") }
+                TextButton(onClick = { selectionMode = false; selected = emptySet() }) { Text("取消") }
+            }
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(sorted) { row ->
+            itemsIndexed(sorted) { index, row ->
+                val isSel = selectionMode && selected.contains(index)
                 val time = row.getOrElse(0) { "" }
                 val body = row.getOrElse(2) { "" }
                 Column(Modifier.fillMaxWidth()) {
@@ -100,6 +152,7 @@ fun ConversationScreen(
                     // 正文 16sp 行距 1.1（bubble_body_line_spacing_multiplier）、最大宽受 57dp 屏边距约束。
                     // 注：分身流转的都是"收到"的通知，无自发消息，故全部渲染为左侧收气泡
                     // （真实短信里的绿色"发"气泡不适用）。
+                    // 长按进入多选（系统短信逻辑），多选模式下点击切换选中、选中项描边高亮。
                     val maxBubbleWidth = (LocalConfiguration.current.screenWidthDp.dp - 72.dp)
                     Row(
                         Modifier.fillMaxWidth(),
@@ -117,17 +170,53 @@ fun ConversationScreen(
                                 .widthIn(max = maxBubbleWidth)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(MiuixTheme.colorScheme.surfaceVariant)
+                                .then(
+                                    if (isSel) Modifier.border(
+                                        2.dp,
+                                        MiuixTheme.colorScheme.primary,
+                                        RoundedCornerShape(16.dp)
+                                    ) else Modifier
+                                )
                                 .padding(horizontal = 19.dp, vertical = 14.dp)
+                                .combinedClickable(
+                                    onClick = {
+                                        if (selectionMode) {
+                                            selected = if (isSel) selected - index else selected + index
+                                            if (selected.isEmpty()) selectionMode = false
+                                        }
+                                    },
+                                    onLongClick = {
+                                        selectionMode = true
+                                        selected = selected + index
+                                    }
+                                )
                         )
                     }
                 }
             }
         }
     }
+    // 删除确认（重要信息提前确认，系统短信删除逻辑）
+    if (showDeleteConfirm) {
+        ConfirmDialog(
+            show = showDeleteConfirm,
+            bottomInset = 40.dp,
+            title = "删除所选 ${selectedRows.size} 条消息？",
+            content = "删除后本地保存的记录将一并移除（小米端实时流转的消息可能在下次轮询后重新出现）。",
+            onConfirm = {
+                state.deleteFlowRows(selectedRows)
+                showDeleteConfirm = false
+                selectionMode = false
+                selected = emptySet()
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
 }
 
 /**
- * 会话详情顶栏：返回键 + 发送人标题 + 排序切换（最新在前 ↔ 最早在前）。
+ * 会话详情顶栏：返回键 + 发送人标题 + 排序选择框（与消息页第一层一致，Popup 弹窗，
+ * 选项：最新在前 / 最早在前）。
  * v0.5.5 由 MainActivity 的 Scaffold topBar 槽调用（Miuix TopAppBar 自行处理
  * 状态栏 inset），配合内容区渲染的 [ConversationScreen]，底部导航栏保留不消失。
  */
@@ -136,8 +225,9 @@ fun ConversationTopBar(
     sender: String,
     desc: Boolean,
     onBack: () -> Unit,
-    onSort: () -> Unit
+    onSetSort: (String) -> Unit
 ) {
+    var showSort by remember { mutableStateOf(false) }
     TopAppBar(
         title = sender,
         subtitle = "",
@@ -150,13 +240,63 @@ fun ConversationTopBar(
             }
         },
         actions = {
-            // 排序直接点击切换（最新在前 ↔ 最早在前），不再弹窗
-            IconButton(onClick = onSort) {
+            // 排序：Popup 选择框（KSU 风格），不再直接切换（用户反馈：点击后应有选择弹窗）
+            IconButton(onClick = { showSort = true }) {
                 Icon(
-                    imageVector = if (desc) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-                    contentDescription = if (desc) "最新在前" else "最早在前",
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "排序",
                     tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                 )
+            }
+            if (showSort) {
+                androidx.compose.ui.window.Popup(
+                    alignment = Alignment.TopEnd,
+                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
+                    onDismissRequest = { showSort = false }
+                ) {
+                    Surface(
+                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(16.dp),
+                        shadowElevation = 10.dp,
+                        modifier = Modifier.width(230.dp)
+                    ) {
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            @Composable
+                            fun Item(label: String, sel: Boolean, onClick: () -> Unit) {
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clickable(onClick = onClick)
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        label,
+                                        style = MiuixTheme.textStyles.body1,
+                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (sel) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = "已选",
+                                            tint = MiuixTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Item("最新在前", desc, {
+                                if (!desc) onSetSort("desc")
+                                showSort = false
+                            })
+                            Item("最早在前", !desc, {
+                                if (desc) onSetSort("asc")
+                                showSort = false
+                            })
+                        }
+                    }
+                }
             }
         }
     )

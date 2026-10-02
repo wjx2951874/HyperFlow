@@ -230,7 +230,7 @@ fun HyperFlowApp() {
                         sender = conversation.first,
                         desc = state.detailSort != "asc",
                         onBack = { state.currentConversation = null },
-                        onSort = { state.setSort(Config.KEY_DETAIL_SORT) }
+                        onSetSort = { state.setSortValue(Config.KEY_DETAIL_SORT, it) }
                     )
                 } else {
                     CustomTopBar(
@@ -381,6 +381,9 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    // 悬浮胶囊不占内容区布局（bottomBar 槽仅承载绘制），内容区补底部留白，
+                    // 列表最后一项可滚动到胶囊上方（内容上浮），不再被悬浮导航栏遮挡。
+                    .then(if (state.navFloat) Modifier.padding(bottom = 88.dp) else Modifier)
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -720,13 +723,20 @@ private fun checkUpdate(
             val ver = json.optString("version", "")
             val vc = json.optInt("versionCode", 0)
             val zipUrl = json.optString("zipUrl", "")
+            // KSU 规范：update.json 的 changelog 字段放"文本或 URL"——KSU 会把该字段当 URL 请求。
+            // 我们的 changelog 字段是 changelog-latest.md 的 URL（否则 KSU 里不显示日志，只显示"开始下载:…"）。
+            // App 内检测到 http 开头时同样下载该 URL 的文本再展示。
+            val rawLog = json.optString("changelog", "")
+            val logText = if (rawLog.startsWith("http")) {
+                runCatching { java.net.URL(rawLog).readText() }.getOrDefault(rawLog)
+            } else rawLog
             val channel = best?.let { b ->
                 results.entries.firstOrNull { it.value == b }?.key
             }?.let { u -> runCatching { java.net.URI(u).host }.getOrNull() } ?: "多通道"
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 // 结果必弹：无论成功/最新/异常都通知用户
                 if (vc > BuildConfig.VERSION_CODE && zipUrl.isNotEmpty()) {
-                    onNew(ver, zipUrl, (json.optString("changelog", "") + "\n（通道：$channel）").trim())
+                    onNew(ver, zipUrl, (logText + "\n（通道：$channel）").trim())
                 } else {
                     onNone()
                 }
@@ -836,6 +846,22 @@ private fun downloadUpdateZip(ctx: Context, url: String, onDone: (Boolean, Strin
     }
 
 private fun launchKernelSu() {
-    RootExec.su("for p in com.kernelsu.manager com.kernelsu com.rifsxd.ksunext; do " +
-            "pm path \$p >/dev/null 2>&1 && { am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p \$p >/dev/null 2>&1 && break; }; done")
+    // 官方 KernelSU 管理器包名 me.weishu.kernelsu 曾在列表中缺失 → "去 KSU 检测"点了没反应。
+    // 与 GuideScreen 同款：pm path 校验存在 + am start 显式类名，失败再 monkey 兜底启动 LAUNCHER。
+    val pkgs = listOf(
+        "me.weishu.kernelsu", "me.weishu.kernelsu.next",
+        "com.rifsxd.ksunext", "com.rifsxd.ksu",
+        "com.kernelsu.manager", "com.kernelsu"
+    )
+    Thread {
+        for (pkg in pkgs) {
+            val out = runCatching { RootExec.su("pm path $pkg 2>/dev/null") }.getOrNull()
+            if (!out.isNullOrBlank() && out.contains("package:")) {
+                runCatching {
+                    RootExec.su("am start -n $pkg/.ui.activity.MainActivity 2>/dev/null || monkey -p $pkg -c android.intent.category.LAUNCHER 1")
+                }
+                break
+            }
+        }
+    }.start()
 }

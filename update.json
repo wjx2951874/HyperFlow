@@ -1,6 +1,6 @@
 {
-  "version": "0.5.7",
-  "versionCode": 87,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.7/HyperFlow-0.5.7-flashable.zip",
-  "changelog": "v0.5.7\n1. 设置页联动：液态玻璃开关仅在悬浮导航栏开启时显示（悬浮关→玻璃项隐藏；悬浮开→自动出现在悬浮开关下方）。\n2. 修复玻璃背景变黑：backdrop 此前从未挂载（空采样），胶囊只剩 40% 半透明容器色、深色下表现为黑底；改为在 Scaffold 内容区挂 layerBackdrop 捕获页面内容（InstallerX 同款结构），玻璃真正折射内容。\n3. 修复分身双流转：去重指纹 key 先归一化标题（去【分身】前缀），避免前缀改写导致 key 不同去重失效。"
+  "version": "0.5.8",
+  "versionCode": 88,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.8/HyperFlow-0.5.8-flashable.zip",
+  "changelog": "https://gh-proxy.com/https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/docs/changelog-latest.md"
 }
