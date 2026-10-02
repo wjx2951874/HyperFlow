@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import com.hyperflowplus.ui.ConversationScreen
+import com.hyperflowplus.ui.ConversationTopBar
 import com.hyperflowplus.ui.FlowScreen
 import com.hyperflowplus.ui.HomeScreen
 import com.hyperflowplus.ui.GuideScreen
@@ -173,14 +174,11 @@ fun HyperFlowApp() {
         }
 
 
-        // 会话详情（独立覆盖页，返回手势/返回键返回列表）
+        // 会话详情：v0.5.5 起改为在 Scaffold 内容区渲染（顶栏进 topBar 槽、
+        // 底部导航栏保留不消失），返回键/返回手势回列表
         val conversation = state.currentConversation
         if (conversation != null) {
             BackHandler { state.currentConversation = null }
-            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-                ConversationScreen(state, conversation.first, conversation.second)
-            }
-            return@MiuixTheme
         }
         // 环境引导覆盖页（首页检测项点击进入，Miuix 返回）
         val gt = guideType
@@ -217,11 +215,21 @@ fun HyperFlowApp() {
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
-                CustomTopBar(
-                    title = title,
-                    modifier = Modifier.background(MiuixTheme.colorScheme.surface)
-                ) {
-                    if (tab == 2) {
+                if (conversation != null) {
+                    // 会话详情顶栏（返回键 + 发送人 + 排序），放 Scaffold topBar 槽
+                    // 保证底部导航栏在详情页保留不消失
+                    ConversationTopBar(
+                        sender = conversation.first,
+                        desc = state.detailSort != "asc",
+                        onBack = { state.currentConversation = null },
+                        onSort = { state.setSort(Config.KEY_DETAIL_SORT) }
+                    )
+                } else {
+                    CustomTopBar(
+                        title = title,
+                        modifier = Modifier.background(MiuixTheme.colorScheme.surface)
+                    ) {
+                        if (tab == 2) {
                         Box {
                             IconButton(onClick = { showSort = true }) {
                                 top.yukonga.miuix.kmp.basic.Icon(
@@ -332,6 +340,7 @@ fun HyperFlowApp() {
                         }
                     }
                 }
+                }
             },
             bottomBar = {
                 // 悬浮导航栏/普通导航栏都放底部槽（InstallerX 同款）：
@@ -342,7 +351,7 @@ fun HyperFlowApp() {
                     ) {
                         LiquidNavBar(
                             selectedTabIndex = tab,
-                            onTabSelected = { tab = it },
+                            onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
                             items = tabs.map { it.icon to it.title },
                             floatEnabled = true,
                             glassEnabled = state.glassEffect
@@ -367,11 +376,16 @@ fun HyperFlowApp() {
                         .fillMaxSize()
                         .background(MiuixTheme.colorScheme.surface)
                 ) {
-                    when (tab) {
-                        0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                        1 -> FlowScreen(state, contentMod)
-                        2 -> MessagesScreen(state, contentMod)
-                        3 -> SettingsScreen(state, contentMod)
+                    if (conversation != null) {
+                        // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
+                        ConversationScreen(state, conversation.first, conversation.second, contentMod)
+                    } else {
+                        when (tab) {
+                            0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                            1 -> FlowScreen(state, contentMod)
+                            2 -> MessagesScreen(state, contentMod)
+                            3 -> SettingsScreen(state, contentMod)
+                        }
                     }
                 }
             }

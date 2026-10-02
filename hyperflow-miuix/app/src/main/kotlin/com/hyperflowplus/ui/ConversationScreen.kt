@@ -1,6 +1,7 @@
 package com.hyperflowplus.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -42,9 +42,18 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 会话详情（短信 App 样式）：标题 = 发送人（大字）+ 来源（小字），
  * 每条消息 = 时间标签（上方小字） + 左对齐圆角气泡（正文原文）。
  * 排序按 detailSort（desc 新在前 / asc 旧在前）。
+ *
+ * v0.5.5：不再自带 TopAppBar（改由 MainActivity 的 Scaffold topBar 槽提供
+ * [ConversationTopBar]，使底部导航栏在会话详情页保留不消失）。
+ * @param modifier 由调用方传入 Scaffold 内容区 padding 后的 Modifier。
  */
 @Composable
-fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>) {
+fun ConversationScreen(
+    state: HFState,
+    sender: String,
+    rows: List<Array<String>>,
+    modifier: Modifier = Modifier
+) {
     var showSort by remember { mutableStateOf(false) }
     val desc = state.detailSort != "asc"
 
@@ -63,31 +72,7 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
             if (desc) (tb - ta).toInt() else (ta - tb).toInt()
         }
     }
-    // 标题副文案：取首条记录的来源设备
-    val device = remember(rows) { rows.firstOrNull()?.getOrElse(1) { "" } ?: "" }
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = sender,
-            subtitle = "",
-            navigationIcon = {
-                IconButton(onClick = { state.currentConversation = null }) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowLeft,
-                        contentDescription = "返回"
-                    )
-                }
-            },
-            actions = {
-                // 排序直接点击切换（最新在前 ↔ 最早在前），不再弹窗
-                IconButton(onClick = { state.setSort(Config.KEY_DETAIL_SORT) }) {
-                    Icon(
-                        imageVector = if (desc) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-                        contentDescription = if (desc) "最新在前" else "最早在前",
-                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-                    )
-                }
-            }
-        )
+    Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surfaceContainerLow)) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -111,7 +96,8 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                             .padding(bottom = 6.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    // 消息气泡：左对齐、圆角、正文原文、宽度自适应（不撑满全屏）
+                    // 消息气泡：左对齐、小圆角 + 发丝描边（对齐 MIUI 短信接收气泡样式）、
+                    // 正文原文、宽度自适应（不撑满全屏）；页面底为浅灰容器色衬托白色气泡
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Start,
@@ -121,11 +107,12 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
                             body.ifEmpty { "(无正文)" },
                             style = MiuixTheme.textStyles.body1,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(
-                                    MiuixTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.65f
-                                    )
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MiuixTheme.colorScheme.surface)
+                                .border(
+                                    width = 1.dp,
+                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.08f),
+                                    shape = RoundedCornerShape(6.dp)
                                 )
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
@@ -134,4 +121,40 @@ fun ConversationScreen(state: HFState, sender: String, rows: List<Array<String>>
             }
         }
     }
+}
+
+/**
+ * 会话详情顶栏：返回键 + 发送人标题 + 排序切换（最新在前 ↔ 最早在前）。
+ * v0.5.5 由 MainActivity 的 Scaffold topBar 槽调用（Miuix TopAppBar 自行处理
+ * 状态栏 inset），配合内容区渲染的 [ConversationScreen]，底部导航栏保留不消失。
+ */
+@Composable
+fun ConversationTopBar(
+    sender: String,
+    desc: Boolean,
+    onBack: () -> Unit,
+    onSort: () -> Unit
+) {
+    TopAppBar(
+        title = sender,
+        subtitle = "",
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowLeft,
+                    contentDescription = "返回"
+                )
+            }
+        },
+        actions = {
+            // 排序直接点击切换（最新在前 ↔ 最早在前），不再弹窗
+            IconButton(onClick = onSort) {
+                Icon(
+                    imageVector = if (desc) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                    contentDescription = if (desc) "最新在前" else "最早在前",
+                    tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                )
+            }
+        }
+    )
 }

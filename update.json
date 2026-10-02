@@ -1,6 +1,6 @@
 {
-  "version": "0.5.4",
-  "versionCode": 84,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.4/HyperFlow-0.5.4-flashable.zip",
-  "changelog": "v0.5.4\n1. 分身点击拉起 999 扩展适配：新增飞书、钉钉、企业微信（含飞书国际版 Lark），与小米互联「支持的应用」列表对齐——接收端点击【分身】通知可直接打开多开版。\n2. 微信/QQ 原适配保持不变；未开双开的应用仍走系统原逻辑，绝不误伤。"
+  "version": "0.5.5",
+  "versionCode": 85,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.5/HyperFlow-0.5.5-flashable.zip",
+  "changelog": "v0.5.5\n1. 修复：点进短信会话详情后底部导航栏消失——详情页改为在 Scaffold 内容区渲染（顶栏进 topBar 槽、底栏保留），返回键/返回手势/点底栏 tab 均可退出会话。\n2. 样式初版对齐 MIUI 短信：会话详情气泡改为小圆角 + 发丝描边（白色气泡），页面底为浅灰容器色。"
 }
