@@ -1,23 +1,18 @@
 package com.hyperflowplus.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
@@ -28,8 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -72,7 +69,8 @@ fun ConversationScreen(
             if (desc) (tb - ta).toInt() else (ta - tb).toInt()
         }
     }
-    Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
+    // 页面底 = 主题 surface（浅 #F7F7F7 / 暗 #000000）＝ 真实短信详情页底色
+    Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -96,8 +94,13 @@ fun ConversationScreen(
                             .padding(bottom = 6.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    // 消息气泡：左对齐、小圆角 + 发丝描边（对齐 MIUI 短信接收气泡样式）、
-                    // 正文原文、宽度自适应（不撑满全屏）；页面底为浅灰容器色衬托白色气泡
+                    // 消息气泡：左对齐接收气泡，样式按真实小米短信 18.0.0.32 反编译结果校准 ——
+                    // 圆角 16dp（bubble_corner_radius）、内边距 18.9/13.8dp（bubble_padding_left/right/top_and_bottom）、
+                    // 气泡底 = 主题 surfaceVariant（浅 #FFFFFF / 暗 #242424）＝ 真实短信收气泡色、无描边、
+                    // 正文 16sp 行距 1.1（bubble_body_line_spacing_multiplier）、最大宽受 57dp 屏边距约束。
+                    // 注：分身流转的都是"收到"的通知，无自发消息，故全部渲染为左侧收气泡
+                    // （真实短信里的绿色"发"气泡不适用）。
+                    val maxBubbleWidth = (LocalConfiguration.current.screenWidthDp.dp - 72.dp)
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Start,
@@ -105,16 +108,16 @@ fun ConversationScreen(
                     ) {
                         Text(
                             body.ifEmpty { "(无正文)" },
-                            style = MiuixTheme.textStyles.body1,
+                            style = TextStyle(
+                                fontSize = 16.sp,
+                                lineHeight = 17.6.sp,
+                                color = MiuixTheme.colorScheme.onSurface
+                            ),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MiuixTheme.colorScheme.surface)
-                                .border(
-                                    width = 1.dp,
-                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.08f),
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .widthIn(max = maxBubbleWidth)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MiuixTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 19.dp, vertical = 14.dp)
                         )
                     }
                 }

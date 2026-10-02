@@ -3,9 +3,27 @@
 > **版本状态**：v0.4.x ~ v0.5.x 全部为**测试版（Beta）**，正式版（Stable）尚未发布；
 > 正式版发布时本日志会单独开 v1.x 一节并标注。
 > 按版本倒序。每条含：改动内容、修复原因（为什么这么改）、遗留待验证项。
-> 版本号与 versionCode 同步：v0.5.x 系列 = 80/81/82/83/84/85（v0.4.4x = 76/77/78，v0.4.3x = 74/75…）。
+> 版本号与 versionCode 同步：v0.5.x 系列 = 80/81/82/83/84/85/86（v0.4.4x = 76/77/78，v0.4.3x = 74/75…）。
 
 ---
+
+## v0.5.6（versionCode 86）— 2026-10-02
+
+- **短信详情样式按真实短信 APK（短信_18.0.0.32）逐项校准**：用户上传真实小米短信包后，
+  用 apktool 反编译提取了会话详情/列表的布局与资源（bubble_corner_radius、bubble_padding_*、
+  message_bubble_in_bg_n/out_bg_n、TextAppearance.MessageBody 等），按真实值修正：
+  - 气泡圆角 6dp → **16dp**（bubble_corner_radius）。
+  - 气泡内边距 14/10dp → **左右 19dp（bubble_padding_left/right=18.9）、上下 14dp
+    （bubble_padding_top_and_bottom=13.8）**。
+  - 去掉发丝描边，气泡底改主题 surfaceVariant（浅 **#FFFFFF** / 暗 **#242424**，与真实短信
+    message_bubble_in_bg_n 完全一致）。
+  - 页面底改主题 surface（浅 **#F7F7F7** / 暗 **#000000**，与真实短信详情页底色一致；此前
+    surfaceVariant 浅色实为纯白，"浅灰底"实际是白底，观感偏"发泡"）。
+  - 正文显式 16sp + 行距 1.1（bubble_body_line_spacing_multiplier），颜色用主题 onSurface。
+  - 气泡最大宽按 bubble_margin_end=57dp 屏边距约束（screenWidth-72dp），长文不再撑满全屏。
+  - 说明：分身流转的都是"收到"的通知，无自发消息，故全部渲染为左侧收气泡；真实短信的
+    绿色"发"气泡（miui_primary_green_n=#36D167 / 暗 #10C550）不适用。
+- 待验证：深浅色下气泡/页面底色、长消息换行宽度、整体观感是否接近真机短信。
 
 ## v0.5.5（versionCode 85）— 2026-10-02
 

@@ -1,6 +1,6 @@
 {
-  "version": "0.5.5",
-  "versionCode": 85,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.5/HyperFlow-0.5.5-flashable.zip",
-  "changelog": "v0.5.5\n1. 修复：点进短信会话详情后底部导航栏消失——详情页改为在 Scaffold 内容区渲染（顶栏进 topBar 槽、底栏保留），返回键/返回手势/点底栏 tab 均可退出会话。\n2. 样式初版对齐 MIUI 短信：会话详情气泡改为小圆角 + 发丝描边（白色气泡），页面底为浅灰容器色。"
+  "version": "0.5.6",
+  "versionCode": 86,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.6/HyperFlow-0.5.6-flashable.zip",
+  "changelog": "v0.5.6\n1. 短信详情样式按真实短信 APK（短信_18.0.0.32）逐项校准：气泡圆角 6→16dp、内边距 19/14dp、去描边、气泡底用 surfaceVariant（浅白/暗 #242424）、页面底用 surface（浅 #F7F7F7）、正文 16sp 行距 1.1、最大宽受 57dp 屏边距约束。\n2. 底栏不消失保持 v0.5.5 修复不变。\n说明：流转消息均为"收到"通知，全部渲染为左侧收气泡；绿色发气泡不适用。"
 }
