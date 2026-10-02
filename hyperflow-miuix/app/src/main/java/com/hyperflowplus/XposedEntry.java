@@ -93,13 +93,24 @@ public class XposedEntry extends XposedModule {
         }
     }
 
-    /** 写运行态标记（zygote 进程有 root 权限；失败静默，不影响功能） */
+    /** 写运行态标记（双路径，任一命中即视为"模块被 LSP 真正加载"）：
+     *  1) /data/adb/hyperflowplus/xposed_loaded —— zygote/system_server（root 进程）可写
+     *  2) /data/user/0/com.hyperflowplus/files/xposed_loaded —— App 自身进程可写
+     *     （作用域勾选本 App 后 onPackageLoaded("com.hyperflowplus") 触发，普通进程有权限）
+     *  失败静默，不影响功能。
+     */
     private static void markLoaded() {
+        long now = System.currentTimeMillis();
+        writeStamp("/data/adb/hyperflowplus/xposed_loaded", now);
+        writeStamp("/data/user/0/com.hyperflowplus/files/xposed_loaded", now);
+    }
+
+    private static void writeStamp(String path, long now) {
         try {
-            java.io.File f = new java.io.File("/data/adb/hyperflowplus/xposed_loaded");
+            java.io.File f = new java.io.File(path);
             f.getParentFile().mkdirs();
             java.io.PrintWriter w = new java.io.PrintWriter(f, "UTF-8");
-            w.println(System.currentTimeMillis());
+            w.println(now);
             w.close();
         } catch (Throwable ignored) {
         }

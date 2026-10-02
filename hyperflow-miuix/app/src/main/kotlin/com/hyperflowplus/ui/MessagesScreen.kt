@@ -180,20 +180,35 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         if (title.isEmpty() && body.isEmpty()) continue
         // 按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
         // 标题为空时回退到设备名，避免全部挤进"未知"分组
-        val key = title.ifEmpty { device.ifEmpty { "未知" } }
-        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src))
+        // 分组 key：去掉【分身】前缀再分组 —— 带前缀与不带前缀的同一分身消息
+        // 必须进同一会话，否则跨会话不去重会显示两条
+        val key = title.removePrefix("【分身】").ifEmpty { device.ifEmpty { "未知" } }
+        groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src, title))
     }
     // 去重：本地归档与小米端（云端）同一条短信重复显示 → 云端优先，本地隐藏；
     // 同会话内以「时间戳+正文」为唯一键，live 记录保留、local 记录丢弃（本地独有的仍保留并带 hf_source=local 标记）
     for ((_, rows) in groups) {
         val seen = HashMap<String, Boolean>()
+        // 第一遍：统计哪些唯一键存在带【分身】前缀的 live 条目
+        val prefer = HashSet<String>()
+        for (r in rows) {
+            if (r.getOrNull(3) != "local" && r.getOrNull(4)?.startsWith("【分身】") == true) {
+                val minTs = timeToEpoch(r[0]) / 60000
+                prefer.add(minTs.toString() + "|" + r[2])
+            }
+        }
+        // 第二遍：同键去重 —— 有带前缀版本时隐藏不带前缀的；本地(local)遇 live 隐藏
         rows.removeAll { r ->
-            // 分钟级时间戳（本地保存与云端流转时间可能差几秒，属同一条短信）
             val minTs = timeToEpoch(r[0]) / 60000
             val k = minTs.toString() + "|" + r[2]
             val isLive = r.getOrNull(3) != "local"
-            if (isLive) { seen[k] = true; false }
-            else { seen[k] ?: false }
+            if (isLive) {
+                val prefixed = r.getOrNull(4)?.startsWith("【分身】") == true
+                val keep = !(prefer.contains(k) && !prefixed)
+                if (keep) { seen[k] = true; false } else { true }
+            } else {
+                seen[k] ?: false
+            }
         }
     }
     val list = groups.map { it.key to it.value }.toMutableList()

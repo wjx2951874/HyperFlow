@@ -369,13 +369,19 @@ fun HyperFlowApp() {
                     }
                     // 悬浮导航栏：覆盖在内容之上（浮于底部中央，不挤占内容）
                     if (state.navFloat) {
-                        LiquidNavBar(
-                            selectedTabIndex = tab,
-                            onTabSelected = { tab = it },
-                            items = tabs.map { it.icon to it.title },
-                            floatEnabled = true,
-                            glassEnabled = state.glassEffect
-                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                        ) {
+                            LiquidNavBar(
+                                selectedTabIndex = tab,
+                                onTabSelected = { tab = it },
+                                items = tabs.map { it.icon to it.title },
+                                floatEnabled = true,
+                                glassEnabled = state.glassEffect
+                            )
+                        }
                     }
                 }
             }

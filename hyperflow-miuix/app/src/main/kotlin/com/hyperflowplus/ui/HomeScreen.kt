@@ -102,6 +102,7 @@ find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while
 done
 echo ==RUNNING;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
+cat /data/user/0/com.hyperflowplus/files/xposed_loaded 2>/dev/null
 echo ==END""") }.getOrNull() else null
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
             if (!out.isNullOrBlank()) {
@@ -118,7 +119,9 @@ echo ==END""") }.getOrNull() else null
             // 配置态（db/scope 文件）在"框架整体关闭/去作用域"时会残留 → 曾误判"环境正常"。
             // 以最近 48h 内加载过为准（装好后没重启=不加载=如实显示未启用）。
             val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
-            val runtimeOk = runSeg.toLongOrNull()?.let {
+            // 双路径任一最近 48h 内加载过即生效（/data/adb=root 进程写入，/data/user/0/<app>=App 进程写入）
+            val runStamp = runSeg.lines().mapNotNull { it.trim().toLongOrNull() }.maxOrNull()
+            val runtimeOk = runStamp?.let {
                 System.currentTimeMillis() - it < 48 * 3600 * 1000L
             } ?: false
             // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）

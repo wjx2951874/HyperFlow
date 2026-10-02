@@ -39,6 +39,20 @@ public class HookRemoteOpen {
         add("com.tencent.mobileqq");
     }};
 
+    /** 允许改写为分身的调用方：小米互联（远程镜像打开）+ 本 App 消息页点击 */
+    private static final Set<String> ALLOWED_CALLERS = new HashSet<String>() {{
+        add("com.milink.service");
+        add("com.hyperflowplus");
+    }};
+
+    /** 明确排除的调用方（本机桌面/系统 launcher 手动打开主空间应用，绝不改写） */
+    private static final Set<String> EXCLUDED_CALLERS = new HashSet<String>() {{
+        add("com.miui.home");
+        add("com.android.launcher3");
+        add("com.miui.systemui");
+        add("android");
+    }};
+
     /** 分身空间用户 id（MIUI 应用双开基于 user 999） */
     private static final int USER_CLONE = 999;
 
@@ -92,9 +106,13 @@ public class HookRemoteOpen {
             if (!Config.isCloneTransferEnabled()) {
                 return chain.proceed();
             }
-            // 1) 调用者必须是小米互联服务（远程镜像打开请求）；本机桌面/应用自己打开不拦截
+            // 1) 调用者必须属于允许集（小米互联远程打开 / 本 App 消息页）；
+            //    明确排除桌面/系统（手动开主空间绝不改写）
             String caller = findCallingPackage(args);
-            if (!"com.milink.service".equals(caller)) {
+            if (caller == null || EXCLUDED_CALLERS.contains(caller)) {
+                return chain.proceed();
+            }
+            if (!ALLOWED_CALLERS.contains(caller)) {
                 return chain.proceed();
             }
             // 2) 目标包必须是微信/QQ
@@ -106,19 +124,31 @@ public class HookRemoteOpen {
             if (!TARGET_PKGS.contains(pkg)) {
                 return chain.proceed();
             }
-            // 3) 当前请求是主空间（userId==0）且该应用已开双开（999 空间存在）
+            // 3) 当前请求是主空间（userId==0 或签名无 userId 参数=默认主空间）
+            //    且该应用已开双开（999 空间存在）
             int userId = findUserId(args);
-            if (userId != 0) {
+            if (userId != 0 && userId != -1) {
                 return chain.proceed();
             }
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 MiflowLog.d("clone open: " + pkg + " not dual-installed, fallback to main user");
                 return chain.proceed();
             }
-            // 4) 改写 userId → 999，让 system_server 在分身空间打开微信/QQ
-            setUserId(args, USER_CLONE);
-            MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
-            Config.bump(Config.CNT_CLONE);
+            if (userId == 0) {
+                // 4a) 有 userId 参数：改写为 999，让 system_server 在分身空间打开
+                setUserId(args, USER_CLONE);
+                MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
+                Config.bump(Config.CNT_CLONE);
+            } else {
+                // 4b) 签名无 userId 参数（系统默认主空间打开）：
+                //     吞掉原调用，改用 IActivityTaskManager.startActivityAsUser 重发到 999。
+                //     反射失败/不可用时兜底走原逻辑，绝不误伤本地打开。
+                if (relaunchAsClone(chain, intent, pkg)) {
+                    MiflowLog.d("clone open relaunched: " + pkg + " → user " + USER_CLONE);
+                    Config.bump(Config.CNT_CLONE);
+                    return null;
+                }
+            }
         } catch (Throwable t) {
             MiflowLog.w("redirectToClone failed: " + t.getMessage());
         }
@@ -155,6 +185,43 @@ public class HookRemoteOpen {
             }
         }
         return -1;
+    }
+
+    /**
+     * 无 userId 参数重载（startActivity(intent)）的兜底：吞掉原调用，
+     * 通过 IActivityTaskManager.startActivityAsUser 在分身空间(999)重发打开请求。
+     * 任何反射失败都返回 false，由调用方走原逻辑。
+     */
+    private static boolean relaunchAsClone(Chain chain, Intent intent, String pkg) {
+        try {
+            Class<?> atmCls = Class.forName("android.app.IActivityTaskManager");
+            Object atm = atmCls.getMethod("getService").invoke(null);
+            if (atm == null) {
+                return false;
+            }
+            Method startAsUser = null;
+            for (Method m : atmCls.getDeclaredMethods()) {
+                if (m.getName().equals("startActivityAsUser") && m.getParameterCount() == 11) {
+                    startAsUser = m;
+                    break;
+                }
+            }
+            if (startAsUser == null) {
+                return false;
+            }
+            startAsUser.setAccessible(true);
+            // startActivityAsUser(IApplicationThread caller, String callingPackage, Intent intent,
+            //   String resolvedType, IBinder resultTo, String resultWho, int requestCode, int flags,
+            //   ProfilerInfo profilerInfo, Bundle bOptions, int userId)
+            startAsUser.invoke(atm, new Object[]{
+                    null, "com.milink.service", intent, null, null, null, -1, 0,
+                    null, null, USER_CLONE
+            });
+            return true;
+        } catch (Throwable t) {
+            MiflowLog.w("relaunchAsClone failed: " + t.getMessage());
+            return false;
+        }
     }
 
     /** 把 userId 参数改写为分身空间 */

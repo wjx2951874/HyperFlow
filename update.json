@@ -1,6 +1,6 @@
 {
-  "version": "v0.5.0",
-  "versionCode": 80,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.0/HyperFlow-0.5.0-flashable.zip",
-  "changelog": "·修复启动白屏闪退：自建圆环图标解析器在material路径格式下崩溃，改用官方path DSL手写节点（S/s平滑反射点已折算）\n·分身流转回退「只放行」：主空间不再重复显示分身通知\n·点击分身通知→直接拉起999空间微信/QQ（需勾选android作用域）\n·悬浮导航栏改用InstallerX原版FloatingBottomBar（液态玻璃/模糊/普通三态）\n·首页检测三态（全绿对勾/部分黄叹号查看更多/无Root红色授权卡）+LSP运行态双保险\n·澎湃OS版本串补全"
+  "version": "v0.5.1",
+  "versionCode": 81,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.1/HyperFlow-0.5.1-flashable.zip",
+  "changelog": "·修复分身双通知：同一分身消息走了两条流转链路，现流转侧同key去重只放行一次，消息页分组去掉【分身】前缀合并同会话、同键去重优先保留带【分身】的\n·修复点击分身通知开错应用：调用方扩大到互联+本App消息页、排除桌面，无userId参数重载改用startActivityAsUser重发999\n·修复LSP检测全红：运行态标记双路径（App进程写私有目录+root写adb），任一48h内命中即生效\n·修复悬浮导航栏空白/位置：底部居中容器包裹\n·修复KSU更新无日志：updateJson去掉?v=0441缓存参数"
 }
