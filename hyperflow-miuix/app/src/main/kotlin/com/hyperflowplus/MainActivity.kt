@@ -75,6 +75,7 @@ import com.hyperflowplus.ui.HyperDialog
 import com.hyperflowplus.ui.LiquidNavBar
 import com.hyperflowplus.ui.RoundedIcons
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
 import com.hyperflowplus.ui.MessagesScreen
@@ -210,8 +211,15 @@ fun HyperFlowApp() {
         // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
         com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
 
-        // 导航栏/悬浮胶囊的液态折射 backdrop 由 LiquidNavBar 内部自捕获（InstallerX 同款），
-        // 不再用 BarBlurHost 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
+        // 液态玻璃 backdrop：在 Scaffold 内容区挂 layerBackdrop 捕获页面内容，供悬浮胶囊折射。
+        // InstallerX 同款结构：胶囊在 bottomBar 槽（内容区之外、绘制顺序在内容之后）采样，
+        // 不会把胶囊自身卷进捕获子树（v0.5.3 之前的 BarBlurHost 包整页会自采递归崩溃，弃用）。
+        // 修复"玻璃后背景变黑"：此前 backdrop 从未挂载（空采样），玻璃只剩 40% 半透明容器色，
+        // 深色模式下即表现为一块黑底；挂载后胶囊真正折射页面内容。
+        val glassBackdrop = rememberLayerBackdrop()
+
+        // 导航栏/悬浮胶囊的液态折射 backdrop 由 MainActivity 挂载（见上），不再用 BarBlurHost
+        // 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
@@ -354,7 +362,8 @@ fun HyperFlowApp() {
                             onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
                             items = tabs.map { it.icon to it.title },
                             floatEnabled = true,
-                            glassEnabled = state.glassEffect
+                            glassEnabled = state.glassEffect,
+                            backdrop = if (state.glassEffect) glassBackdrop else null
                         )
                     }
                 } else {
@@ -363,7 +372,8 @@ fun HyperFlowApp() {
                         onTabSelected = { tab = it },
                         items = tabs.map { it.icon to it.title },
                         floatEnabled = false,
-                        glassEnabled = state.glassEffect
+                        glassEnabled = state.glassEffect,
+                        backdrop = if (state.glassEffect) glassBackdrop else null
                     )
                 }
             }
@@ -375,6 +385,8 @@ fun HyperFlowApp() {
                     Modifier
                         .fillMaxSize()
                         .background(MiuixTheme.colorScheme.surface)
+                        // 液态玻璃开启时把页面内容记录进 glassBackdrop（供悬浮胶囊折射）
+                        .then(if (state.glassEffect) Modifier.layerBackdrop(glassBackdrop) else Modifier)
                 ) {
                     if (conversation != null) {
                         // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供

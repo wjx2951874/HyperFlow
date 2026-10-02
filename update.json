@@ -1,6 +1,6 @@
 {
-  "version": "0.5.6",
-  "versionCode": 86,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.6/HyperFlow-0.5.6-flashable.zip",
-  "changelog": "v0.5.6\n1. 短信详情样式按真实短信 APK（短信_18.0.0.32）逐项校准：气泡圆角 6→16dp、内边距 19/14dp、去描边、气泡底用 surfaceVariant（浅白/暗 #242424）、页面底用 surface（浅 #F7F7F7）、正文 16sp 行距 1.1、最大宽受 57dp 屏边距约束。\n2. 底栏不消失保持 v0.5.5 修复不变。\n说明：流转消息均为"收到"通知，全部渲染为左侧收气泡；绿色发气泡不适用。"
+  "version": "0.5.7",
+  "versionCode": 87,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.7/HyperFlow-0.5.7-flashable.zip",
+  "changelog": "v0.5.7\n1. 设置页联动：液态玻璃开关仅在悬浮导航栏开启时显示（悬浮关→玻璃项隐藏；悬浮开→自动出现在悬浮开关下方）。\n2. 修复玻璃背景变黑：backdrop 此前从未挂载（空采样），胶囊只剩 40% 半透明容器色、深色下表现为黑底；改为在 Scaffold 内容区挂 layerBackdrop 捕获页面内容（InstallerX 同款结构），玻璃真正折射内容。\n3. 修复分身双流转：去重指纹 key 先归一化标题（去【分身】前缀），避免前缀改写导致 key 不同去重失效。"
 }

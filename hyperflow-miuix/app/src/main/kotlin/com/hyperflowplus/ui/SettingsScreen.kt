@@ -58,12 +58,15 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     checked = state.navFloat,
                     onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
                 )
-                SwitchPreference(
-                    title = "液态玻璃",
-                    summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
-                    checked = state.glassEffect,
-                    onCheckedChange = { state.set(Config.KEY_GLASS, it) }
-                )
+                // 液态玻璃仅悬浮模式可用：悬浮开启时才显示该项（与悬浮开关联动，不并列常驻）
+                if (state.navFloat) {
+                    SwitchPreference(
+                        title = "液态玻璃",
+                        summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
+                        checked = state.glassEffect,
+                        onCheckedChange = { state.set(Config.KEY_GLASS, it) }
+                    )
+                }
             }
         }
 

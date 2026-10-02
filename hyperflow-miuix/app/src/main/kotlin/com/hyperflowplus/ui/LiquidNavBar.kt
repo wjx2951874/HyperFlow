@@ -32,6 +32,7 @@ import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.Backdrop
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -84,16 +85,17 @@ fun LiquidNavBar(
     items: List<Pair<ImageVector, String>>,
     floatEnabled: Boolean,
     glassEnabled: Boolean,
+    backdrop: LayerBackdrop? = null,
 ) {
     if (items.isEmpty()) return
-    val backdrop = LocalLiquidBackdrop.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     if (floatEnabled) {
         // 悬浮胶囊：液态玻璃 / 模糊 / 普通 三态（与 InstallerX Revived 一致）
-        // backdrop 由胶囊内部自捕获（InstallerX 同款），不依赖外层 BarBlurHost，
-        // 因此悬浮+玻璃可同时开启且不会把内容页卷入捕获子树递归崩溃
-        val bd = rememberLayerBackdrop()
+        // backdrop 由 MainActivity 在 Scaffold 内容区挂 layerBackdrop 捕获页面内容
+        // （InstallerX 同款结构：胶囊在内容层之外绘制，采样不会卷入自身，不递归不闪退）；
+        // 未传入时（仅悬浮无玻璃）内部自建空 backdrop 走普通绘制。
+        val bd = backdrop ?: rememberLayerBackdrop()
         val mode = when {
             glassEnabled -> FloatingBottomBarMode.LiquidGlass
             else -> FloatingBottomBarMode.None

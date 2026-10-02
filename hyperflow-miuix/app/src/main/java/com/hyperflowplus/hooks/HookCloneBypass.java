@@ -150,11 +150,18 @@ public class HookCloneBypass {
                             // 一条原样流出）。以「包名|id|tag|标题|正文」内容指纹为 key，短窗口内第二次
                             // 出现直接拦截 —— 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行；
                             // 且必须跨进程（见 isDuplicate/共享文件），否则另一进程的链路拦不住。
+                            // 注意：markCloneTitle 会改写标题加【分身】前缀，而两条链路可能共享同一个
+                            // Notification 对象——若 key 直接用标题，第一条记录的是"原标题"key，第二条
+                            // 进来时标题已被改成"【分身】原标题"，key 不同导致去重失效（用户实测双流转）。
+                            // 因此 key 计算前先归一化：去掉【分身】前缀再取指纹。
                             String titleTxt = "";
                             if (n != null && n.extras != null) {
                                 CharSequence t = n.extras.getCharSequence(Notification.EXTRA_TITLE);
                                 CharSequence x = n.extras.getCharSequence(Notification.EXTRA_TEXT);
-                                titleTxt = (t == null ? "" : t) + "|" + (x == null ? "" : x);
+                                String tStr = (t == null ? "" : t).toString();
+                                String xStr = (x == null ? "" : x).toString();
+                                if (tStr.startsWith("【分身】")) tStr = tStr.substring(3);
+                                titleTxt = tStr + "|" + xStr;
                                 if (titleTxt.length() > 96) titleTxt = titleTxt.substring(0, 96);
                             }
                             String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag()
