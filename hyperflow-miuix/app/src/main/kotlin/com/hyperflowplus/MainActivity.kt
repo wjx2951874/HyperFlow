@@ -156,6 +156,28 @@ fun HyperFlowApp() {
                     }
                 )
             }
+            // v0.5.11：打开 App 自动检测更新（延迟启动，避开引导页/闪退 Toast 同帧渲染）。
+            // 有新版 → 弹窗提示一次（prefs 按版本号去重），之后不再主动弹；
+            // 仅设置页"版本号"行显示"有新版可更新"提示；点击该行可随时手动再检。
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching {
+                    checkUpdate(
+                        onNew = { ver, url, log ->
+                            MainHolder.hasUpdate = true
+                            MainHolder.latestVer = ver
+                            val p = ctx.getSharedPreferences("hf_prefs", android.content.Context.MODE_PRIVATE)
+                            if (p.getString("upd_toasted_ver", "") != ver) {
+                                p.edit().putString("upd_toasted_ver", ver).apply()
+                                updVer = ver; updUrl = url; updLog = log
+                                updPhase = "new"; showUpd = true
+                            }
+                        },
+                        onNone = { MainHolder.hasUpdate = false },
+                        onError = { MainHolder.hasUpdate = false },
+                        onBusy = {}
+                    )
+                }
+            }, 1500)
         }
         // 引导判断：首次（App 私有标记，root 无关）显示引导页；连点"关于-HyperFlow"3 次可重开
         LaunchedEffect(Unit) {

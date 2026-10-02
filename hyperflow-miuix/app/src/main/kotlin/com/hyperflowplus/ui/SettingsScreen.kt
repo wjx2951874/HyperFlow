@@ -92,15 +92,11 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
-                    title = "调试模式",
-                    summary = if (state.debugMode) "已开启：保存详细运行日志" else "关闭后仅保留关键日志",
-                    checked = state.debugMode,
-                    onCheckedChange = { state.set(Config.KEY_DEBUG_MODE, it) }
-                )
+                // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"机型"行连点 3 次，
+                // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
                 ArrowPreference(
                     title = "分享运行日志",
-                    summary = "导出调试日志用于反馈问题",
+                    summary = "导出日志用于反馈问题\n首页连点"机型"3 次或连续闪退 3 次也会自动保存日志",
                     onClick = {
                         val ctxA = ctx
                         Thread {
@@ -128,14 +124,23 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 var hiddenClicks by remember { mutableIntStateOf(0) }
+                // v0.5.11：版本号与更新检查合并为一行：
+                // 有新版 → summary 前缀"有新版可更新"；点击 = 检查更新弹窗；连点 3 次 = 重进引导页
                 ArrowPreference(
-                    title = "HyperFlow",
-                    summary = "v${BuildConfig.VERSION_NAME} · 澎湃OS 互联通知流转增强",
+                    title = "版本",
+                    summary = buildString {
+                        if (MainHolder.hasUpdate) {
+                            append("有新版 v${MainHolder.latestVer} 可更新，点击检查 · ")
+                        }
+                        append("v${BuildConfig.VERSION_NAME}")
+                    },
                     onClick = {
                         hiddenClicks++
                         if (hiddenClicks >= 3) {
                             hiddenClicks = 0
                             MainHolder.onReopenOnboarding()   // 连点 3 次：重进引导页
+                        } else {
+                            MainHolder.onCheckUpdate()
                         }
                     }
                 )
@@ -154,11 +159,6 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     summary = "Miuix / KernelSU / LSPosed / AndroidX 等开源库许可详情",
                     onClick = { MainHolder.onOpenLicenses() }
                 )
-                ArrowPreference(
-                    title = "获取更新",
-                    summary = "检查 GitHub 最新版本（KernelSU 模块页亦提供在线更新）",
-                    onClick = { MainHolder.onCheckUpdate() }
-                )
             }
         }
     }
@@ -169,4 +169,7 @@ object MainHolder {
     var onCheckUpdate: () -> Unit = {}
     var onOpenLicenses: () -> Unit = {}
     var onReopenOnboarding: () -> Unit = {}
+    // v0.5.11：自动检测到的更新状态（设置页版本号行显示"有新版"提示）
+    var hasUpdate by androidx.compose.runtime.mutableStateOf(false)
+    var latestVer by androidx.compose.runtime.mutableStateOf("")
 }

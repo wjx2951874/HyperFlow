@@ -36,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hyperflowplus.BuildConfig
+import com.hyperflowplus.HFApplication
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
@@ -282,126 +284,61 @@ echo ==END""") }.getOrNull()
             )
         }
 
-        // ===== 环境检测（三态） =====
-        // ① 无 Root：只显示红色"请授予 root 权限"卡（其他项无 root 也查不到，不再逐项显示）
-        // ② 全部就绪：绿色圆环对勾大卡（点击弹 6 项详情）
-        // ③ 部分未就绪：黄色圆环叹号卡 + "查看更多" → 弹窗红标未成功项 + "去解决" → 步骤弹窗
-        if (!rootOk) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp)
-                    .clickable { launchKernelSu() }
+        // ===== 环境状态卡（v0.5.11：InstallerX 同款横向状态条 + 谷歌 Material 对号/叹号） =====
+        // 全部就绪=绿色对勾卡 / 无 Root=红色叹号卡 / 部分未就绪=黄色叹号卡；点击弹检测详情
+        var showEnvDetail by remember { mutableStateOf(false) }
+        var showMore by remember { mutableStateOf(false) }
+        var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
+        val stateCardColor = when {
+            !rootOk -> CRed
+            allOk -> CGreen
+            else -> CYellow
+        }
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp)
+                .clickable {
+                    when {
+                        !rootOk -> launchKernelSu()
+                        allOk -> showEnvDetail = true
+                        else -> showMore = true
+                    }
+                }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    top.yukonga.miuix.kmp.basic.Icon(
-                        imageVector = RoundedIcons.Cancel,
-                        contentDescription = "未授予 Root 权限",
-                        tint = CRed,
-                        modifier = Modifier.size(44.dp)
-                    )
-                    Spacer(Modifier.height(6.dp))
+                top.yukonga.miuix.kmp.basic.Icon(
+                    imageVector = if (allOk && rootOk) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = stateCardColor,
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(levelText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = stateCardColor)
                     Text(
-                        "请授予 Root 权限",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = CRed
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "未检测到 Root 环境，其余项无法检测\n点击前往 KernelSU 管理器授权",
+                        when {
+                            !rootOk -> "未检测到 Root 环境，点击前往 KernelSU 管理器授权"
+                            allOk -> "所有检测项均通过，点击查看详情"
+                            else -> "$passed/6 项通过，点击查看更多"
+                        },
                         style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                     )
                 }
+                Icon(
+                    Icons.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = stateCardColor.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp)
+                )
             }
-        } else if (allOk) {
-            var showEnvDetail by remember { mutableStateOf(false) }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp)
-                    .clickable { showEnvDetail = true }
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    StatusBadge(ok = true, size = 44.dp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "环境已就绪",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = CGreen
-                    )
-                }
-            }
-            if (showEnvDetail) {
-                HyperDialog(
-                    title = "环境检测",
-                    show = showEnvDetail,
-                    onDismiss = { showEnvDetail = false }
-                ) {
-                    Column(Modifier.padding(horizontal = 8.dp)) {
-                        EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
-                        EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
-                        EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
-                        EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
-                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）")
-                        EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
-                    }
-                }
-            }
-        } else {
-            // 部分未就绪：黄色圆环叹号卡（与绿色 CheckCircle 同源 Material 圆环样式）
-            var showMore by remember { mutableStateOf(false) }
-            var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp)
-                    .clickable { showMore = true }
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    top.yukonga.miuix.kmp.basic.Icon(
-                        imageVector = RoundedIcons.ErrorOutline,
-                        contentDescription = "部分环境未就绪",
-                        tint = CYellow,
-                        modifier = Modifier.size(44.dp)
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "部分环境未就绪",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = CYellow
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "$passed/6 项通过",
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(
-                            Icons.Rounded.KeyboardArrowRight,
-                            contentDescription = "查看更多",
-                            modifier = Modifier.size(16.dp),
-                            tint = CYellow.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-            }
-            // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
+        }
+
+        // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
             if (showMore) {
                 HyperDialog(
                     title = "环境检测",
@@ -495,7 +432,14 @@ echo ==END""") }.getOrNull()
             }
         }
 
-        // ===== 设备信息（大框大标题 + 小卡网格） =====
+        // ===== 状态数值卡（v0.5.11：InstallerX 同款两列大数值卡） =====
+        val msgCount = runCatching { parseFlow(state.flow, "time_desc").sumOf { it.second.size } }.getOrDefault(0)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MetricCard("检测项", "$passed/6")
+            MetricCard("流转消息", "$msgCount 条")
+        }
+
+        // ===== 设备信息（v0.5.11：InstallerX 同款单行信息列表；机型连点 3 次 = 捕获日志机关） =====
         GroupTitle("设备信息")
 
         // 解析各字段（机型行格式：机型：Redmi Note 12 Turbo（23049RP8BC））
@@ -509,68 +453,40 @@ echo ==END""") }.getOrNull()
         val kernV = devLine.firstOrNull { it.startsWith("内核：") }?.removePrefix("内核：")?.trim() ?: state.kernelVersion
         val rootV = if (state.rootInfo.isNotEmpty()) "${state.rootInfo} / KSU ${state.ksuVersion}" else "未授权"
 
-        // 大框：机型小标题 + 品牌数字大标题 + 括号型号
-        Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "机型",
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    modelName,
-                    fontSize = 22.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    color = MiuixTheme.colorScheme.onBackground,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    maxLines = 1
-                )
-                if (modelCode.isNotEmpty()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "型号：$modelCode",
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-                    )
-                }
+        // 调试机关：连点"机型"行 3 次（800ms 内）→ 捕获 logcat 日志存本地目录（替代原"调试模式"开关）
+        var modelTaps by remember { mutableStateOf(0) }
+        var modelTapLast by remember { mutableStateOf(0L) }
+        fun onModelTap() {
+            val now = android.os.SystemClock.elapsedRealtime()
+            modelTaps = if (now - modelTapLast < 800) modelTaps + 1 else 1
+            modelTapLast = now
+            if (modelTaps >= 3) {
+                modelTaps = 0
+                val ctxT = ctx
+                Thread {
+                    val f = runCatching { HFApplication.captureLogcat(ctxT) }.getOrNull()
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        Toast.makeText(
+                            ctxT,
+                            if (f != null) "已捕获日志：${f.absolutePath}" else "日志捕获失败",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }.start()
             }
         }
 
-        // 小卡网格（两行两列，圆角小块）
-        @Composable
-        fun InfoCard(label: String, value: String) {
-            Card(Modifier.weight(1f).padding(vertical = 3.dp)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp)
-                ) {
-                    Text(
-                        label,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        fontSize = 11.sp
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        value.ifEmpty { "未知" },
-                        style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            InfoCard("澎湃OS", miuiV)
-            InfoCard("Android", andV)
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            InfoCard("内核", kernV)
-            InfoCard("Root", rootV)
-        }
+        InfoRow("机型", if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName, onClick = ::onModelTap)
+        InfoRow(
+            "系统",
+            if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
+            else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
+        )
+        InfoRow("模块", "HyperFlow v${BuildConfig.VERSION_NAME}")
+        InfoRow("内核", kernV.ifEmpty { "未知" })
+        InfoRow("Root", rootV)
+        InfoRow("框架", if (lspOk) "LSPosed 已启用" else "未启用")
+        InfoRow("互联", if (milinkOk) "小米互联服务正常" else "未安装小米互联服务")
     }
 }
 
@@ -735,4 +651,56 @@ private fun launchKernelSu() {
         }
     }
     runCatching { RootExec.su("monkey -p com.rifsxd.ksu -c android.intent.category.LAUNCHER 1") }
+}
+
+/** 状态数值卡（v0.5.11：InstallerX 同款——上小标签 + 下大数值） */
+@Composable
+private fun MetricCard(label: String, value: String) {
+    Card(Modifier.weight(1f).padding(vertical = 3.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Text(
+                label,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                value,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/** 单行信息行（v0.5.11：InstallerX 同款——左侧标签 + 右侧值；可点击触发调试机关） */
+@Composable
+private fun InfoRow(label: String, value: String, onClick: (() -> Unit)? = null) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                modifier = Modifier.width(64.dp)
+            )
+            Text(
+                value,
+                style = MiuixTheme.textStyles.body1,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
+                maxLines = 1
+            )
+        }
+    }
 }
