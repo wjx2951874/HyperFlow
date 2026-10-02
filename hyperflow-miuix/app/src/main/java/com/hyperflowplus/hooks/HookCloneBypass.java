@@ -74,6 +74,17 @@ public class HookCloneBypass {
                             if ((n.flags & 512) != 0) {
                                 return chain.proceed();
                             }
+                            // 同一分身消息可能从两条流转链路各来一次（一条经过本 hook 带【分身】前缀、
+                            // 一条原样流出）。以「包名+id+tag」为 key，短窗口内第二次出现直接拦截 ——
+                            // 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行。
+                            String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag();
+                            long now = System.currentTimeMillis();
+                            Long last = RELEASED_KEYS.get(dupKey);
+                            if (last != null && now - last < 15000L) {
+                                MiflowLog.d("duplicate flow blocked: " + dupKey);
+                                return Boolean.FALSE;
+                            }
+                            RELEASED_KEYS.put(dupKey, now);
                             if (sbn.getUser() != null && sbn.getUser().hashCode() == 999) {
                                 // 分身通知：只放行，不改 user（归一会导致发送端 systemui 主空间也显示一条）。
                                 // 标题加【分身】前缀（只改流转数据，发送端已显示的通知不受影响）；
@@ -83,17 +94,6 @@ public class HookCloneBypass {
                                 MiflowLog.d("clone notification released: " + sbn.getPackageName());
                                 return Boolean.TRUE;
                             }
-                            // 同一分身消息可能从两条流转链路各来一次（小米互联 listener + 另一条链路，
-                            // 只有经过本 hook 的那条带【分身】前缀）。以「包名+id+tag」为 key，
-                            // 短时间窗口内第二次出现直接拦截 —— 从源头只流转一次。
-                            String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag();
-                            long now = System.currentTimeMillis();
-                            Long last = RELEASED_KEYS.get(dupKey);
-                            if (last != null && now - last < 15000L) {
-                                MiflowLog.d("duplicate flow blocked: " + dupKey);
-                                return Boolean.FALSE;
-                            }
-                            RELEASED_KEYS.put(dupKey, now);
                             // 其他应用（电话/短信等）全量放行
                             MiflowLog.d("all-app notification released: " + sbn.getPackageName());
                             return Boolean.TRUE;

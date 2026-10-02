@@ -1,6 +1,6 @@
 {
-  "version": "v0.5.1",
-  "versionCode": 81,
+  "version": "v0.5.2",
+  "versionCode": 82,
   "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.1/HyperFlow-0.5.1-flashable.zip",
-  "changelog": "·修复分身双通知：同一分身消息走了两条流转链路，现流转侧同key去重只放行一次，消息页分组去掉【分身】前缀合并同会话、同键去重优先保留带【分身】的\n·修复点击分身通知开错应用：调用方扩大到互联+本App消息页、排除桌面，无userId参数重载改用startActivityAsUser重发999\n·修复LSP检测全红：运行态标记双路径（App进程写私有目录+root写adb），任一48h内命中即生效\n·修复悬浮导航栏空白/位置：底部居中容器包裹\n·修复KSU更新无日志：updateJson去掉?v=0441缓存参数"
+  "changelog": "·修复悬浮+液态玻璃同时开启闪退：悬浮胶囊在内容页内，backdrop 自捕获递归渲染崩溃，悬浮时玻璃降级为模糊胶囊\n·修复分身双通知（第二版）：同 key 去重检查提前到所有放行分支之前（此前 999 分支直接 return 绕过查重）\n·修复检测爆红：补全 KernelSU 内嵌 LSPosed 配置路径；配置已启用但未重启生效时显示黄色「重启后生效」提示而非爆红\n·更新日志通道验证：update.json 已确认三通道（gh-proxy/jsDelivr/raw）完整返回 changelog"
 }

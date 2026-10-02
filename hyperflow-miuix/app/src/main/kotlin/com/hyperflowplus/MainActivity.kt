@@ -212,8 +212,10 @@ fun HyperFlowApp() {
         // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
         com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
 
-        // BarBlurHost 提供 backdrop：只有液态玻璃（悬浮胶囊折射）需要捕获内容页
-        BarBlurHost(enabled = state.glassEffect) {
+        // BarBlurHost 提供 backdrop：只有液态玻璃需要捕获内容页。
+        // 悬浮胶囊开启时不捕获 —— 悬浮胶囊在内容页内，backdrop 自捕获会递归渲染崩溃；
+        // 悬浮+玻璃此时降级为 Blur 模糊胶囊（LiquidNavBar 内已处理）。
+        BarBlurHost(enabled = state.glassEffect && !state.navFloat) {
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {

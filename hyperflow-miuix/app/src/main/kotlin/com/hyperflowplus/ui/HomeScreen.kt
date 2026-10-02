@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,6 +64,10 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
     var lspOk by remember { mutableStateOf(state.envLsp) }
     var moduleOk by remember { mutableStateOf(state.envModule) }
     var scopeOk by remember { mutableStateOf(state.envScope) }
+    // 三态：0=异常(红) / 1=配置已启用但运行态未加载(黄，重启后生效) / 3=正常(绿)
+    var lspState by remember { mutableIntStateOf(0) }
+    var moduleState by remember { mutableIntStateOf(0) }
+    var scopeState by remember { mutableIntStateOf(0) }
     var milinkOk by remember { mutableStateOf(state.envMilink) }
 
     fun detect() {
@@ -74,7 +79,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
             // 一次 su 读全部 LSPosed 配置（兼容 KernelSU 内嵌/模块版不同路径）
             // ==MODULES 段 = 各 modules.list 拼接；==SCOPE 段 = 各 scope 文件拼接
             val out = if (r) runCatching { RootExec.su("""echo ==LSP;
-for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/riru/modules/lsposed/config; do
+for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/modules/zygisk_lspd/config /data/adb/modules/zygisk_lspd /data/adb/modules/lspd/config /data/adb/modules/lspd /data/adb/modules/ksu_lspd /data/adb/modules/ksu_lsposed /data/adb/riru/modules/lsposed/config; do
   [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
 done
 echo ==MODULES;
@@ -129,19 +134,22 @@ echo ==END""") }.getOrNull() else null
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
             val modEnabled = (lspInstalled && hasModName(modsSeg)) || dbHit
             val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
-            // 生效判定 = 配置态 && 运行态（模块真的被加载了才算启用/勾选成功）
-            val moduleOkV = modEnabled && runtimeOk
-            val scopeOkV2 = scopeOkV && runtimeOk
-            val lspOkV = lspInstalled && runtimeOk
+            // 生效判定 = 配置态 && 运行态（模块真的被加载了才算启用/勾选成功）。
+            // 配置态 OK 但运行态未加载（升级/启用后没重启 zygote）→ 标记为"待重启"黄态，不爆红：
+            // 3 = 正常(绿) / 1 = 待重启(黄) / 0 = 异常(红)
+            val moduleOkV = if (modEnabled && runtimeOk) 3 else if (modEnabled) 1 else 0
+            val scopeOkV2 = if (scopeOkV && runtimeOk) 3 else if (scopeOkV) 1 else 0
+            val lspOkV = if (lspInstalled && runtimeOk) 3 else if (lspInstalled) 1 else 0
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")
             }.getOrDefault(false)
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                rootOk = r; ksuOk = k; lspOk = lspOkV
-                moduleOk = moduleOkV; scopeOk = scopeOkV2; milinkOk = m
+                rootOk = r; ksuOk = k; lspOk = lspOkV > 0
+                moduleOk = moduleOkV > 0; scopeOk = scopeOkV2 > 0; milinkOk = m
+                lspState = lspOkV; moduleState = moduleOkV; scopeState = scopeOkV2
                 checking = false
-                state.saveEnvCache(r, k, lspOkV, moduleOkV, scopeOkV2, m)
+                state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV2 > 0, m)
             }
         }.start()
     }
@@ -167,6 +175,7 @@ echo ==END""") }.getOrNull() else null
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
         val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
+        val pendingRestart = lspState == 1 || moduleState == 1 || scopeState == 1
         val level: Color = when {
             !rootOk -> CRed
             allOk -> CGreen
@@ -178,6 +187,9 @@ echo ==END""") }.getOrNull() else null
             else -> "部分环境未就绪"
         }
         val passed = listOf(rootOk, ksuOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
+        // 已启用但运行态未加载：黄色提示重启（不爆红，如实反映"已勾选但未生效"）
+        val pendingHint = if (pendingRestart)
+            "LSP 模块已启用但尚未生效，请重启设备后重新检测" else null
 
         Row(
             modifier = Modifier
@@ -211,6 +223,14 @@ echo ==END""") }.getOrNull() else null
                     modifier = Modifier.clickable { detect() }
                 )
             }
+        }
+        if (pendingHint != null) {
+            Text(
+                pendingHint,
+                style = MiuixTheme.textStyles.body2,
+                color = CYellow,
+                modifier = Modifier.padding(start = 6.dp, top = 0.dp, end = 6.dp)
+            )
         }
 
         // ===== 环境检测（三态） =====
