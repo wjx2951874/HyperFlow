@@ -240,8 +240,14 @@ echo ==END""") }.getOrNull()
                 .padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(level))
-            Spacer(Modifier.width(8.dp))
+            // 汇总行图标：谷歌 Material 同源（绿对勾=就绪 / 黄叹号=部分 / 红叹号=异常），与详情行 StatusBadge 一致
+            Icon(
+                imageVector = if (allOk) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                contentDescription = null,
+                tint = level,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 levelText,
                 fontSize = 16.sp,

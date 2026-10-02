@@ -375,26 +375,33 @@ fun HyperFlowApp() {
                     Modifier
                         .fillMaxSize()
                         .background(MiuixTheme.colorScheme.surface)
-                        // 液态玻璃开启时把页面内容记录进 glassBackdrop（供悬浮胶囊折射）
-                        .then(if (state.glassEffect) Modifier.layerBackdrop(glassBackdrop) else Modifier)
                 ) {
-                    if (conversation != null) {
-                        // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
-                        ConversationScreen(state, conversation.first, conversation.second, contentMod)
-                    } else {
-                        when (tab) {
-                            0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                            1 -> FlowScreen(state, contentMod)
-                            2 -> MessagesScreen(state, contentMod)
-                            3 -> SettingsScreen(state, contentMod)
+                    // 录制容器（v0.5.10.1 结构）：
+                    // 液态玻璃开启时，只把【页面内容】录进 glassBackdrop。
+                    // 胶囊必须放在本容器【之外】——否则 LayerBackdropNode.draw() 里
+                    // recordLayer 重放 drawContent() 时会把胶囊自身的 LiquidGlass 绘制卷进
+                    // 录制层，而胶囊又 drawLayer 采样同一 layer → 递归记录 → 闪退。
+                    // 本容器是胶囊的祖先/兄弟同根节点，坐标可正常换算（不黑）。
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(MiuixTheme.colorScheme.surface)
+                            .then(if (state.glassEffect) Modifier.layerBackdrop(glassBackdrop) else Modifier)
+                    ) {
+                        if (conversation != null) {
+                            // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
+                            ConversationScreen(state, conversation.first, conversation.second, contentMod)
+                        } else {
+                            when (tab) {
+                                0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                                1 -> FlowScreen(state, contentMod)
+                                2 -> MessagesScreen(state, contentMod)
+                                3 -> SettingsScreen(state, contentMod)
+                            }
                         }
                     }
-                    // v0.5.10：悬浮胶囊移入内容 Box（layerBackdrop 节点【后代】）。
-                    // 根因：LayerBackdrop.drawBackdrop 用 layerCoordinates.localPositionOf(coordinates)
-                    // 换算采样位置，Compose 要求 blur 节点是 backdrop 节点的后代；
-                    // 此前胶囊是兄弟节点 → 换算失败 → 采样落空 → 玻璃黑底。
-                    // 移入子树后坐标换算合法，玻璃真实折射页面内容；采样异常时
-                    // FloatingBottomBar 的 onDrawSurface(半透明容器色 0.4f) 兜底 → 永不黑。
+                    // 悬浮胶囊 overlay：在录制容器之外（不污染录制层）、内容 Box 之内
+                    // （采样坐标与录制容器同根，换算合法 → 玻璃真实折射、不黑、不闪退）
                     if (state.navFloat) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                             LiquidNavBar(
@@ -416,7 +423,7 @@ fun HyperFlowApp() {
             when (updPhase) {
                 "checking" -> HyperDialog(
 
-                    bottomInset = 40.dp,                    title = "检查更新",
+                                        title = "检查更新",
                     summary = "正在检查更新…",
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -430,7 +437,7 @@ fun HyperFlowApp() {
                 }
                 "new" -> HyperDialog(
 
-                    bottomInset = 40.dp,                    // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+                                        // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
                     title = "更新日志",
                     summary = updVer,
                     show = showUpd,
@@ -473,7 +480,7 @@ fun HyperFlowApp() {
                 }
                 "busy" -> HyperDialog(
 
-                    bottomInset = 40.dp,                    title = "正在检查更新",
+                                        title = "正在检查更新",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -486,7 +493,7 @@ fun HyperFlowApp() {
                 }
                 "none" -> HyperDialog(
 
-                    bottomInset = 40.dp,                    title = "已是最新版本",
+                                        title = "已是最新版本",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -499,7 +506,7 @@ fun HyperFlowApp() {
                 }
                 else -> HyperDialog(
 
-                    bottomInset = 40.dp,                    title = "检查更新失败",
+                                        title = "检查更新失败",
                     summary = updMsg,
                     show = showUpd,
                     onDismiss = { showUpd = false }
@@ -517,7 +524,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "选择更新方式",
                 summary = "① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
-                bottomInset = 40.dp,
+                
                 show = updMethod,
                 onDismiss = { updMethod = false }
             ) {
@@ -553,7 +560,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "正在下载更新包",
                 summary = "正在从镜像通道下载，请稍候…",
-                bottomInset = 40.dp,
+                
                 show = updDownloading,
                 onDismiss = { updDownloading = false }
             ) {
@@ -571,7 +578,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "更新包已下载",
                 summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
-                bottomInset = 40.dp,
+                
                 show = true,
                 onDismiss = { updDownloaded = null }
             ) {
@@ -601,7 +608,7 @@ fun HyperFlowApp() {
             HyperDialog(
                 title = "下载失败",
                 summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
-                bottomInset = 40.dp,
+                
                 show = true,
                 onDismiss = { updDlError = null }
             ) {

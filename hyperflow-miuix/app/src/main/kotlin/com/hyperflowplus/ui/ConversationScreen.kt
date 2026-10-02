@@ -254,7 +254,7 @@ fun ConversationScreen(
         val skipCount = selectedRows.size - deletable.size
         ConfirmDialog(
             show = showDeleteConfirm,
-            bottomInset = 40.dp,
+            
             title = "删除",
             content = buildString {
                 append("确定要删除该信息吗？")

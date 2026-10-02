@@ -87,7 +87,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         }
         ConfirmDialog(
             show = showStartDialog,
-            bottomInset = 40.dp,
+            
             title = "你确定要开启 App 内消息嘛？",
             content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
             onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); showStartDialog = false },
@@ -270,7 +270,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         } else {
             ConfirmDialog(
                 show = true,
-                bottomInset = 40.dp,
+                
                 title = "删除",
                 content = buildString {
                     append("确定要删除与「$sender」的 ${localRows.size} 条信息吗？")
