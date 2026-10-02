@@ -154,11 +154,11 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth(),
                     // v0.5.10：对齐小米短信 MIUI 搜索栏参数（反编译实测）
                     // 圆角 22dp（miuix_appcompat_search_view_bg_radius）、
-                    // 背景 surface_container_low（miuix_appcompat_edit_text_search_bg_color）、
+                    // 背景 surfaceContainer（miuix_appcompat_edit_text_search_bg_color 同族）、
                     // 内容边距 12dp（miuix_search_padding_horizontal_common）
                     cornerRadius = 22.dp,
                     colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = MiuixTheme.colorScheme.surfaceContainerLow
+                        backgroundColor = MiuixTheme.colorScheme.surfaceContainer
                     ),
                     insideMargin = DpSize(12.dp, 16.dp),
                     label = "搜索短信",

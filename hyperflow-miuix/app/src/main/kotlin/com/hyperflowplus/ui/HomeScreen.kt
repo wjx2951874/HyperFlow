@@ -94,8 +94,8 @@ echo ==LSPD;
 # 用户"不启动 LSP"（框架禁用/未激活）时目录可能仍在 → 靠进程判定才能真正反映框架状态。
 pidof lspd 2>/dev/null
 pidof lspd_64 2>/dev/null
-ps -A 2>/dev/null | grep -w lspd | grep -v grep | awk '{print $NF}'
-ps -A 2>/dev/null | grep -iE "riru.*lspd|lspd.*daemon" | grep -v grep | awk '{print $NF}'
+ps -A 2>/dev/null | grep -w lspd | grep -v grep | awk '{print ${'$'}NF}'
+ps -A 2>/dev/null | grep -iE "riru.*lspd|lspd.*daemon" | grep -v grep | awk '{print ${'$'}NF}'
 echo ==MODULES;
 # 标准路径 + find 全盘遍历（覆盖所有 LSPosed 变体，如 KernelSU 内嵌版的不同目录）
 for f in /data/adb/lspd/config/modules.list /data/adb/lspd/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/lsposed/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/riru/modules/lsposed/config/modules.list; do
