@@ -126,6 +126,12 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     var delTarget by remember { mutableStateOf<Pair<String, List<Array<String>>>?>(null) }
     // 小米端读不到数据：当前显示的是本地保存的历史记录（避免误以为小米互联还有数据）
     val localOnly = convos.isNotEmpty() && !state.liveAvailable
+    // 搜索结果"信息"分组：跨会话收集所有匹配消息（composable 作用域计算，勿移入 LazyColumn DSL）
+    val allMsgs = if (q.isNotEmpty()) {
+        filtered.flatMap { (s, rows) ->
+            rows.filter { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }.map { s to it }
+        }
+    } else emptyList()
     LazyColumn(modifier.fillMaxSize()) {
         // 搜索框固定在列表顶部（Miuix TextField = 小米短信搜索栏同款组件）
         item(key = "search") {
@@ -179,13 +185,6 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         }
         // 搜索结果分组（短信搜索页同款：会话 / 信息）
         if (q.isNotEmpty()) {
-            // 信息分组：跨会话收集所有匹配消息
-            val allMsgs = remember(filtered, q) {
-                filtered.flatMap { (s, rows) ->
-                    rows.filter { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }
-                        .map { s to it }
-                }
-            }
             if (filtered.isEmpty() && allMsgs.isEmpty()) {
                 item(key = "noMatch") {
                     Text(
