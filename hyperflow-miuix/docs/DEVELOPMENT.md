@@ -42,6 +42,12 @@ Release APK 需要签名（本地 keystore 或 CI 签名；密钥信息属私有
 **update.json 维护规范**：必须用 `python json.dumps(ensure_ascii=False, indent=2)` 生成后
 再 `json.loads` 校验一遍再提交——手写 JSON 出错会让 KSU/App 都解析失败（历史教训）。
 
+> **⚠️ 历史教训（v0.5.3 踩坑）**：发版时最容易漏改的就是 update.json 的 `zipUrl`！
+> v0.5.3 只同步了 version/versionCode/changelog，zipUrl 仍指向 v0.5.1 旧包，
+> 导致 KSU 检测到"新版本"但下载的是旧包/下载失败。**每次发版后必须**：
+> `curl -s https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json | grep zipUrl`
+> 确认指向**本次发布**的 Release 资产 URL，且该 URL `curl -I` 返回 200。
+
 ### 组装可刷入 zip（8 条目，KSU 模块格式）
 
 ```
