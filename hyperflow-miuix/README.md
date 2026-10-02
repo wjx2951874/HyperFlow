@@ -61,6 +61,7 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 
 ## 文档索引
 
+- **[`HANDOFF.md`](HANDOFF.md) —— 接手引导（给下一个 AI 工具 / 开发者，读完即可无缝接手）**
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) —— 整体架构与设计决策
 - [`docs/FEATURES.md`](docs/FEATURES.md) —— 每个功能的实现原理 / 代码位置 / 为什么这么写 / 已知限制
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) —— 开发环境、构建、发布流程
