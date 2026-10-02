@@ -31,6 +31,25 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 
+/**
+ * 液态玻璃胶囊的内阴影效果（源自 AndroidLiquidGlass）。
+ *
+ * 为什么需要它：液态玻璃的"玻璃感"不只靠模糊/折射，还需要边缘的
+ * 下沉阴影（内阴影）让胶囊看起来像嵌进屏幕的一层玻璃。纯外阴影
+ * （elevation）达不到这个效果，所以用离屏 GraphicsLayer 自绘内阴影。
+ *
+ * 实现原理（InnerShadowNode.draw）：
+ *   1. 先画内容 drawContent()；
+ *   2. 把当前 Shape（圆角胶囊）裁成 clipPath；
+ *   3. 离屏 layer 里：clipPath 内画一层 shadow.color，再平移画一个
+ *      BlendMode.Clear 的"掩膜"（ShadowMaskPaint）裁掉偏移方向的边 → 得到
+ *      偏移侧被裁掉的内侧阴影原形；
+ *   4. 对 layer 施加 BlurEffect（半径 = shadow.radius）得到柔和阴影；
+ *   5. 最后 clipPath 内 drawLayer 画回主画布。
+ *
+ * 参数见 [InnerShadow]（radius=模糊半径、offset=阴影偏移方向、color/alpha=颜色）。
+ * 注意 prevRadius 缓存：radius 不变时不重建 renderEffect，避免每帧重建 BlurEffect。
+ */
 @Immutable
 data class InnerShadow(
     val radius: Dp = 24.dp,

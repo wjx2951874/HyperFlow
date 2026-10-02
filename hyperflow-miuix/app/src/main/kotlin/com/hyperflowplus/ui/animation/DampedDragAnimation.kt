@@ -24,6 +24,18 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * 阻尼拖拽动画状态机（InstallerX Revived 原版移植，KernelSU 同源）。
+ *
+ * 驱动悬浮导航栏的"选中项胶囊"：
+ *   - 手指横向拖动时把拖拽量折算成选中索引（value：Float 连续值，如 0.3 表示
+ *     在第 0→1 个 tab 之间），松手后弹簧回弹到最近的整数索引；
+ *   - pressProgress：按下越久越趋近 1，驱动胶囊缩放/涟漪/色散强度；
+ *   - scaleX/scaleY：按下放大（pressedScale/initialScale），松手回弹；
+ *   - velocity：拖动速度，FloatingBottomBar 用它做胶囊"果冻"挤压变形。
+ * 内部多组 Animatable（value/velocity/pressProgress/scaleX/scaleY）各配
+ * 独立弹簧参数，通过 MutatorMutex 互斥防止动画相互打断。
+ */
 class DampedDragAnimation(
     private val animationScope: CoroutineScope,
     val initialValue: Float,

@@ -126,8 +126,11 @@ object FloatingBottomBarDefaults {
 }
 
 enum class FloatingBottomBarMode {
+    /** 液态玻璃：胶囊 = 窗口层 backdrop 折射（vibrancy + blur + lens + 色散 + 高光） */
     LiquidGlass,
+    /** 纯模糊：普通毛玻璃胶囊（低配/兼容场景，不依赖 RuntimeShader） */
     Blur,
+    /** 无效果：纯色胶囊（最省电） */
     None,
 }
 
@@ -190,6 +193,23 @@ private fun rememberGravityRotatedHighlight(base: Highlight, extraDegrees: Float
     }
 }
 
+/**
+ * 悬浮导航栏胶囊（InstallerX Revived 原版移植，GPL-3.0）。
+ *
+ * 结构三层（液态玻璃模式）：
+ *   1. 基础层：未选中态所有 tab（胶囊背景 = 窗口 backdrop 折射）；
+ *   2. 透明捕获层：alpha=0 再绘一遍 tabs 并 layerBackdrop 记录（选中态 tab
+ *      用 activeContentColor 重绘，指示器需要同时采到它）；
+ *   3. 指示器层：跟随拖动的选中胶囊（combinedBackdrop = 基础层 + 捕获层，
+ *      单独做折射 + 色散 + 高光 + 内阴影 + 按速度拉伸的"果冻"变形）。
+ *
+ * 关键设计（与普通 bottom bar 的区别）：
+ *   - backdrop 由本组件内部 rememberLayerBackdrop() 自捕获窗口层内容
+ *     —— 这是 v0.5.3 悬浮+玻璃共存不闪退的根因（见 docs/FEATURES.md）；
+ *   - 拖动选中项用 DampedDragAnimation（阻尼弹簧）+ InteractiveHighlight
+ *     （按下涟漪）+ 重力感应高光（rememberDeviceTilt）；
+ *   - mode=None/Blur 时无 RuntimeShader 依赖，低版本 Android 兼容。
+ */
 @Composable
 fun <T> FloatingBottomBar(
     items: List<T>,
@@ -383,6 +403,7 @@ fun <T> FloatingBottomBar(
     val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
     val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
 
+    // 指示器的采样源 = 基础层 backdrop + 透明捕获层（见类注释三层结构说明）
     val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
 
     Box(

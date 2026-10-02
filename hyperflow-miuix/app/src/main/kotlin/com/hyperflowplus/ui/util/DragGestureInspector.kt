@@ -19,6 +19,15 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.util.fastFirstOrNull
 
+/**
+ * 拖拽手势探针（InstallerX Revived 原版移植，KernelSU 同源）。
+ *
+ * 悬浮导航栏选中项胶囊拖拽的底层手势识别：按下（Initial pass 取原始
+ * down，避免被上层消费）→ 拖动（positionChange 累计位移）→ 抬起
+ * （正常结束）或取消（onDragCancel）。由 DampedDragAnimation 的
+ * pointerInput 挂载使用；用 PointerEventPass.Initial 保证在
+ * 其它手势/滚动消费前先拿到按下事件。
+ */
 suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},

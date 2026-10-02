@@ -17,17 +17,23 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能②-2 点击分身通知 → 打开 999 空间微信/QQ（V0.4.43）。
+ * 功能②-2 点击分身通知 → 打开 999 空间微信/QQ（V0.4.43 引入，V0.5.1 重写）。
  *
  * 机制：接收端（非 root 设备）点击分身通知 → 系统「跨设备镜像打开应用」把
  * 「打开应用」请求发回发送端 → 小米互联服务（com.milink.service）在 system_server
  * 执行 startActivity，系统按主空间解析包名 → 打开主空间微信/QQ。
  *
  * 本 hook 在 system_server 拦截 startActivity：
- *   条件 = 调用者是 com.milink.service（远程打开请求）&& 目标包 ∈ 微信/QQ
- *          && userId == 0 && 该应用在 999 空间存在（已开双开）
+ *   条件 = 调用者是 com.milink.service（远程打开请求）或本 App 消息页 && 目标包 ∈ 微信/QQ
+ *          && userId == 0（或无 userId 参数的默认主空间）&& 该应用在 999 空间存在（已开双开）
  *   → 把 userId 改写为 999 → 直接打开多开微信/QQ。
  *   其余情况（本地正常打开、其他应用、未开双开）全部走系统原逻辑，绝不误伤。
+ *
+ * V0.5.1 重写要点（用户实测修复）：
+ *   - 加 ALLOWED_CALLERS / EXCLUDED_CALLERS 白黑名单（此前条件过宽，点击主空间通知也会被改写）
+ *   - findUserId 对「无 userId 参数重载」返回 -1 也视为主空间
+ *   - 无 userId 参数时吞掉原调用 return null，改用 IActivityTaskManager.startActivityAsUser
+ *     11 参重载反射以 user 999 重发；反射失败兜底 proceed 走原逻辑，绝不误伤本地打开
  *
  * 需要模块在 LSPosed 作用域勾选「android（系统框架）」。
  */

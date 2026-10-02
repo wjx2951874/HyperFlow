@@ -28,6 +28,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.intellij.lang.annotations.Language
 
+/**
+ * 按压交互高光（InstallerX Revived 原版移植，KernelSU 同源）。
+ *
+ * 悬浮导航栏胶囊按下时的高光反馈：AGSL RuntimeShader 绘制
+ * 跟随手指位置的聚光高光（sparkle/light 效果），pressProgress 控制
+ * 高光强弱，位置用弹簧动画平滑跟随拖动；Android 12- 自动跳过
+ * （FloatingBottomBar 里对 SDK < TIRAMISU 不创建本类，走 None 分支）。
+ */
 @SuppressLint("NewApi")
 class InteractiveHighlight(
     val animationScope: CoroutineScope,

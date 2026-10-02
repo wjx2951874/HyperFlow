@@ -1,3 +1,9 @@
 
 # 签名私钥（禁止提交）
 keystore.jks
+
+# 构建产物（禁止提交）
+.gradle/
+app/build/
+*.apk
+*.zip

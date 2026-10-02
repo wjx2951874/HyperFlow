@@ -13,7 +13,22 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.runtimeShaderEffect
 
 /**
- * Rounded-rect refraction lens with optional chromatic dispersion.
+ * 圆角矩形"折射透镜"效果（液态玻璃的核心之一，源自 AndroidLiquidGlass）。
+ *
+ * 作用：让胶囊区域内的背景内容产生玻璃折射——边缘（圆角边界附近）的
+ * 内容被"吸入"胶囊内部，配合 [vibrancy] 提饱和、[InnerShadow] 内阴影，
+ * 呈现 iOS 26 风格的液态玻璃质感。
+ *
+ * 实现：AGSL RuntimeShader（Android 13+），关键概念：
+ *   - refractionHeight：折射影响带的高度（距边缘多少 px 内产生折射）；
+ *   - refractionAmount：折射强度（内容被拉入的最大像素量，取负值传入
+ *     shader 表示向胶囊中心方向折射）；
+ *   - depthEffect：叠加中心法向分量，让折射带呈现球面透镜的"深度"感；
+ *   - chromaticAberration（色散）：>0 时启用 RGB 分离（3.5/7 加权采样），
+ *     边缘出现彩虹色散（0.1 轻微 / 0.2 类 Apple 药丸 / 0.3+ 明显光环）。
+ *
+ * 两个 shader 字符串对应两条管线：普通折射（省电）与带色散折射。
+ * 所有尺寸参数按 downscaleFactor 缩放（backdrop 降采样后坐标一致）。
  *
  * @param chromaticAberration Strength of the rim chromatic dispersion. `0` disables the
  *  effect (cheaper non-dispersion shader is used). Typical values: `0.1` for subtle,

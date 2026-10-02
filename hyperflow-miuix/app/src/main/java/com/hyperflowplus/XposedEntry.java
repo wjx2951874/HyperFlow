@@ -12,15 +12,22 @@ import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 
 /**
- * HyperFlow V0.3.11 —— libxposed API 102 入口（LSPosed/Vector 新框架）。
+ * HyperFlow —— libxposed API 102 入口（LSPosed/Vector 新框架）。
  *
  * 注册方式（META-INF/xposed/）：
  *   java_init.list → com.hyperflowplus.XposedEntry
  *   module.prop    → minApiVersion=101 / targetApiVersion=102
- *   scope.list     → com.milink.service（作用域内置，无需手动勾选）
+ *   scope.list     → com.milink.service（旧版框架作用域文件）
  *
- * 作用域内置后框架只向 com.milink.service 进程注入本模块；
- * 入口在 onPackageLoaded 中检查包名并装配 hook。
+ * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 3 项：
+ *   com.milink.service（小米互联：通知流转 5 个 hook）
+ *   com.hyperflowplus（本 App：写运行态标记时间戳，供首页检测判断"模块真被加载"）
+ *   android（system_server：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen）
+ *
+ * 入口在 onPackageLoaded 中按包名分发装配 hook：
+ *   - android            → 注入 system_server（HookRemoteOpen）
+ *   - com.milink.service → 注入小米互联服务（其余 6 个 hook）
+ *   - 其他包名           → 仅写运行态标记，不装配
  * V0.2.6 起不再启动 HTTP WebUI：配置读写全部由 App 经 su 完成。
  */
 public class XposedEntry extends XposedModule {

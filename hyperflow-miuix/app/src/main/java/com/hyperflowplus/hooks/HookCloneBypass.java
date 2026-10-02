@@ -147,8 +147,9 @@ public class HookCloneBypass {
                                 return chain.proceed();
                             }
                             // 同一分身消息可能从两条流转链路各来一次（一条经过本 hook 带【分身】前缀、
-                            // 一条原样流出）。以「包名+id+tag」为 key，短窗口内第二次出现直接拦截 ——
-                            // 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行。
+                            // 一条原样流出）。以「包名|id|tag|标题|正文」内容指纹为 key，短窗口内第二次
+                            // 出现直接拦截 —— 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行；
+                            // 且必须跨进程（见 isDuplicate/共享文件），否则另一进程的链路拦不住。
                             String titleTxt = "";
                             if (n != null && n.extras != null) {
                                 CharSequence t = n.extras.getCharSequence(Notification.EXTRA_TITLE);

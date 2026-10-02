@@ -20,6 +20,17 @@ import top.yukonga.miuix.kmp.blur.Backdrop
  * pattern used in `LiquidBottomTabs` to layer a recorded "tinted tabs" pass over the
  * underlying app background as a single sampling source for an indicator.
  */
+/**
+ * 组合 backdrop：按顺序先画 [first] 再画 [second]。
+ *
+ * 用途：把"着色/覆盖层"采样叠在"基础 backdrop"之上，作为指示器
+ * （选中项胶囊）的单一采样源——否则指示器只能采到基础层，看不到
+ * 上面覆盖层的内容。
+ *
+ * 中文注释：本类在当前版本（v0.5.3，InstallerX 同款结构）中由
+ * 胶囊内部 rememberLayerBackdrop() 自捕获替代，主要保留给
+ * 需要多层 backdrop 合成的场景复用。
+ */
 @Stable
 class CombinedBackdrop(val first: Backdrop, val second: Backdrop) : Backdrop {
 
