@@ -40,11 +40,83 @@ public class HookCloneBypass {
     /** 自定义标记：分身通知（供第二道兜底 hook 识别，防【分身】前缀在第一道链路丢失） */
     private static final String HF_IS_CLONE = "hf_is_clone";
 
-    /** 最近放行的通知 key（包名|id|tag）→ 时间戳：短窗口内同 key 二次出现拦截（防双链路重复流转） */
+    /** 最近放行的通知 key → 时间戳：短窗口内同 key 二次出现拦截（防双链路重复流转）。
+     *  key = 包名|id|tag|标题|正文 前 96 字符（内容指纹），窗口 20s。
+     *  除内存表外同步写跨进程共享文件：双链路若发生在不同进程（milink/dist 等），
+     *  每个进程都有独立静态表，单靠内存表拦不住第二条。 */
     private static final java.util.concurrent.ConcurrentHashMap<String, Long> RELEASED_KEYS =
             new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long DUP_WINDOW_MS = 20000L;
+
+    /** 跨进程去重文件候选路径（按可写性依次尝试；App 检测脚本读取全部路径求并集） */
+    private static final String[] DUP_FILE_CANDS = {
+            "/data/adb/hyperflowplus/released_keys",
+            "/data/local/tmp/hyperflowplus_released_keys",
+            "/data/misc/hyperflowplus_released_keys",
+    };
+    private static volatile String dupFileWritable = null;
+
+    private static boolean isDuplicate(String key, long now) {
+        Long last = RELEASED_KEYS.get(key);
+        if (last != null && now - last < DUP_WINDOW_MS) {
+            return true;
+        }
+        // 跨进程：读共享文件里是否已有同 key（文件行格式：时间戳|key）
+        String f = dupFileWritable;
+        if (f != null) {
+            try {
+                java.io.File file = new java.io.File(f);
+                if (file.exists()) {
+                    java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(file));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        int sp = line.indexOf('|');
+                        if (sp <= 0) continue;
+                        long ts = Long.parseLong(line.substring(0, sp));
+                        if (now - ts < DUP_WINDOW_MS && line.substring(sp + 1).equals(key)) {
+                            br.close();
+                            return true;
+                        }
+                    }
+                    br.close();
+                }
+            } catch (Throwable ignored) { }
+        }
+        return false;
+    }
+
+    private static void recordReleased(String key, long now) {
+        RELEASED_KEYS.put(key, now);
+        String f = dupFileWritable;
+        if (f != null) {
+            try {
+                // 追加一行；同时把过期行清掉（超过窗口的忽略即可，文件由 App 检测/下次启动清理）
+                java.io.File file = new java.io.File(f);
+                java.io.File parent = file.getParentFile();
+                if (parent != null && !parent.exists()) parent.mkdirs();
+                java.io.FileWriter w = new java.io.FileWriter(f, true);
+                w.write(now + "|" + key + "\n");
+                w.close();
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    private static void pickDupFile() {
+        for (String cand : DUP_FILE_CANDS) {
+            try {
+                java.io.File f = new java.io.File(cand);
+                java.io.File parent = f.getParentFile();
+                if (parent != null) parent.mkdirs();
+                java.io.FileWriter w = new java.io.FileWriter(cand, true);
+                w.close();
+                dupFileWritable = cand;
+                return;
+            } catch (Throwable ignored) { }
+        }
+    }
 
     public static void install(ClassLoader cl) {
+        pickDupFile();
         try {
             Class<?> handler = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationHandler", false, cl);
             Method m = handler.getDeclaredMethod("isNotificationValid", StatusBarNotification.class);
@@ -77,14 +149,21 @@ public class HookCloneBypass {
                             // 同一分身消息可能从两条流转链路各来一次（一条经过本 hook 带【分身】前缀、
                             // 一条原样流出）。以「包名+id+tag」为 key，短窗口内第二次出现直接拦截 ——
                             // 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行。
-                            String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag();
+                            String titleTxt = "";
+                            if (n != null && n.extras != null) {
+                                CharSequence t = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+                                CharSequence x = n.extras.getCharSequence(Notification.EXTRA_TEXT);
+                                titleTxt = (t == null ? "" : t) + "|" + (x == null ? "" : x);
+                                if (titleTxt.length() > 96) titleTxt = titleTxt.substring(0, 96);
+                            }
+                            String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag()
+                                    + "|" + titleTxt;
                             long now = System.currentTimeMillis();
-                            Long last = RELEASED_KEYS.get(dupKey);
-                            if (last != null && now - last < 15000L) {
+                            if (isDuplicate(dupKey, now)) {
                                 MiflowLog.d("duplicate flow blocked: " + dupKey);
                                 return Boolean.FALSE;
                             }
-                            RELEASED_KEYS.put(dupKey, now);
+                            recordReleased(dupKey, now);
                             if (sbn.getUser() != null && sbn.getUser().hashCode() == 999) {
                                 // 分身通知：只放行，不改 user（归一会导致发送端 systemui 主空间也显示一条）。
                                 // 标题加【分身】前缀（只改流转数据，发送端已显示的通知不受影响）；

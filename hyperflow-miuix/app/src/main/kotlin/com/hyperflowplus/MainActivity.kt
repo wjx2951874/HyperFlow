@@ -212,10 +212,8 @@ fun HyperFlowApp() {
         // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
         com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
 
-        // BarBlurHost 提供 backdrop：只有液态玻璃需要捕获内容页。
-        // 悬浮胶囊开启时不捕获 —— 悬浮胶囊在内容页内，backdrop 自捕获会递归渲染崩溃；
-        // 悬浮+玻璃此时降级为 Blur 模糊胶囊（LiquidNavBar 内已处理）。
-        BarBlurHost(enabled = state.glassEffect && !state.navFloat) {
+        // 导航栏/悬浮胶囊的液态折射 backdrop 由 LiquidNavBar 内部自捕获（InstallerX 同款），
+        // 不再用 BarBlurHost 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
             topBar = {
@@ -336,9 +334,21 @@ fun HyperFlowApp() {
                 }
             },
             bottomBar = {
-                // 悬浮导航栏：不占 Scaffold 底部（内容全屏，胶囊浮在上面，只有悬浮部分遮挡）
-                // 普通/液态全宽导航栏：正常占位
-                if (!state.navFloat) {
+                // 悬浮导航栏/普通导航栏都放底部槽（InstallerX 同款）：
+                // 悬浮胶囊在内容层之外，backdrop 由胶囊内部自捕获，不卷入内容页渲染
+                if (state.navFloat) {
+                    Box(
+                        Modifier.fillMaxWidth()
+                    ) {
+                        LiquidNavBar(
+                            selectedTabIndex = tab,
+                            onTabSelected = { tab = it },
+                            items = tabs.map { it.icon to it.title },
+                            floatEnabled = true,
+                            glassEnabled = state.glassEffect
+                        )
+                    }
+                } else {
                     LiquidNavBar(
                         selectedTabIndex = tab,
                         onTabSelected = { tab = it },
@@ -352,16 +362,10 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                // layerBackdrop 只捕获内容页（不含导航栏）→ 玻璃胶囊模糊的是页面内容，效果与 InstallerX/KernelSU 一致
-                val bd = com.hyperflowplus.ui.LocalLiquidBackdrop.current
                 Box(
                     Modifier
                         .fillMaxSize()
                         .background(MiuixTheme.colorScheme.surface)
-                        .then(
-                            if (bd is top.yukonga.miuix.kmp.blur.LayerBackdrop) Modifier.layerBackdrop(bd)
-                            else Modifier
-                        )
                 ) {
                     when (tab) {
                         0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
@@ -369,28 +373,10 @@ fun HyperFlowApp() {
                         2 -> MessagesScreen(state, contentMod)
                         3 -> SettingsScreen(state, contentMod)
                     }
-                    // 悬浮导航栏：覆盖在内容之上（浮于底部中央，不挤占内容）
-                    if (state.navFloat) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.BottomCenter)
-                        ) {
-                            LiquidNavBar(
-                                selectedTabIndex = tab,
-                                onTabSelected = { tab = it },
-                                items = tabs.map { it.icon to it.title },
-                                floatEnabled = true,
-                                glassEnabled = state.glassEffect
-                            )
-                        }
-                    }
                 }
             }
-        }
 
         // 排序菜单已内联在 topBar 的 Sort 图标下方（KSU 风格下拉，Popup 锚定，见 topBar 块）
-
         // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
         if (showUpd) {
             when (updPhase) {

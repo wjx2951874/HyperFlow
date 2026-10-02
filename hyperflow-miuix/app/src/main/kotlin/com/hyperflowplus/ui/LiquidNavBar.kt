@@ -91,13 +91,13 @@ fun LiquidNavBar(
 
     if (floatEnabled) {
         // 悬浮胶囊：液态玻璃 / 模糊 / 普通 三态（与 InstallerX Revived 一致）
+        // backdrop 由胶囊内部自捕获（InstallerX 同款），不依赖外层 BarBlurHost，
+        // 因此悬浮+玻璃可同时开启且不会把内容页卷入捕获子树递归崩溃
+        val bd = rememberLayerBackdrop()
         val mode = when {
-            glassEnabled && backdrop != null -> FloatingBottomBarMode.LiquidGlass
-            glassEnabled -> FloatingBottomBarMode.Blur
+            glassEnabled -> FloatingBottomBarMode.LiquidGlass
             else -> FloatingBottomBarMode.None
         }
-        // 非玻璃模式 backdrop 不参与绘制，传空 backdrop 占位即可
-        val bd = backdrop ?: rememberLayerBackdrop()
         Box(
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp + navBottom),
             contentAlignment = Alignment.Center,

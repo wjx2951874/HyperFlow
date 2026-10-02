@@ -66,6 +66,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
     var scopeOk by remember { mutableStateOf(state.envScope) }
     // 三态：0=异常(红) / 1=配置已启用但运行态未加载(黄，重启后生效) / 3=正常(绿)
     var lspState by remember { mutableIntStateOf(0) }
+    var runtimeOk by remember { mutableStateOf(false) }
     var moduleState by remember { mutableIntStateOf(0) }
     var scopeState by remember { mutableIntStateOf(0) }
     var milinkOk by remember { mutableStateOf(state.envMilink) }
@@ -126,7 +127,7 @@ echo ==END""") }.getOrNull() else null
             val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
             // 双路径任一最近 48h 内加载过即生效（/data/adb=root 进程写入，/data/user/0/<app>=App 进程写入）
             val runStamp = runSeg.lines().mapNotNull { it.trim().toLongOrNull() }.maxOrNull()
-            val runtimeOk = runStamp?.let {
+            val runtimeOkLocal = runStamp?.let {
                 System.currentTimeMillis() - it < 48 * 3600 * 1000L
             } ?: false
             // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）
@@ -134,12 +135,14 @@ echo ==END""") }.getOrNull() else null
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
             val modEnabled = (lspInstalled && hasModName(modsSeg)) || dbHit
             val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
-            // 生效判定 = 配置态 && 运行态（模块真的被加载了才算启用/勾选成功）。
-            // 配置态 OK 但运行态未加载（升级/启用后没重启 zygote）→ 标记为"待重启"黄态，不爆红：
-            // 3 = 正常(绿) / 1 = 待重启(黄) / 0 = 异常(红)
-            val moduleOkV = if (modEnabled && runtimeOk) 3 else if (modEnabled) 1 else 0
-            val scopeOkV2 = if (scopeOkV && runtimeOk) 3 else if (scopeOkV) 1 else 0
-            val lspOkV = if (lspInstalled && runtimeOk) 3 else if (lspInstalled) 1 else 0
+            // 生效判定 = 配置态为准（db/scope 命中即绿）。
+            // 之前曾要求"配置态 && 运行态"才绿：xposed_loaded 时间戳由 milink（非 root）进程写入，
+            // 多数情况下无权限写成功 → runtimeOk 恒 false → 用户明明勾选了却永远不绿（爆红）。
+            // 运行态只用于黄条提示（已启用但未重启 zygote 则提示重启），不再决定红绿：
+            // 3 = 正常(绿) / 0 = 异常(红)；pendingRestart 黄条单独给"配置 OK 但未加载"的提示
+            val moduleOkV = if (modEnabled) 3 else 0
+            val scopeOkV2 = if (scopeOkV) 3 else 0
+            val lspOkV = if (lspInstalled) 3 else 0
             val m = runCatching {
                 val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
                 !pm.isNullOrBlank() && pm.contains("package:")
@@ -148,6 +151,7 @@ echo ==END""") }.getOrNull() else null
                 rootOk = r; ksuOk = k; lspOk = lspOkV > 0
                 moduleOk = moduleOkV > 0; scopeOk = scopeOkV2 > 0; milinkOk = m
                 lspState = lspOkV; moduleState = moduleOkV; scopeState = scopeOkV2
+                runtimeOk = runtimeOkLocal
                 checking = false
                 state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV2 > 0, m)
             }
@@ -175,7 +179,9 @@ echo ==END""") }.getOrNull() else null
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
         val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
-        val pendingRestart = lspState == 1 || moduleState == 1 || scopeState == 1
+        // 配置态绿、但模块尚未被加载（xposed_loaded 时间戳超过 48h 或缺失）= 需要重启 zygote 生效。
+        // 此时仍显示绿，仅顶部黄条提示重启；避免"勾选了还爆红"的误判。
+        val pendingRestart = !runtimeOk && (lspState == 3 || moduleState == 3 || scopeState == 3)
         val level: Color = when {
             !rootOk -> CRed
             allOk -> CGreen

@@ -1,6 +1,6 @@
 {
-  "version": "v0.5.2",
-  "versionCode": 82,
+  "version": "0.5.3",
+  "versionCode": 83,
   "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.1/HyperFlow-0.5.1-flashable.zip",
-  "changelog": "·修复悬浮+液态玻璃同时开启闪退：悬浮胶囊在内容页内，backdrop 自捕获递归渲染崩溃，悬浮时玻璃降级为模糊胶囊\n·修复分身双通知（第二版）：同 key 去重检查提前到所有放行分支之前（此前 999 分支直接 return 绕过查重）\n·修复检测爆红：补全 KernelSU 内嵌 LSPosed 配置路径；配置已启用但未重启生效时显示黄色「重启后生效」提示而非爆红\n·更新日志通道验证：update.json 已确认三通道（gh-proxy/jsDelivr/raw）完整返回 changelog"
+  "changelog": "v0.5.3\n1. 悬浮导航栏 + 液态玻璃重构为 InstallerX 同款结构（悬浮栏移入 Scaffold 底部槽、backdrop 由胶囊内部自捕获），两者可同时开启且不再闪退，液态玻璃折射效果生效。\n2. 环境检测修复：LSP 模块/作用域以配置态为准（勾选即绿），不再依赖运行态时间戳（该时间戳因 milink 进程权限写不成功曾导致明明勾选却爆红）；未重启时顶部给黄色提示。\n3. 分身双通知去重升级：内容指纹（包名|id|tag|标题正文）+ 跨进程共享文件，双链路即使在不同进程也能拦截第二条。\n4. 点击【分身】通知拉起 999 分身微信/QQ（HookRemoteOpen 已重写，需 LSP 勾选 android 作用域）。"
 }
