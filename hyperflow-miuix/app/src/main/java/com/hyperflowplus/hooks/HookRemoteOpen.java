@@ -17,16 +17,18 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能②-2 点击分身通知 → 打开 999 空间微信/QQ（V0.4.43 引入，V0.5.1 重写）。
+ * 功能②-2 点击分身通知 → 打开 999 空间微信/QQ/飞书/钉钉/企业微信（V0.4.43 引入，
+ * V0.5.1 重写，V0.5.4 扩展适配飞书/钉钉/企业微信）。
  *
  * 机制：接收端（非 root 设备）点击分身通知 → 系统「跨设备镜像打开应用」把
  * 「打开应用」请求发回发送端 → 小米互联服务（com.milink.service）在 system_server
- * 执行 startActivity，系统按主空间解析包名 → 打开主空间微信/QQ。
+ * 执行 startActivity，系统按主空间解析包名 → 打开主空间应用。
  *
  * 本 hook 在 system_server 拦截 startActivity：
- *   条件 = 调用者是 com.milink.service（远程打开请求）或本 App 消息页 && 目标包 ∈ 微信/QQ
+ *   条件 = 调用者是 com.milink.service（远程打开请求）或本 App 消息页 && 目标包 ∈
+ *          支持应用集（微信/QQ/飞书/钉钉/企业微信，与小米互联「支持的应用」列表对齐）
  *          && userId == 0（或无 userId 参数的默认主空间）&& 该应用在 999 空间存在（已开双开）
- *   → 把 userId 改写为 999 → 直接打开多开微信/QQ。
+ *   → 把 userId 改写为 999 → 直接打开多开应用。
  *   其余情况（本地正常打开、其他应用、未开双开）全部走系统原逻辑，绝不误伤。
  *
  * V0.5.1 重写要点（用户实测修复）：
@@ -39,10 +41,18 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  */
 public class HookRemoteOpen {
 
-    /** 适配的迷你应用包名（微信/QQ；其余暂不适配，走系统原逻辑开主空间） */
+    /**
+     * 适配的迷你应用包名（与小米互联「支持的应用」列表中的第三方 App 对齐）。
+     * 微信/QQ 为 V0.4.43 首批；V0.5.4 扩展飞书/钉钉/企业微信（含飞书国际版 Lark）。
+     * 其余应用暂不适配，走系统原逻辑开主空间（可随时按需添加，无需改其他逻辑）。
+     */
     private static final Set<String> TARGET_PKGS = new HashSet<String>() {{
-        add("com.tencent.mm");
-        add("com.tencent.mobileqq");
+        add("com.tencent.mm");              // 微信
+        add("com.tencent.mobileqq");        // QQ
+        add("com.ss.android.lark");         // 飞书
+        add("com.larksuite.cn");            // 飞书国际版 Lark
+        add("com.alibaba.android.rimet");   // 钉钉
+        add("com.tencent.wework");          // 企业微信
     }};
 
     /** 允许改写为分身的调用方：小米互联（远程镜像打开）+ 本 App 消息页点击 */
@@ -121,7 +131,7 @@ public class HookRemoteOpen {
             if (!ALLOWED_CALLERS.contains(caller)) {
                 return chain.proceed();
             }
-            // 2) 目标包必须是微信/QQ
+            // 2) 目标包必须是支持应用集（微信/QQ/飞书/钉钉/企业微信）
             Intent intent = findIntent(args);
             if (intent == null || intent.getComponent() == null) {
                 return chain.proceed();

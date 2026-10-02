@@ -7,7 +7,6 @@
 > **⚠️ 版本状态：当前所有版本均为测试版（Beta）**。v0.4.x ~ v0.5.x 全部属于测试迭代，
 > **正式版（Stable）尚未发布**，正式版版本号（v1.x）与发布时间未定，届时会在此处与
 > `docs/CHANGELOG.md` 明确标注。
-
 ---
 
 ## 这是什么
@@ -26,7 +25,7 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 |---|---|---|
 | ① 亮屏流转 | 亮屏时强制放行通知流转（模拟锁屏） | `hooks/HookForceTransfer.java` |
 | ② 分身流转 | 999 空间微信/QQ 通知也流转，标题加【分身】前缀 | `hooks/HookCloneBypass.java` |
-| ②-2 点击拉 999 | 点击分身通知 → 直接打开 999 空间微信/QQ | `hooks/HookRemoteOpen.java` |
+| ②-2 点击拉 999 | 点击分身通知 → 直接打开 999 空间微信/QQ/飞书/钉钉/企业微信 | `hooks/HookRemoteOpen.java` |
 | ③ 短信持久化 | 流转短信归档到 App 消息页；可选写入系统收件箱 | `hooks/HookSmsPersist.java` / `hooks/HookSmsSenderEnrich.java` |
 | ④ 来电在线接听 | 来电以全屏接听形态流转（亮屏/锁屏均可） | `hooks/HookCallRelay.java` |
 | ⑤ 自动输锁屏密码 | P1 开发中（占位实现） | `hooks/HookAutoUnlock.java` |
@@ -70,7 +69,8 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 
 ## 开发状态
 
-- 当前版本：**v0.5.3**（versionCode 83）
+- 当前版本：**v0.5.4**（versionCode 84）
+- v0.5.4 重点：分身点击拉起 999 扩展适配飞书/钉钉/企业微信（对齐小米互联「支持的应用」列表）
 - v0.5.3 重点：悬浮导航栏 + 液态玻璃重构为 InstallerX 同款结构（可同时开启、修复自捕获闪退）；LSP 检测改为配置态即绿；分身双通知跨进程去重。
 - 完整历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)，待办见 [`docs/ROADMAP.md`](docs/ROADMAP.md)
 

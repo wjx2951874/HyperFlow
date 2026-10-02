@@ -50,22 +50,27 @@ if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return 
 
 ---
 
-## 功能②-2 点击分身通知 → 打开 999 微信/QQ（✅ 部分待验证）
+## 功能②-2 点击分身通知 → 打开 999 微信/QQ/飞书/钉钉/企业微信（✅ 部分待验证）
 
 **原理**：接收端点击分身通知 → 系统"跨设备镜像打开应用"把 Intent 发回发送端 →
 milink 在 **system_server** 执行 `startActivity`（目标包=微信/QQ，userId=0 → 会打开主空间）。
 hook 拦截该调用：
-- 条件：调用者是 `com.milink.service`（或本 App 消息页）&& 目标包 ∈ {com.tencent.mm, com.tencent.mobileqq}
+- 条件：调用者是 `com.milink.service`（或本 App 消息页）&& 目标包 ∈ 支持应用集
   && 该包在 user 999 空间存在（`/data/user/999/<pkg>` 存在=已开双开）
 - 动作：把 userId 改写为 **999** 重发 → 直接打开多开应用
 - 其余情况（本地打开、其他应用、未开双开）**一律走系统原逻辑**，绝不误伤
+
+**支持应用集**（与小米互联「支持的应用」列表中的第三方 App 对齐，v0.5.4 起）：
+微信 `com.tencent.mm` / QQ `com.tencent.mobileqq` / 飞书 `com.ss.android.lark`（含国际版 `com.larksuite.cn`）/
+钉钉 `com.alibaba.android.rimet` / 企业微信 `com.tencent.wework`
 
 **代码位置**：`java/com/hyperflowplus/hooks/HookRemoteOpen.java`（注入 system_server，`android` 作用域）
 **关键实现细节**：
 - 无 `int userId` 参数的重载（`startActivity(intent)`）也要拦——反射 `IActivityTaskManager.startActivityAsUser` 11 参重载以 user 999 重发
 - `ALLOWED_CALLERS` / `EXCLUDED_CALLERS` 白黑名单见文件头注释
+- 新增应用只需往 `TARGET_PKGS` 加包名，其余逻辑零改动
 
-**限制**：仅适配微信、QQ（其他多开应用暂未适配，按需逐个加）。
+**限制**：需用户已开对应 App 的双开（999 空间存在才改写）；未开双开自动回退主空间。
 
 ---
 

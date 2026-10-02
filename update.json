@@ -1,6 +1,6 @@
 {
-  "version": "0.5.3",
-  "versionCode": 83,
-  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.3/HyperFlow-0.5.3-flashable.zip",
-  "changelog": "v0.5.3\n1. 悬浮导航栏 + 液态玻璃重构为 InstallerX 同款结构（悬浮栏移入 Scaffold 底部槽、backdrop 由胶囊内部自捕获），两者可同时开启且不再闪退，液态玻璃折射效果生效。\n2. 环境检测修复：LSP 模块/作用域以配置态为准（勾选即绿），不再依赖运行态时间戳（该时间戳因 milink 进程权限写不成功曾导致明明勾选却爆红）；未重启时顶部给黄色提示。\n3. 分身双通知去重升级：内容指纹（包名|id|tag|标题正文）+ 跨进程共享文件，双链路即使在不同进程也能拦截第二条。\n4. 点击【分身】通知拉起 999 分身微信/QQ（HookRemoteOpen 已重写，需 LSP 勾选 android 作用域）。"
+  "version": "0.5.4",
+  "versionCode": 84,
+  "zipUrl": "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v0.5.4/HyperFlow-0.5.4-flashable.zip",
+  "changelog": "v0.5.4\n1. 分身点击拉起 999 扩展适配：新增飞书、钉钉、企业微信（含飞书国际版 Lark），与小米互联「支持的应用」列表对齐——接收端点击【分身】通知可直接打开多开版。\n2. 微信/QQ 原适配保持不变；未开双开的应用仍走系统原逻辑，绝不误伤。"
 }
