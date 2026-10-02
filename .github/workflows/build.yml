@@ -28,6 +28,11 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
 
+      - name: Install platform android-37.0 (compileSdk=37)
+        run: |
+          yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;36.0.0" > /dev/null || \
+          yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --sdk_root="$ANDROID_HOME" "platforms;android-37.0" "build-tools;36.0.0" > /dev/null || true
+
       - name: Inject signing secrets (optional)
         env:
           HF_KEYSTORE_B64: ${{ secrets.HF_KEYSTORE_B64 }}

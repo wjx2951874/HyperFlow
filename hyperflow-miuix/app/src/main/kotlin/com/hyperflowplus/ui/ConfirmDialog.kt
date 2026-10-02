@@ -50,7 +50,7 @@ fun ConfirmDialog(
     countdownSec: Int = 0,
     checkboxText: String? = null,
     singleConfirmText: String? = null,
-    bottomInset: Dp = 40.dp,
+    bottomInset: Dp = smartInset,
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit,
     onCancel: () -> Unit = onDismiss,

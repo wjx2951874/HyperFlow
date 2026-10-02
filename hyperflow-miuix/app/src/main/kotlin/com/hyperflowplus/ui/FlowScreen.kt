@@ -1,12 +1,15 @@
 package com.hyperflowplus.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,10 +30,16 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     var pendingToggle by remember { mutableStateOf<String?>(null) }
 
+    // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
+    val fScroll = rememberScrollState()
+    LaunchedEffect(fScroll) {
+        androidx.compose.runtime.snapshotFlow { fScroll.value }.collect { MainHolder.scrollTick++ }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(fScroll)
             .padding(horizontal = 12.dp)
     ) {
         GroupTitle("通知流转")
@@ -82,6 +91,13 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
+
+        // v0.5.12：悬浮胶囊避让 —— 滚动到底最后一行停在胶囊上沿（不遮挡）
+        Spacer(
+            Modifier.height(
+                if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
+            )
+        )
     }
 
     // ===== 开启/关闭确认弹窗（HyperDialog 系统覆盖层实现，稳定不闪退；开启确认后才更新状态） =====

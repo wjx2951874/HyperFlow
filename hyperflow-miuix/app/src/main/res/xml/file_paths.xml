@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- v0.5.12：运行日志文件分享（filesDir/hf_logs/*.txt） -->
+    <files-path
+        name="hf_logs"
+        path="hf_logs/" />
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

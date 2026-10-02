@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,23 +125,6 @@ fun ConversationScreen(
                         }
                     }
                 )
-                TextButton(
-                    text = "复制",
-                    onClick = {
-                        if (selectedRows.isNotEmpty()) {
-                            runCatching {
-                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                                cm.setPrimaryClip(
-                                    android.content.ClipData.newPlainText(
-                                        "HyperFlow",
-                                        selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
-                                    )
-                                )
-                                Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                )
                 // 删除：MIUI ActionMode 同款（图标 + 文字，短信 App miuix_actionbar_delete_icon 语义）
                 Row(
                     modifier = Modifier
@@ -174,10 +159,20 @@ fun ConversationScreen(
                 TextButton(text = "取消", onClick = { selectionMode = false; selected = emptySet() })
             }
         }
+        // v0.5.12：悬浮胶囊避让 —— 列表滚到底最后一行停在胶囊上沿（不遮挡）
+        val cList = rememberLazyListState()
+        LaunchedEffect(cList) {
+            androidx.compose.runtime.snapshotFlow { cList.firstVisibleItemIndex to cList.firstVisibleItemScrollOffset }
+                .collect { MainHolder.scrollTick++ }
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
+            state = cList,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
+            ),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             itemsIndexed(sorted) { index, row ->

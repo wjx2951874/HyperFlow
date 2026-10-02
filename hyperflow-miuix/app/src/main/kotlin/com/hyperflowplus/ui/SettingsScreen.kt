@@ -4,24 +4,26 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
+import com.hyperflowplus.HFApplication
 import com.hyperflowplus.HFState
-import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -41,10 +43,16 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         }
     }
 
+    // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
+    val sScroll = rememberScrollState()
+    LaunchedEffect(sScroll) {
+        androidx.compose.runtime.snapshotFlow { sScroll.value }.collect { MainHolder.scrollTick++ }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(sScroll)
             .padding(horizontal = 12.dp)
     ) {
         // ===== 主题 =====
@@ -92,25 +100,46 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"机型"行连点 3 次，
+                // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"系统"行连点 5 次，
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
+                // v0.5.12：分享改为文件分享（FileProvider 分享 .txt 日志本体）
                 ArrowPreference(
                     title = "分享运行日志",
-                    summary = "导出日志用于反馈问题\n首页连点「机型」3 次或连续闪退 3 次也会自动保存日志",
+                    summary = "导出日志文件用于反馈问题\n首页连点「系统」5 次或连续闪退 3 次也会自动保存日志",
                     onClick = {
                         val ctxA = ctx
                         Thread {
-                            val log = runCatching {
-                                RootExec.su("logcat -d -t 300 2>/dev/null | grep -iE 'hyperflow|milink|LSPosed|AndroidRuntime' | tail -200")
-                            }.getOrNull() ?: "日志为空"
+                            // 优先分享最近一次已保存的日志文件；无则实时捕获一份
+                            val dir = java.io.File(ctxA.filesDir, "hf_logs")
+                            var file: java.io.File? = dir.listFiles()
+                                ?.filter { it.name.endsWith(".txt") }
+                                ?.maxByOrNull { it.lastModified() }
+                            if (file == null || !file.exists()) {
+                                file = runCatching { HFApplication.captureLogcat(ctxA) }.getOrNull()
+                            }
+                            val f = file
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                val send = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "HyperFlow 运行日志")
-                                    putExtra(Intent.EXTRA_TEXT, "HyperFlow v" + BuildConfig.VERSION_NAME + "\n\n" + log)
+                                if (f == null) {
+                                    Toast.makeText(ctxA, "日志捕获失败", Toast.LENGTH_SHORT).show()
+                                    return@post
                                 }
-                                runCatching { ctxA.startActivity(Intent.createChooser(send, "分享日志")) }
-                                    .onFailure { Toast.makeText(ctxA, "无可用分享应用", Toast.LENGTH_SHORT).show() }
+                                runCatching {
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        ctxA,
+                                        "com.hyperflowplus.fileprovider",
+                                        f
+                                    )
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, "HyperFlow v${BuildConfig.VERSION_NAME} 运行日志")
+                                        putExtra(Intent.EXTRA_TEXT, "HyperFlow v${BuildConfig.VERSION_NAME} 运行日志\n详见附件文件")
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    ctxA.startActivity(Intent.createChooser(send, "分享日志文件"))
+                                }.onFailure {
+                                    Toast.makeText(ctxA, "无可用分享应用", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }.start()
                     }
@@ -124,15 +153,15 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 var hiddenClicks by remember { mutableIntStateOf(0) }
-                // v0.5.11：版本号与更新检查合并为一行：
-                // 有新版 → summary 前缀"有新版可更新"；点击 = 检查更新弹窗；连点 3 次 = 重进引导页
+                // v0.5.12：版本行常驻提示"点击可检查更新"；自动检查更新已有（打开 App 检测一次）
+                // 连点 3 次 = 重进引导页
                 ArrowPreference(
                     title = "版本",
                     summary = buildString {
                         if (MainHolder.hasUpdate) {
-                            append("有新版 v${MainHolder.latestVer} 可更新，点击检查 · ")
+                            append("有新版 v${MainHolder.latestVer} 可更新 · ")
                         }
-                        append("v${BuildConfig.VERSION_NAME}")
+                        append("点击可检查更新 · v${BuildConfig.VERSION_NAME}")
                     },
                     onClick = {
                         hiddenClicks++
@@ -146,7 +175,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 ArrowPreference(
                     title = "作者",
-                    summary = "酷安 @翰德姆（关注反馈，会回关哦）",
+                    summary = "酷安 @翰德姆",
                     onClick = { browse("https://www.coolapk.com/u/4112338") }
                 )
                 ArrowPreference(
@@ -161,6 +190,13 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
+
+        // v0.5.12：悬浮胶囊避让 —— 滚动到底最后一行停在胶囊上沿（不遮挡）
+        Spacer(
+            Modifier.height(
+                if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
+            )
+        )
     }
 }
 
@@ -172,4 +208,10 @@ object MainHolder {
     // v0.5.11：自动检测到的更新状态（设置页版本号行显示"有新版"提示）
     var hasUpdate by androidx.compose.runtime.mutableStateOf(false)
     var latestVer by androidx.compose.runtime.mutableStateOf("")
+    // v0.5.12：滚动偏移 tick —— 任何页面滚动时 +1，MainActivity 录制 Box 的
+    // graphicsLayer 读它建立依赖 → 滚动时重绘 → backdrop 重录（玻璃折射不滞后不黑）
+    var scrollTick by androidx.compose.runtime.mutableLongStateOf(0L)
+    // v0.5.12：悬浮胶囊避让 —— MainActivity 按 navFloat 设置，页面滚动容器尾部
+    // 加同高间距，保证内容最后一行可滚到胶囊上沿（不遮挡、不留白）
+    var bottomPad by androidx.compose.runtime.mutableStateOf(androidx.compose.ui.unit.Dp.Unspecified)
 }

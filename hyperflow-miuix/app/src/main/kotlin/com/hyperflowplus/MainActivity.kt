@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.heightIn
@@ -232,6 +233,9 @@ fun HyperFlowApp() {
 
         // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
         com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
+        // v0.5.12：悬浮胶囊底部避让 —— 页面滚动容器尾部加同高间距，
+        // 内容最后一行可滚到胶囊上沿（不遮挡、不留白）
+        MainHolder.bottomPad = if (state.navFloat) 96.dp else 0.dp
 
         // 液态玻璃 backdrop：在 Scaffold 内容区挂 layerBackdrop 捕获页面内容，供悬浮胶囊折射。
         // InstallerX 同款结构：胶囊在 bottomBar 槽（内容区之外、绘制顺序在内容之后）采样，
@@ -404,10 +408,19 @@ fun HyperFlowApp() {
                     // recordLayer 重放 drawContent() 时会把胶囊自身的 LiquidGlass 绘制卷进
                     // 录制层，而胶囊又 drawLayer 采样同一 layer → 递归记录 → 闪退。
                     // 本容器是胶囊的祖先/兄弟同根节点，坐标可正常换算（不黑）。
+                    // v0.5.12 玻璃黑底根治：滚动页（首页/流转/消息）滚动时，滚动容器只
+                    // invalidate 自身（graphicsLayer 平移），父节点不重绘 → recordLayer 不重录
+                    // → 胶囊采样的还是滚动前的旧帧 → 折射错位/黑块（设置页不滚动所以正常）。
+                    // 解法：本容器 graphicsLayer 读全局滚动 tick（页面滚动时 +1，见各页
+                    // LaunchedEffect），滚动即重绘 → draw() 重跑 → backdrop 每帧重录。
                     Box(
                         Modifier
                             .fillMaxSize()
                             .background(MiuixTheme.colorScheme.surface)
+                            .graphicsLayer {
+                                // 读滚动 tick 建立依赖：滚动变化 → 本 block 重算 → 节点重绘 → backdrop 重录
+                                MainHolder.scrollTick
+                            }
                             .then(if (state.glassEffect) Modifier.layerBackdrop(glassBackdrop) else Modifier)
                     ) {
                         if (conversation != null) {

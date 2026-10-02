@@ -121,6 +121,17 @@ done
 find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
   echo "==DBX ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"
 done
+echo ==DBQ;
+# v0.5.12：模块启用标志精确检测 —— db 里 grep 到包名 ≠ 启用（enabled 列才决定）！
+# 用户实测：在 LSPosed 里关掉 HyperFlow 模块后，包名仍留在 modules_config.db，
+# 旧逻辑 dbHit=true → 误判"已启用/环境正常"。设备有 sqlite3 时直接查 enabled 列：
+# 输出 "com.hyperflowplus|1"（启用）/ "com.hyperflowplus|0"（禁用），供解析段区分。
+for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
+  [ -f "${'$'}db" ] && { echo "==DBQF ${'$'}db"; command -v sqlite3 >/dev/null 2>&1 && sqlite3 "${'$'}db" "SELECT module_pkg_name, enabled FROM modules_config WHERE module_pkg_name LIKE '%hyperflow%';" 2>/dev/null; }
+done
+find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
+  echo "==DBQX ${'$'}db"; command -v sqlite3 >/dev/null 2>&1 && sqlite3 "${'$'}db" "SELECT module_pkg_name, enabled FROM modules_config WHERE module_pkg_name LIKE '%hyperflow%';" 2>/dev/null
+done
 echo ==RUNNING;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 cat /data/user/0/com.hyperflowplus/files/xposed_loaded 2>/dev/null
@@ -176,8 +187,24 @@ echo ==END""") }.getOrNull()
             // 现在框架没在跑 = 全部 LSP 相关项为异常（红），页面引导去启用（一键启用按钮）。
             val dbHit = dbSeg.contains("==HF_IN_DB")
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
-            val modEnabled = lspInstalled && (hasModName(modsSeg) || dbHit)
-            val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
+            // v0.5.12：db enabled 精确标志（==DBQ 段 sqlite3 输出 "com.hyperflowplus|1"/"|0"）。
+            // LSPosed 1.9+ 里模块被禁用时包名仍留在 modules_config.db → 旧 dbHit 误判已启用。
+            val dbqSeg = out?.substringAfter("==DBQ", "")?.substringBefore("==RUNNING") ?: ""
+            val dbEnabled = dbqSeg.contains("com.hyperflowplus", ignoreCase = true) && dbqSeg.contains("|1")
+            val dbDisabled = dbqSeg.contains("com.hyperflowplus", ignoreCase = true) && dbqSeg.contains("|0")
+            // 无 sqlite3 时（dbqSeg 为空）无法知道 enabled → 用运行时证据兜底：
+            // 最近 48h 内被 LSPosed 真正加载过（maps/时间戳）才算"模块已启用"。
+            // 用户场景：在 LSPosed 关闭模块并重启 → 模块不再被加载 → 时间戳过期/maps 无命中
+            // → runtimeOkLocal=false → modEnabled=false → 环境如实显示异常。
+            val modEnabled = lspInstalled && !dbDisabled && (
+                hasModName(modsSeg) || dbEnabled ||
+                        (dbqSeg.isBlank() && dbHit && runtimeOkLocal)
+                )
+            val scopeOkV = lspInstalled && !dbDisabled && (
+                scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") ||
+                        scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbEnabled ||
+                        (dbqSeg.isBlank() && dbHit && runtimeOkLocal)
+                )
             // 生效判定 = 配置态为准（db/scope 命中即绿）。
             // v0.5.10：不再设"配置 OK 但未加载"的黄条 —— 用户诉求"LSP 不动，重启一次刷完就完事"：
             // 框架活跃(daemon)+模块配置命中 = 直接绿；框架不活跃 = 异常并要求启用。
@@ -211,10 +238,16 @@ echo ==END""") }.getOrNull()
 
     LaunchedEffect(Unit) { detect() }
 
+    // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录，见 MainActivity 注释）
+    val hScroll = rememberScrollState()
+    LaunchedEffect(hScroll) {
+        androidx.compose.runtime.snapshotFlow { hScroll.value }.collect { MainHolder.scrollTick++ }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(hScroll)
             .padding(horizontal = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
@@ -284,61 +317,126 @@ echo ==END""") }.getOrNull()
             )
         }
 
-        // ===== 环境状态卡（v0.5.11：InstallerX 同款横向状态条 + 谷歌 Material 对号/叹号） =====
-        // 全部就绪=绿色对勾卡 / 无 Root=红色叹号卡 / 部分未就绪=黄色叹号卡；点击弹检测详情
-        var showEnvDetail by remember { mutableStateOf(false) }
-        var showMore by remember { mutableStateOf(false) }
-        var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
-        val stateCardColor = when {
-            !rootOk -> CRed
-            allOk -> CGreen
-            else -> CYellow
-        }
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 3.dp)
-                .clickable {
-                    when {
-                        !rootOk -> launchKernelSu()
-                        allOk -> showEnvDetail = true
-                        else -> showMore = true
-                    }
-                }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // ===== 环境检测（三态，v0.5.12 回退 v0.5.10.1 大卡样式；谷歌 Material 图标） =====
+        // ① 无 Root：只显示红色"请授予 root 权限"卡（其余项无 root 也查不到）
+        // ② 全部就绪：绿色圆环对勾大卡（点击弹 6 项详情）
+        // ③ 部分未就绪：黄色圆环叹号卡 + "查看更多" → 弹窗红标未成功项 + "去解决" → 步骤弹窗
+        if (!rootOk) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { launchKernelSu() }
             ) {
-                top.yukonga.miuix.kmp.basic.Icon(
-                    imageVector = if (allOk && rootOk) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = stateCardColor,
-                    modifier = Modifier.size(26.dp)
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(levelText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = stateCardColor)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = "未授予 Root 权限",
+                        tint = CRed,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        when {
-                            !rootOk -> "未检测到 Root 环境，点击前往 KernelSU 管理器授权"
-                            allOk -> "所有检测项均通过，点击查看详情"
-                            else -> "$passed/6 项通过，点击查看更多"
-                        },
+                        "请授予 Root 权限",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CRed
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        "未检测到 Root 环境，其余项无法检测\n点击前往 KernelSU 管理器授权",
                         style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
-                Icon(
-                    Icons.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = stateCardColor.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
-                )
             }
-        }
-
-        // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
+        } else if (allOk) {
+            var showEnvDetail by remember { mutableStateOf(false) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { showEnvDetail = true }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    StatusBadge(ok = true, size = 44.dp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "环境已就绪",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CGreen
+                    )
+                }
+            }
+            if (showEnvDetail) {
+                HyperDialog(
+                    title = "环境检测",
+                    show = showEnvDetail,
+                    onDismiss = { showEnvDetail = false }
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
+                        EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
+                        EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
+                        EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
+                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）")
+                        EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
+                    }
+                }
+            }
+        } else {
+            // 部分未就绪：黄色圆环叹号卡（与绿色 CheckCircle 同源 Material 圆环样式）
+            var showMore by remember { mutableStateOf(false) }
+            var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clickable { showMore = true }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = "部分环境未就绪",
+                        tint = CYellow,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "部分环境未就绪",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CYellow
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "$passed/6 项通过",
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            Icons.Rounded.KeyboardArrowRight,
+                            contentDescription = "查看更多",
+                            modifier = Modifier.size(16.dp),
+                            tint = CYellow.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+            // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
             if (showMore) {
                 HyperDialog(
                     title = "环境检测",
@@ -430,15 +528,9 @@ echo ==END""") }.getOrNull()
                     }
                 }
             }
-
-        // ===== 状态数值卡（v0.5.11：InstallerX 同款两列大数值卡） =====
-        val msgCount = runCatching { parseFlow(state.flow, "time_desc").sumOf { it.second.size } }.getOrDefault(0)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricCard("检测项", "$passed/6", Modifier.weight(1f))
-            MetricCard("流转消息", "$msgCount 条", Modifier.weight(1f))
         }
 
-        // ===== 设备信息（v0.5.11：InstallerX 同款单行信息列表；机型连点 3 次 = 捕获日志机关） =====
+        // ===== 设备信息（v0.5.12：一个统一 Card 内单行列表，行间黑色分割线分隔——学安装工具样式） =====
         GroupTitle("设备信息")
 
         // 解析各字段（机型行格式：机型：Redmi Note 12 Turbo（23049RP8BC））
@@ -452,15 +544,15 @@ echo ==END""") }.getOrNull()
         val kernV = devLine.firstOrNull { it.startsWith("内核：") }?.removePrefix("内核：")?.trim() ?: state.kernelVersion
         val rootV = if (state.rootInfo.isNotEmpty()) "${state.rootInfo} / KSU ${state.ksuVersion}" else "未授权"
 
-        // 调试机关：连点"机型"行 3 次（800ms 内）→ 捕获 logcat 日志存本地目录（替代原"调试模式"开关）
-        var modelTaps by remember { mutableStateOf(0) }
-        var modelTapLast by remember { mutableStateOf(0L) }
-        fun onModelTap() {
+        // 调试机关：连点"系统"行 5 下（800ms 内）→ 捕获 logcat 日志存本地目录
+        var sysTaps by remember { mutableStateOf(0) }
+        var sysTapLast by remember { mutableStateOf(0L) }
+        fun onSysTap() {
             val now = android.os.SystemClock.elapsedRealtime()
-            modelTaps = if (now - modelTapLast < 800) modelTaps + 1 else 1
-            modelTapLast = now
-            if (modelTaps >= 3) {
-                modelTaps = 0
+            sysTaps = if (now - sysTapLast < 800) sysTaps + 1 else 1
+            sysTapLast = now
+            if (sysTaps >= 5) {
+                sysTaps = 0
                 val ctxT = ctx
                 Thread {
                     val f = runCatching { HFApplication.captureLogcat(ctxT) }.getOrNull()
@@ -475,17 +567,59 @@ echo ==END""") }.getOrNull()
             }
         }
 
-        InfoRow("机型", if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName, onClick = ::onModelTap)
-        InfoRow(
-            "系统",
-            if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
-            else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
+        // 设备行数据（学安装工具：左标签右值，单行列表）
+        val devRows = listOf(
+            "机型" to (if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName),
+            "系统" to (if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
+            else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})"),
+            "内核" to kernV.ifEmpty { "未知" },
+            "模块" to "HyperFlow v${BuildConfig.VERSION_NAME}",
+            "Root" to rootV,
+            "框架" to (if (lspOk) "LSPosed 已启用" else "未启用"),
+            "互联" to (if (milinkOk) "小米互联服务正常" else "未安装小米互联服务")
         )
-        InfoRow("模块", "HyperFlow v${BuildConfig.VERSION_NAME}")
-        InfoRow("内核", kernV.ifEmpty { "未知" })
-        InfoRow("Root", rootV)
-        InfoRow("框架", if (lspOk) "LSPosed 已启用" else "未启用")
-        InfoRow("互联", if (milinkOk) "小米互联服务正常" else "未安装小米互联服务")
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                devRows.forEachIndexed { idx, (label, value) ->
+                    // 行间黑色细分割线（安装工具同款分隔；机型/系统行点击触发机关除外，仅系统行机关）
+                    if (idx > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .height(1.dp)
+                                .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (label == "系统") Modifier.clickable { onSysTap() }
+                                else Modifier
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            label,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                            modifier = Modifier.width(64.dp)
+                        )
+                        Text(
+                            value,
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+
+        // v0.5.12：悬浮胶囊避让 —— 滚动到底最后一行停在胶囊上沿（不遮挡）
+        Spacer(Modifier.height(if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad))
     }
 }
 

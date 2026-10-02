@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -139,7 +141,21 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             rows.filter { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }.map { s to it }
         }
     } else emptyList()
-    LazyColumn(modifier.fillMaxSize()) {
+    // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
+    val mList = rememberLazyListState()
+    LaunchedEffect(mList) {
+        androidx.compose.runtime.snapshotFlow { mList.firstVisibleItemIndex to mList.firstVisibleItemScrollOffset }
+            .collect { MainHolder.scrollTick++ }
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        state = mList,
+        // v0.5.12：悬浮胶囊避让 —— 列表滚到底最后一行停在胶囊上沿（不遮挡）
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
+        )
+    ) {
         // 搜索框固定在列表顶部（Miuix TextField = 小米短信搜索栏同款组件）
         item(key = "search") {
             Row(

@@ -11,8 +11,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 92
-        versionName = "0.5.11"
+        versionCode = 93
+        versionName = "0.5.12"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -61,6 +61,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.activity:activity-compose:1.9.3")
+    // v0.5.12：FileProvider（分享运行日志文件）
+    implementation("androidx.core:core-ktx:1.13.1")
 
     // Miuix（HyperOS 风格）核心 / 设置项 / 图标
     implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
