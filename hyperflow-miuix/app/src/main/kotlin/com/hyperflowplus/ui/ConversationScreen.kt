@@ -72,7 +72,7 @@ fun ConversationScreen(
             if (desc) (tb - ta).toInt() else (ta - tb).toInt()
         }
     }
-    Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surfaceContainerLow)) {
+    Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
