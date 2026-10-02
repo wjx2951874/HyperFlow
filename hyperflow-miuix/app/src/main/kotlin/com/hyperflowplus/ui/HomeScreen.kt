@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -567,13 +567,13 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
 /**
  * 环境状态图标（v0.5.8）：改用谷歌官方 Material 图标
  * —— 通过 = Icons.Filled.CheckCircle（实心圆对勾，与系统/其他 App 常见选中样式一致），
- * 未通过 = Icons.Filled.ErrorOutline（红色圆环叹号，与黄色"部分未就绪"大卡同源）。
+ * 未通过 = Icons.Filled.Warning（实心三角叹号，红色；core 图标库内置，避免引入 extended 使包体膨胀约 30MB）。
  * 此前用的是手写 path 的 RoundedIcons 空心圆环勾，用户反馈渲染样式不是标准谷歌图标。
  */
 @Composable
 private fun StatusBadge(ok: Boolean, size: androidx.compose.ui.unit.Dp = 20.dp) {
     Icon(
-        imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+        imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.Warning,
         contentDescription = null,
         tint = if (ok) androidx.compose.ui.graphics.Color(0xFF2EBD59) else androidx.compose.ui.graphics.Color(0xFFE84C4C),
         modifier = Modifier.size(size)
