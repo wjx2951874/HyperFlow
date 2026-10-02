@@ -243,6 +243,19 @@ object HFState {
      *  本地历史（hf_source=local）行为持久删除。 */
     fun deleteFlowRows(keys: List<Array<String>>) {
         Thread {
+            fun parseTs(s: String): Long {
+                val fmt1 = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.US)
+                fmt1.isLenient = false
+                val fmt2 = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                fmt2.isLenient = false
+                val fmt3 = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.US)
+                fmt3.isLenient = false
+                return runCatching { fmt1.parse(s)?.time ?: 0L }.getOrElse {
+                    runCatching { fmt2.parse(s)?.time ?: 0L }.getOrElse {
+                        runCatching { fmt3.parse(s)?.time ?: 0L }.getOrDefault(0L)
+                    }
+                }
+            }
             fun matchRow(line: String, r: Array<String>): Boolean {
                 if (line.isBlank()) return false
                 val body = r.getOrNull(2).orEmpty()
@@ -262,19 +275,6 @@ object HFState {
                     }
                 }
                 return true
-            }
-            fun parseTs(s: String): Long {
-                val fmt1 = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.US)
-                fmt1.isLenient = false
-                val fmt2 = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                fmt2.isLenient = false
-                val fmt3 = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.US)
-                fmt3.isLenient = false
-                return runCatching { fmt1.parse(s)?.time ?: 0L }.getOrElse {
-                    runCatching { fmt2.parse(s)?.time ?: 0L }.getOrElse {
-                        runCatching { fmt3.parse(s)?.time ?: 0L }.getOrDefault(0L)
-                    }
-                }
             }
             // 1) 本地历史文件持久删除
             val f = historyFile

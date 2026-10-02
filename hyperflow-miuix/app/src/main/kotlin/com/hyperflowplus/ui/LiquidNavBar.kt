@@ -91,6 +91,7 @@ fun LiquidNavBar(
 ) {
     if (items.isEmpty()) return
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val density = LocalDensity.current
 
     if (floatEnabled) {
         // 悬浮胶囊：液态玻璃 / 模糊 / 普通 三态（与 InstallerX Revived 一致）
@@ -110,7 +111,7 @@ fun LiquidNavBar(
                 // 上移 76dp（胶囊 64dp + 底部 12dp 空隙）后胶囊悬浮在内容区底部之上，
                 // 正确折射页面内容；内容区已补 88dp 底部留白，列表可滚动到胶囊上方。
                 .graphicsLayer {
-                    translationY = -with(LocalDensity.current) { 76.dp.toPx() }
+                    translationY = -with(density) { 76.dp.toPx() }
                 },
             contentAlignment = Alignment.Center,
         ) {

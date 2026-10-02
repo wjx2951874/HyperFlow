@@ -104,22 +104,25 @@ fun ConversationScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = {
-                    if (selectedRows.isNotEmpty()) {
-                        runCatching {
-                            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                            cm.setPrimaryClip(
-                                android.content.ClipData.newPlainText(
-                                    "HyperFlow",
-                                    selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
+                TextButton(
+                    text = "复制",
+                    onClick = {
+                        if (selectedRows.isNotEmpty()) {
+                            runCatching {
+                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                cm.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        "HyperFlow",
+                                        selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
+                                    )
                                 )
-                            )
-                            Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
-                }) { Text("复制") }
-                TextButton(onClick = { if (selectedRows.isNotEmpty()) showDeleteConfirm = true }) { Text("删除") }
-                TextButton(onClick = { selectionMode = false; selected = emptySet() }) { Text("取消") }
+                )
+                TextButton(text = "删除", onClick = { if (selectedRows.isNotEmpty()) showDeleteConfirm = true })
+                TextButton(text = "取消", onClick = { selectionMode = false; selected = emptySet() })
             }
         }
         LazyColumn(
