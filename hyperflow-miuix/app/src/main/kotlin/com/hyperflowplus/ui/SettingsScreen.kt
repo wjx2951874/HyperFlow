@@ -96,7 +96,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
                 ArrowPreference(
                     title = "分享运行日志",
-                    summary = "导出日志用于反馈问题\n首页连点"机型"3 次或连续闪退 3 次也会自动保存日志",
+                    summary = "导出日志用于反馈问题\n首页连点「机型」3 次或连续闪退 3 次也会自动保存日志",
                     onClick = {
                         val ctxA = ctx
                         Thread {

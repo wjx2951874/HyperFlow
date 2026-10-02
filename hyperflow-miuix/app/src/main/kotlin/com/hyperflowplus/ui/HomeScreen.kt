@@ -430,13 +430,12 @@ echo ==END""") }.getOrNull()
                     }
                 }
             }
-        }
 
         // ===== 状态数值卡（v0.5.11：InstallerX 同款两列大数值卡） =====
         val msgCount = runCatching { parseFlow(state.flow, "time_desc").sumOf { it.second.size } }.getOrDefault(0)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricCard("检测项", "$passed/6")
-            MetricCard("流转消息", "$msgCount 条")
+            MetricCard("检测项", "$passed/6", Modifier.weight(1f))
+            MetricCard("流转消息", "$msgCount 条", Modifier.weight(1f))
         }
 
         // ===== 设备信息（v0.5.11：InstallerX 同款单行信息列表；机型连点 3 次 = 捕获日志机关） =====
@@ -655,8 +654,8 @@ private fun launchKernelSu() {
 
 /** 状态数值卡（v0.5.11：InstallerX 同款——上小标签 + 下大数值） */
 @Composable
-private fun MetricCard(label: String, value: String) {
-    Card(Modifier.weight(1f).padding(vertical = 3.dp)) {
+private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier.padding(vertical = 3.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
