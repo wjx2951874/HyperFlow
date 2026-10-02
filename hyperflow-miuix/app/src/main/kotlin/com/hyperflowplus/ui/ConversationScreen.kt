@@ -76,12 +76,17 @@ fun ConversationScreen(
     var selected by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    /** 本地私有解析（与消息页同规则）：正文列表首列 M/dd HH:mm 转毫秒时间戳，用于排序 */
+    /** 时间戳解析（与消息页同规则）：content_time 有 yyyyMMddTHHmmss 和 yyyy-MM-dd HH:mm 两种格式，
+     *  字符串比较会错乱。原实现只认 M/d HH:mm（本地旧格式），导致排序全部返回 0 → 排序按钮不生效。 */
     fun timeToEpoch(raw: String): Long {
-        val t = raw.trim().replace("/", "-")
-        val p = java.text.SimpleDateFormat("M-d HH:mm", java.util.Locale.US)
-        p.isLenient = false
-        return runCatching { p.parse(t)?.time ?: raw.toLongOrNull() ?: 0L }.getOrDefault(0L)
+        if (raw.isBlank()) return 0L
+        return runCatching {
+            if (raw.contains("T")) {
+                java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
+            } else {
+                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
+            }
+        }.getOrDefault(0L)
     }
     val sorted = remember(rows, desc, state.sortVersion) {
         // 时间戳排序：兼容 content_time 两种格式（字符串比较会错乱）
@@ -96,7 +101,8 @@ fun ConversationScreen(
     }
     // 页面底 = 主题 surface（浅 #F7F7F7 / 暗 #000000）＝ 真实短信详情页底色
     Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-        // 多选操作栏：已选 N 条 + 复制 / 删除 / 取消（系统短信长按多选同款交互）
+        // 多选操作栏：已选 N 条 + 删除 / 取消（系统短信长按多选同款交互；
+        // v0.5.13 起多选不再提供复制——小米短信多选只有删除，复制在单条长按菜单）
         if (selectionMode) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -108,24 +114,7 @@ fun ConversationScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(
-                    text = "复制",
-                    onClick = {
-                        if (selectedRows.isNotEmpty()) {
-                            runCatching {
-                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                                cm.setPrimaryClip(
-                                    android.content.ClipData.newPlainText(
-                                        "HyperFlow",
-                                        selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
-                                    )
-                                )
-                                Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                )
-                // 删除：MIUI ActionMode 同款（图标 + 文字，短信 App miuix_actionbar_delete_icon 语义）
+                // 删除：MIUI ActionMode 同款（红色垃圾桶 + 红色文字，短信 App 删除语义）
                 Row(
                     modifier = Modifier
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
@@ -146,14 +135,14 @@ fun ConversationScreen(
                     Icon(
                         imageVector = Icons.Filled.Delete,
                         contentDescription = "删除",
-                        tint = MiuixTheme.colorScheme.primary,
+                        tint = MiuixTheme.colorScheme.error,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "删除",
                         style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.primary
+                        color = MiuixTheme.colorScheme.error
                     )
                 }
                 TextButton(text = "取消", onClick = { selectionMode = false; selected = emptySet() })
@@ -256,6 +245,7 @@ fun ConversationScreen(
                 if (skipCount > 0) append("\n小米端实时消息（$skipCount 条）无法删除。")
             },
             confirmText = "删除",
+            confirmDanger = true,
             onConfirm = {
                 state.deleteFlowRows(deletable)
                 showDeleteConfirm = false

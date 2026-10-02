@@ -240,9 +240,16 @@ fun HyperFlowApp() {
         // 液态玻璃 backdrop：在 Scaffold 内容区挂 layerBackdrop 捕获页面内容，供悬浮胶囊折射。
         // InstallerX 同款结构：胶囊在 bottomBar 槽（内容区之外、绘制顺序在内容之后）采样，
         // 不会把胶囊自身卷进捕获子树（v0.5.3 之前的 BarBlurHost 包整页会自采递归崩溃，弃用）。
-        // 修复"玻璃后背景变黑"：此前 backdrop 从未挂载（空采样），玻璃只剩 40% 半透明容器色，
-        // 深色模式下即表现为一块黑底；挂载后胶囊真正折射页面内容。
-        val glassBackdrop = rememberLayerBackdrop()
+        // 修复"玻璃后背景变黑"（v0.5.13 根治）：此前 backdrop 用无 block 的 rememberLayerBackdrop()
+        // —— 只录制页面 UI、不铺底色，页面内容下方空白区域在采样时是透明 → 玻璃折射区变黑；
+        // 设置页内容一直铺到底所以侥幸正常，首页/流转/消息内容短则黑。这里显式先铺 surface
+        // 底色再录内容（与 BarBlurHost 一致），任何采样区域都有白底，玻璃不再黑。
+        // onDraw 是 DrawScope（非 @Composable）回调，色值先在 Composable 作用域取好再捕获。
+        val glassSurface = MiuixTheme.colorScheme.surface
+        val glassBackdrop = rememberLayerBackdrop {
+            drawRect(glassSurface)
+            drawContent()
+        }
 
         // 导航栏/悬浮胶囊的液态折射 backdrop 由 MainActivity 挂载（见上），不再用 BarBlurHost
         // 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。

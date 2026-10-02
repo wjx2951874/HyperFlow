@@ -50,6 +50,8 @@ fun ConfirmDialog(
     countdownSec: Int = 0,
     checkboxText: String? = null,
     singleConfirmText: String? = null,
+    // v0.5.13：删除类确认按钮用 MIUI 危险红（error 色），其余保持 HyperOS 蓝
+    confirmDanger: Boolean = false,
     bottomInset: Dp = smartInset,
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit,
@@ -74,6 +76,14 @@ fun ConfirmDialog(
         } else {
             if (onCheckedConfirm != null) onCheckedConfirm(checked) else onConfirm()
         }
+    }
+    val confirmColors = if (confirmDanger) {
+        ButtonDefaults.buttonColors(
+            color = MiuixTheme.colorScheme.error,
+            contentColor = MiuixTheme.colorScheme.onError
+        )
+    } else {
+        ButtonDefaults.buttonColorsPrimary()
     }
     HyperDialog(
         title = title,
@@ -107,11 +117,11 @@ fun ConfirmDialog(
             Spacer(Modifier.height(12.dp))
         }
         if (singleConfirmText != null) {
-            // 单按钮模式：右侧蓝色（HyperOS 弹窗确认位）
+            // 单按钮模式：右侧确认位（HyperOS 弹窗确认位；confirmDanger 时红色）
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(
                     onClick = { fire() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    colors = confirmColors,
                     modifier = Modifier.width(112.dp)
                 ) {
                     Text(singleConfirmText)
@@ -129,7 +139,7 @@ fun ConfirmDialog(
                 Spacer(Modifier.width(20.dp))
                 Button(
                     onClick = { fire() },
-                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    colors = confirmColors,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(confirmText)

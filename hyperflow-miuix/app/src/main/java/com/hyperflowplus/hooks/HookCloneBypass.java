@@ -41,18 +41,23 @@ public class HookCloneBypass {
     private static final String HF_IS_CLONE = "hf_is_clone";
 
     /** 最近放行的通知 key → 时间戳：短窗口内同 key 二次出现拦截（防双链路重复流转）。
-     *  key = 包名|id|tag|标题|正文 前 96 字符（内容指纹），窗口 20s。
+     *  key = 包名|标题|正文 前 96 字符（**纯内容指纹，不含 id/tag**）——
+     *  v0.5.13：实测双流转的"两条"通常来自不同链路对同一 sbn 的重复处理，
+     *  而重构/镜像后的 sbn id/tag 可能不同，含 id/tag 的 key 会漏拦。纯内容 key 才稳。
+     *  窗口 60s（两条链路间隔毫秒级，60s 足够；同内容真消息 60s 内再次出现的概率可忽略）。
      *  除内存表外同步写跨进程共享文件：双链路若发生在不同进程（milink/dist 等），
      *  每个进程都有独立静态表，单靠内存表拦不住第二条。 */
     private static final java.util.concurrent.ConcurrentHashMap<String, Long> RELEASED_KEYS =
             new java.util.concurrent.ConcurrentHashMap<>();
-    private static final long DUP_WINDOW_MS = 20000L;
+    private static final long DUP_WINDOW_MS = 60000L;
 
-    /** 跨进程去重文件候选路径（按可写性依次尝试；App 检测脚本读取全部路径求并集） */
+    /** 跨进程去重文件候选路径（按可写性依次尝试；App 检测脚本读取全部路径求并集）。
+     *  v0.5.13：/data/misc 优先 —— dist 通知链路在 system_server（system uid），
+     *  /data/adb 与 /data/local/tmp 通常不可写；/data/misc 属 system 可写目录。 */
     private static final String[] DUP_FILE_CANDS = {
+            "/data/misc/hyperflowplus_released_keys",
             "/data/adb/hyperflowplus/released_keys",
             "/data/local/tmp/hyperflowplus_released_keys",
-            "/data/misc/hyperflowplus_released_keys",
     };
     private static volatile String dupFileWritable = null;
 
@@ -88,13 +93,37 @@ public class HookCloneBypass {
     private static void recordReleased(String key, long now) {
         RELEASED_KEYS.put(key, now);
         String f = dupFileWritable;
+        if (f == null) {
+            // install 时可能暂不可写（如 system_server 刚启动），首次放行时重试探测
+            pickDupFile();
+            f = dupFileWritable;
+        }
         if (f != null) {
             try {
-                // 追加一行；同时把过期行清掉（超过窗口的忽略即可，文件由 App 检测/下次启动清理）
                 java.io.File file = new java.io.File(f);
                 java.io.File parent = file.getParentFile();
                 if (parent != null && !parent.exists()) parent.mkdirs();
-                java.io.FileWriter w = new java.io.FileWriter(f, true);
+                // 读回旧行，仅保留窗口内的（v0.5.13：写时清理，防共享文件无限增长）；
+                // 截断到 200 行，再追加新行
+                java.util.List<String> keep = new java.util.ArrayList<>();
+                if (file.exists()) {
+                    java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(file));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        int sp = line.indexOf('|');
+                        if (sp <= 0) continue;
+                        try {
+                            if (now - Long.parseLong(line.substring(0, sp)) < DUP_WINDOW_MS) {
+                                keep.add(line);
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                        if (keep.size() > 200) break;
+                    }
+                    br.close();
+                }
+                java.io.FileWriter w = new java.io.FileWriter(f, false);
+                for (String l : keep) w.write(l + "\n");
                 w.write(now + "|" + key + "\n");
                 w.close();
             } catch (Throwable ignored) { }
@@ -142,18 +171,10 @@ public class HookCloneBypass {
                             if (!hasContent) {
                                 return chain.proceed();
                             }
-                            // group summary（flag 512）保留原逻辑，避免通知组重复折叠
-                            if ((n.flags & 512) != 0) {
-                                return chain.proceed();
-                            }
-                            // 同一分身消息可能从两条流转链路各来一次（一条经过本 hook 带【分身】前缀、
-                            // 一条原样流出）。以「包名|id|tag|标题|正文」内容指纹为 key，短窗口内第二次
-                            // 出现直接拦截 —— 从源头只流转一次。检查必须在任何放行分支（含 999）之前执行；
-                            // 且必须跨进程（见 isDuplicate/共享文件），否则另一进程的链路拦不住。
-                            // 注意：markCloneTitle 会改写标题加【分身】前缀，而两条链路可能共享同一个
-                            // Notification 对象——若 key 直接用标题，第一条记录的是"原标题"key，第二条
-                            // 进来时标题已被改成"【分身】原标题"，key 不同导致去重失效（用户实测双流转）。
-                            // 因此 key 计算前先归一化：去掉【分身】前缀再取指纹。
+                            // 去重检查前置（v0.5.13）：必须在任何放行/跳过分支之前执行——
+                            // 第二条链路可能以 group summary / 镜像等形态到达，若先去处理
+                            // summary 再回来查重就拦不住。内容指纹去掉了 id/tag（重构的 sbn
+                            // id/tag 可能不同），窗口 60s。
                             String titleTxt = "";
                             if (n != null && n.extras != null) {
                                 CharSequence t = n.extras.getCharSequence(Notification.EXTRA_TITLE);
@@ -164,14 +185,17 @@ public class HookCloneBypass {
                                 titleTxt = tStr + "|" + xStr;
                                 if (titleTxt.length() > 96) titleTxt = titleTxt.substring(0, 96);
                             }
-                            String dupKey = sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getTag()
-                                    + "|" + titleTxt;
+                            String dupKey = sbn.getPackageName() + "|" + titleTxt;
                             long now = System.currentTimeMillis();
                             if (isDuplicate(dupKey, now)) {
                                 MiflowLog.d("duplicate flow blocked: " + dupKey);
                                 return Boolean.FALSE;
                             }
                             recordReleased(dupKey, now);
+                            // group summary（flag 512）保留原逻辑，避免通知组重复折叠
+                            if ((n.flags & 512) != 0) {
+                                return chain.proceed();
+                            }
                             if (sbn.getUser() != null && sbn.getUser().hashCode() == 999) {
                                 // 分身通知：只放行，不改 user（归一会导致发送端 systemui 主空间也显示一条）。
                                 // 标题加【分身】前缀（只改流转数据，发送端已显示的通知不受影响）；

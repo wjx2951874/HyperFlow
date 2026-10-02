@@ -11,8 +11,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 93
-        versionName = "0.5.12"
+        versionCode = 94
+        versionName = "0.5.13"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -60,6 +60,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-core")
+    // v0.5.13：InstallerX 同款状态卡图标（Rounded.CheckCircleOutline / ErrorOutline 圆环家族，
+    // Google Material Icons 官方开源库 Apache-2.0；R8 会裁剪未使用图标，包体增量很小）
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.activity:activity-compose:1.9.3")
     // v0.5.12：FileProvider（分享运行日志文件）
     implementation("androidx.core:core-ktx:1.13.1")

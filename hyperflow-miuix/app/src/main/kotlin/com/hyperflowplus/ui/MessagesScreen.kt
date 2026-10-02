@@ -293,6 +293,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     if (liveCount > 0) append("\n小米端实时消息（$liveCount 条）无法删除。")
                 },
                 confirmText = "删除",
+                confirmDanger = true,
                 onConfirm = {
                     state.deleteFlowRows(localRows)
                     delTarget = null
