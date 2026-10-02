@@ -351,29 +351,17 @@ fun HyperFlowApp() {
                 }
             },
             bottomBar = {
-                // 悬浮导航栏/普通导航栏都放底部槽（InstallerX 同款）：
-                // 悬浮胶囊在内容层之外，backdrop 由胶囊内部自捕获，不卷入内容页渲染
-                if (state.navFloat) {
-                    Box(
-                        Modifier.fillMaxWidth()
-                    ) {
-                        LiquidNavBar(
-                            selectedTabIndex = tab,
-                            onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
-                            items = tabs.map { it.icon to it.title },
-                            floatEnabled = true,
-                            glassEnabled = state.glassEffect,
-                            backdrop = if (state.glassEffect) glassBackdrop else null
-                        )
-                    }
-                } else {
+                // v0.5.9 结构修正：悬浮模式 bottomBar 槽不再放胶囊。
+                // 根因：胶囊在槽内（内容区下方），backdrop 采样坐标超出内容纹理 → 采样透明黑 → 浅色模式黑底。
+                // 悬浮胶囊改由内容区叠加（浮于内容之上），坐标落在 backdrop 纹理内，玻璃折射真实页面内容。
+                if (!state.navFloat) {
                     LiquidNavBar(
                         selectedTabIndex = tab,
                         onTabSelected = { tab = it },
                         items = tabs.map { it.icon to it.title },
                         floatEnabled = false,
-                        glassEnabled = state.glassEffect,
-                        backdrop = if (state.glassEffect) glassBackdrop else null
+                        glassEnabled = false,
+                        backdrop = null
                     )
                 }
             }
@@ -381,8 +369,7 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    // 悬浮胶囊不占内容区布局（bottomBar 槽仅承载绘制），内容区补底部留白，
-                    // 列表最后一项可滚动到胶囊上方（内容上浮），不再被悬浮导航栏遮挡。
+                    // 悬浮胶囊浮于内容之上（不占布局），内容区补底部留白，列表最后一项可滚动上浮不被遮挡
                     .then(if (state.navFloat) Modifier.padding(bottom = 88.dp) else Modifier)
                 Box(
                     Modifier
@@ -401,6 +388,19 @@ fun HyperFlowApp() {
                             2 -> MessagesScreen(state, contentMod)
                             3 -> SettingsScreen(state, contentMod)
                         }
+                    }
+                }
+                // 悬浮胶囊浮于所有内容之上（在 backdrop 纹理内采样 → 玻璃底下通透、周围不被黑）
+                if (state.navFloat) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        LiquidNavBar(
+                            selectedTabIndex = tab,
+                            onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
+                            items = tabs.map { it.icon to it.title },
+                            floatEnabled = true,
+                            glassEnabled = state.glassEffect,
+                            backdrop = if (state.glassEffect) glassBackdrop else null
+                        )
                     }
                 }
             }

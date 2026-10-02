@@ -76,12 +76,15 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
     fun detect() {
         checking = true
         Thread {
-            val r = runCatching { RootExec.su("id -u 2>/dev/null | tr -d ' \n'") }.getOrNull()?.trim() == "0"
-            val ksuRaw = runCatching { RootExec.su("ksud -V 2>/dev/null || echo none") }.getOrNull()?.trim()
-            val k = r && !ksuRaw.isNullOrBlank() && ksuRaw != "none"
-            // 一次 su 读全部 LSPosed 配置（兼容 KernelSU 内嵌/模块版不同路径）
-            // ==MODULES 段 = 各 modules.list 拼接；==SCOPE 段 = 各 scope 文件拼接
-            val out = if (r) runCatching { RootExec.su("""echo ==LSP;
+            // v0.5.9：一次 su 会话完成全部检测（原 4 次独立 su 会话 → 每次 1-3s，合计可达 10s+）
+            // 段标记解析：==ID / ==KSU / ==MILINK / ==LSP / ==MODULES / ==SCOPE / ==DB / ==RUNNING / ==MAPS
+            val out = runCatching { RootExec.su("""echo ==ID;
+id -u 2>/dev/null
+echo ==KSU;
+ksud -V 2>/dev/null || echo none
+echo ==MILINK;
+pm path com.milink.service 2>/dev/null
+echo ==LSP;
 for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/modules/zygisk_lspd/config /data/adb/modules/zygisk_lspd /data/adb/modules/lspd/config /data/adb/modules/lspd /data/adb/modules/ksu_lspd /data/adb/modules/ksu_lsposed /data/adb/riru/modules/lsposed/config; do
   [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
 done
@@ -112,13 +115,22 @@ echo ==RUNNING;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 cat /data/user/0/com.hyperflowplus/files/xposed_loaded 2>/dev/null
 echo ==MAPS;
-# 运行态最强证据：模块 APK 被 LSPosed 真正 mmap 进进程（zygote 作用域进程 maps 里含模块路径）。
-# 覆盖"模块由非 root 进程（如小米互联服务）加载、写不进 /data/adb 时间戳"的场景：
-# 此前 milink 加载模块却无法写时间戳 → 重启生效后仍误报"请重启"。
-for p in /proc/[0-9]*; do
-  grep -q "modules/hyperflowplus" "${'$'}p/maps" 2>/dev/null && echo "==LOADED ${'$'}{p##*/}"
+# 运行态证据：模块 APK 被加载进进程后 maps 里有其路径。
+# v0.5.9 修复误报：本模块是 priv-app 安装（/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk），
+# 旧版只 grep "modules/hyperflowplus"（模块目录路径）永远匹配不上 → 重启生效后仍黄条"请重启"。
+# 大小写不敏感多模式单次 grep -l（一次遍历全部进程 maps，不再逐进程 for+grep）；
+# 排除本 App 自身进程（App 运行中 maps 必含自身 APK 路径，不代表模块被 LSPosed 加载），
+# 命中其它进程（zygote / milink 等作用域进程）= 模块真正被加载。
+APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
+for m in $(grep -ilE "hyperflow" /proc/[0-9]*/maps 2>/dev/null); do
+  p=${'$'}{m%/*}
+  case " ${'$'}APP_PID " in *" ${'$'}{p##*/} "*) continue;; esac
+  echo "==LOADED ${'$'}{p##*/}"
 done
-echo ==END""") }.getOrNull() else null
+echo ==END""") }.getOrNull()
+            val r = out?.substringAfter("==ID")?.substringBefore("==KSU")?.trim() == "0"
+            val ksuRaw = out?.substringAfter("==KSU")?.substringBefore("==MILINK")?.trim()
+            val k = r && !ksuRaw.isNullOrBlank() && ksuRaw != "none"
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
             if (!out.isNullOrBlank()) {
                 runCatching { RootExec.su("mkdir -p /data/adb/hyperflowplus && echo '${'$'}out' > /data/adb/hyperflowplus/detect.log") }
@@ -135,9 +147,8 @@ echo ==END""") }.getOrNull() else null
             // 以最近 48h 内加载过为准（装好后没重启=不加载=如实显示未启用）。
             val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
             // 双路径任一最近 48h 内加载过即生效（/data/adb=root 进程写入，/data/user/0/<app>=App 进程写入）
-            // 补充 MAPS 证据：非 root 作用域进程（milink 等）加载模块时写不进 /data/adb 时间戳，
-            // 但 /proc/*/maps 里能看到模块 APK 已被 mmap —— 命中即视为已生效，
-            // 消除"模块由 milink 加载生效但时间戳缺失 → 重启后仍误报'请重启'"的问题。
+            // MAPS 证据：非 root 作用域进程（milink 等）加载模块时写不进 /data/adb 时间戳，
+            // 但 /proc/*/maps 里能看到模块 APK 已被 mmap —— 命中即视为已生效。
             val mapsHit = runSeg.contains("==LOADED")
             val runStamp = runSeg.lines().mapNotNull { it.trim().toLongOrNull() }.maxOrNull()
             val runtimeOkLocal = mapsHit || (runStamp?.let {
@@ -156,10 +167,7 @@ echo ==END""") }.getOrNull() else null
             val moduleOkV = if (modEnabled) 3 else 0
             val scopeOkV2 = if (scopeOkV) 3 else 0
             val lspOkV = if (lspInstalled) 3 else 0
-            val m = runCatching {
-                val pm = RootExec.su("pm path com.milink.service 2>/dev/null")
-                !pm.isNullOrBlank() && pm.contains("package:")
-            }.getOrDefault(false)
+            val m = out?.substringAfter("==MILINK")?.substringBefore("==LSP")?.contains("package:") == true
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 rootOk = r; ksuOk = k; lspOk = lspOkV > 0
                 moduleOk = moduleOkV > 0; scopeOk = scopeOkV2 > 0; milinkOk = m

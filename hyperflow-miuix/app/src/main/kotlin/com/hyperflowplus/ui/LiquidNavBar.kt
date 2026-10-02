@@ -104,15 +104,7 @@ fun LiquidNavBar(
             else -> FloatingBottomBarMode.None
         }
         Box(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp + navBottom)
-                // 胶囊上移进内容区底部：backdrop 由 MainActivity 挂在 Scaffold 内容区 Box 上
-                // （内容区在 bottomBar 槽上方），胶囊若留在槽内，采样区域落在内容区纹理之外
-                // → 采样透明黑 → 玻璃显示黑底（浅色模式尤为明显）。
-                // 上移 76dp（胶囊 64dp + 底部 12dp 空隙）后胶囊悬浮在内容区底部之上，
-                // 正确折射页面内容；内容区已补 88dp 底部留白，列表可滚动到胶囊上方。
-                .graphicsLayer {
-                    translationY = -with(density) { 76.dp.toPx() }
-                },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp + navBottom),
             contentAlignment = Alignment.Center,
         ) {
             FloatingBottomBar(

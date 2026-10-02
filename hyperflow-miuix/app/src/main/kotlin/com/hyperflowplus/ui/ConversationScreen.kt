@@ -121,7 +121,18 @@ fun ConversationScreen(
                         }
                     }
                 )
-                TextButton(text = "删除", onClick = { if (selectedRows.isNotEmpty()) showDeleteConfirm = true })
+                TextButton(
+                    text = "删除",
+                    onClick = {
+                        if (selectedRows.isNotEmpty()) {
+                            if (selectedRows.none { it.getOrNull(3) == "local" }) {
+                                Toast.makeText(context, "小米端消息无法删除，仅支持删除本地存档", Toast.LENGTH_SHORT).show()
+                            } else {
+                                showDeleteConfirm = true
+                            }
+                        }
+                    }
+                )
                 TextButton(text = "取消", onClick = { selectionMode = false; selected = emptySet() })
             }
         }
@@ -199,15 +210,21 @@ fun ConversationScreen(
             }
         }
     }
-    // 删除确认（重要信息提前确认，系统短信删除逻辑）
+    // 删除确认（重要信息提前确认，系统短信删除逻辑；小米端实时消息不允许删除）
     if (showDeleteConfirm) {
+        val deletable = selectedRows.filter { it.getOrNull(3) == "local" }
+        val skipCount = selectedRows.size - deletable.size
         ConfirmDialog(
             show = showDeleteConfirm,
             bottomInset = 40.dp,
-            title = "删除所选 ${selectedRows.size} 条消息？",
-            content = "删除后本地保存的记录将一并移除（小米端实时流转的消息可能在下次轮询后重新出现）。",
+            title = "删除",
+            content = buildString {
+                append("确定要删除该信息吗？")
+                if (skipCount > 0) append("\n小米端实时消息（$skipCount 条）无法删除。")
+            },
+            confirmText = "删除",
             onConfirm = {
-                state.deleteFlowRows(selectedRows)
+                state.deleteFlowRows(deletable)
                 showDeleteConfirm = false
                 selectionMode = false
                 selected = emptySet()
