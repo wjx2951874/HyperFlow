@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyperflowplus.Config
@@ -40,6 +41,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TextFieldDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -93,8 +95,13 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         return
     }
-    val convos = remember(state.flow, state.archiveSort, state.sortVersion) {
-        parseFlow(state.flow, state.archiveSort)
+    val convos = remember(state.flow, state.archiveSort, state.sortVersion, state.msgLiveOnly) {
+        val parsed = parseFlow(state.flow, state.archiveSort)
+        if (state.msgLiveOnly) {
+            // 仅实时：本地存档隐藏（不删除）——设置页"仅显示实时消息"开启时生效
+            parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) != "local" } }
+                .filter { it.second.isNotEmpty() }
+        } else parsed
     }
     if (convos.isEmpty()) {
         Column(
@@ -145,6 +152,15 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
+                    // v0.5.10：对齐小米短信 MIUI 搜索栏参数（反编译实测）
+                    // 圆角 22dp（miuix_appcompat_search_view_bg_radius）、
+                    // 背景 surface_container_low（miuix_appcompat_edit_text_search_bg_color）、
+                    // 内容边距 12dp（miuix_search_padding_horizontal_common）
+                    cornerRadius = 22.dp,
+                    colors = TextFieldDefaults.textFieldColors(
+                        backgroundColor = MiuixTheme.colorScheme.surfaceContainerLow
+                    ),
+                    insideMargin = DpSize(12.dp, 16.dp),
                     label = "搜索短信",
                     useLabelAsPlaceholder = true,
                     singleLine = true,

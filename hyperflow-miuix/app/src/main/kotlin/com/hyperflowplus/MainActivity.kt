@@ -369,8 +369,8 @@ fun HyperFlowApp() {
                 val contentMod = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    // 悬浮胶囊浮于内容之上（不占布局），内容区补底部留白，列表最后一项可滚动上浮不被遮挡
-                    .then(if (state.navFloat) Modifier.padding(bottom = 88.dp) else Modifier)
+                    // v0.5.10：学 KSU/安装工具 —— 内容区铺满到底（无底部留白），
+                    // 悬浮胶囊 overlay 覆盖其上；被胶囊盖住的部分可看不到，周围内容正常显示
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -389,18 +389,23 @@ fun HyperFlowApp() {
                             3 -> SettingsScreen(state, contentMod)
                         }
                     }
-                }
-                // 悬浮胶囊浮于所有内容之上（在 backdrop 纹理内采样 → 玻璃底下通透、周围不被黑）
-                if (state.navFloat) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                        LiquidNavBar(
-                            selectedTabIndex = tab,
-                            onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
-                            items = tabs.map { it.icon to it.title },
-                            floatEnabled = true,
-                            glassEnabled = state.glassEffect,
-                            backdrop = if (state.glassEffect) glassBackdrop else null
-                        )
+                    // v0.5.10：悬浮胶囊移入内容 Box（layerBackdrop 节点【后代】）。
+                    // 根因：LayerBackdrop.drawBackdrop 用 layerCoordinates.localPositionOf(coordinates)
+                    // 换算采样位置，Compose 要求 blur 节点是 backdrop 节点的后代；
+                    // 此前胶囊是兄弟节点 → 换算失败 → 采样落空 → 玻璃黑底。
+                    // 移入子树后坐标换算合法，玻璃真实折射页面内容；采样异常时
+                    // FloatingBottomBar 的 onDrawSurface(半透明容器色 0.4f) 兜底 → 永不黑。
+                    if (state.navFloat) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                            LiquidNavBar(
+                                selectedTabIndex = tab,
+                                onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
+                                items = tabs.map { it.icon to it.title },
+                                floatEnabled = true,
+                                glassEnabled = state.glassEffect,
+                                backdrop = if (state.glassEffect) glassBackdrop else null
+                            )
+                        }
                     }
                 }
             }

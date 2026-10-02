@@ -123,6 +123,8 @@ object HFState {
     val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏
     val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃
     val debugMode: Boolean get() = cfg.optBoolean("debug_mode", false)       // 调试模式
+    // 消息第一层显示模式：false=本地+实时一起显示（默认）；true=仅显示实时获取（本地隐藏但不删除）
+    val msgLiveOnly: Boolean get() = cfg.optBoolean("msg_live_only", false)
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "time_desc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")

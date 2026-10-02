@@ -8,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -122,17 +124,53 @@ fun ConversationScreen(
                     }
                 )
                 TextButton(
-                    text = "删除",
+                    text = "复制",
                     onClick = {
                         if (selectedRows.isNotEmpty()) {
-                            if (selectedRows.none { it.getOrNull(3) == "local" }) {
-                                Toast.makeText(context, "小米端消息无法删除，仅支持删除本地存档", Toast.LENGTH_SHORT).show()
-                            } else {
-                                showDeleteConfirm = true
+                            runCatching {
+                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                cm.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        "HyperFlow",
+                                        selectedRows.joinToString("\n") { it.getOrElse(2) { "" } }
+                                    )
+                                )
+                                Toast.makeText(context, "已复制 ${selectedRows.size} 条", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
                 )
+                // 删除：MIUI ActionMode 同款（图标 + 文字，短信 App miuix_actionbar_delete_icon 语义）
+                Row(
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                        .clickable(
+                            enabled = selectedRows.isNotEmpty(),
+                            onClick = {
+                                if (selectedRows.isEmpty()) return@clickable
+                                if (selectedRows.none { it.getOrNull(3) == "local" }) {
+                                    Toast.makeText(context, "小米端消息无法删除，仅支持删除本地存档", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    showDeleteConfirm = true
+                                }
+                            }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "删除",
+                        tint = MiuixTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "删除",
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                }
                 TextButton(text = "取消", onClick = { selectionMode = false; selected = emptySet() })
             }
         }

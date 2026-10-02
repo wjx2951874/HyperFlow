@@ -51,6 +51,7 @@ public final class Config {
     public static final String KEY_DEBUG_MODE = "debug_mode";               // 调试：调试模式（保存详细日志）
     public static final String KEY_ARCHIVE_SORT = "archive_sort";           // 消息列表排序 name_asc/name_desc/time_asc/time_desc（默认 name_asc 按发送人）
     public static final String KEY_DETAIL_SORT = "detail_sort";             // 正文列表排序 desc/asc（默认 desc 新在前）
+    public static final String KEY_MSG_LIVE_ONLY = "msg_live_only";         // 消息第一层：仅显示实时获取（本地隐藏不删）/ 本地+实时一起显示
 
     // 运行时计数器（milink prefs）
     public static final String CNT_FORCE = "cnt_force";

@@ -77,7 +77,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
         checking = true
         Thread {
             // v0.5.9：一次 su 会话完成全部检测（原 4 次独立 su 会话 → 每次 1-3s，合计可达 10s+）
-            // 段标记解析：==ID / ==KSU / ==MILINK / ==LSP / ==MODULES / ==SCOPE / ==DB / ==RUNNING / ==MAPS
+            // 段标记解析：==ID / ==KSU / ==MILINK / ==LSP / ==LSPD / ==MODULES / ==SCOPE / ==DB / ==RUNNING / ==MAPS
             val out = runCatching { RootExec.su("""echo ==ID;
 id -u 2>/dev/null
 echo ==KSU;
@@ -88,6 +88,14 @@ echo ==LSP;
 for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/modules/zygisk_lspd/config /data/adb/modules/zygisk_lspd /data/adb/modules/lspd/config /data/adb/modules/lspd /data/adb/modules/ksu_lspd /data/adb/modules/ksu_lsposed /data/adb/riru/modules/lsposed/config; do
   [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
 done
+echo ==LSPD;
+# v0.5.10：框架活跃判定 = daemon 进程存活（目录残留≠框架在跑）。
+# LSPosed(zygisk) 守护进程名 lspd；KernelSU 内嵌版同名；riru 版 lspd/riru_lspd。
+# 用户"不启动 LSP"（框架禁用/未激活）时目录可能仍在 → 靠进程判定才能真正反映框架状态。
+pidof lspd 2>/dev/null
+pidof lspd_64 2>/dev/null
+ps -A 2>/dev/null | grep -w lspd | grep -v grep | awk '{print $NF}'
+ps -A 2>/dev/null | grep -iE "riru.*lspd|lspd.*daemon" | grep -v grep | awk '{print $NF}'
 echo ==MODULES;
 # 标准路径 + find 全盘遍历（覆盖所有 LSPosed 变体，如 KernelSU 内嵌版的不同目录）
 for f in /data/adb/lspd/config/modules.list /data/adb/lspd/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/lsposed/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/riru/modules/lsposed/config/modules.list; do
@@ -137,8 +145,15 @@ echo ==END""") }.getOrNull()
             }
             // 解析：LSPosed 存在 / 模块已启用（modules.list 内容=模块包名）/ 作用域已勾选（scope 目录下存在本模块文件）
             // 兼容不同 LSPosed 变体：包名/短名/大小写模糊匹配（用户已启用但检测不到 = 路径或格式差异）
-            val lspInstalled = !out.isNullOrBlank() && out.contains("==DIR") && (
-                    out.contains("lspd") || out.contains("lsposed"))
+            // v0.5.10：框架"活跃"判定升级 —— 目录存在 且 daemon(lspd) 进程存活。
+            // 用户关闭框架（zygisk 停用/未激活）时目录仍残留，旧逻辑误判框架在线 → 环境一直"正常"；
+            // 现在框架不在跑 = lspInstalled=false → 环境异常并引导启用（用户诉求：不启用就要检测出来）。
+            val lspSeg = out?.substringAfter("==LSP", "")?.substringBefore("==LSPD") ?: ""
+            val lspdSeg = out?.substringAfter("==LSPD", "")?.substringBefore("==MODULES") ?: ""
+            val lspDirHit = lspSeg.contains("==DIR") && (lspSeg.contains("lspd") || lspSeg.contains("lsposed"))
+            // daemon 存活：==LSPD 段有任意输出（pidof 的 pid 或 ps 的进程行）即框架在跑
+            val lspdAlive = lspdSeg.lines().any { it.isNotBlank() }
+            val lspInstalled = lspDirHit && lspdAlive
             val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
             val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
             val dbSeg = out?.substringAfter("==DB", "")?.substringBefore("==RUNNING") ?: ""
@@ -154,16 +169,18 @@ echo ==END""") }.getOrNull()
             val runtimeOkLocal = mapsHit || (runStamp?.let {
                 System.currentTimeMillis() - it < 48 * 3600 * 1000L
             } ?: false)
-            // 新版 LSPosed：modules_config.db（SQLite）中记录本模块 = 已启用（旧版才用 modules.list/scope 文件）
+            // v0.5.10：模块/作用域"启用"以框架活跃为前提（lspInstalled 已含 daemon 存活）——
+            // 用户关闭 LSP 框架时 db/scope 文件残留 → 旧逻辑误判已启用 → 环境一直"正常"；
+            // 现在框架没在跑 = 全部 LSP 相关项为异常（红），页面引导去启用（一键启用按钮）。
             val dbHit = dbSeg.contains("==HF_IN_DB")
             val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
-            val modEnabled = (lspInstalled && hasModName(modsSeg)) || dbHit
+            val modEnabled = lspInstalled && (hasModName(modsSeg) || dbHit)
             val scopeOkV = lspInstalled && (scopeSeg.contains("==FILE com.hyperflowplus") || scopeSeg.contains("==FILE hyperflowplus") || scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbHit)
             // 生效判定 = 配置态为准（db/scope 命中即绿）。
-            // 之前曾要求"配置态 && 运行态"才绿：xposed_loaded 时间戳由 milink（非 root）进程写入，
-            // 多数情况下无权限写成功 → runtimeOk 恒 false → 用户明明勾选了却永远不绿（爆红）。
-            // 运行态只用于黄条提示（已启用但未重启 zygote 则提示重启），不再决定红绿：
-            // 3 = 正常(绿) / 0 = 异常(红)；pendingRestart 黄条单独给"配置 OK 但未加载"的提示
+            // v0.5.10：不再设"配置 OK 但未加载"的黄条 —— 用户诉求"LSP 不动，重启一次刷完就完事"：
+            // 框架活跃(daemon)+模块配置命中 = 直接绿；框架不活跃 = 异常并要求启用。
+            // 运行时证据（maps/时间戳）仅作内部参考，不再驱动红绿/黄条（曾因 milink 非 zygote 进程
+            // 不注入、App 无 root 写时间戳失败等导致"重启后仍黄"的假阴性）。
             val moduleOkV = if (modEnabled) 3 else 0
             val scopeOkV2 = if (scopeOkV) 3 else 0
             val lspOkV = if (lspInstalled) 3 else 0
@@ -200,9 +217,8 @@ echo ==END""") }.getOrNull()
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
         val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
-        // 配置态绿、但模块尚未被加载（xposed_loaded 时间戳超过 48h 或缺失）= 需要重启 zygote 生效。
-        // 此时仍显示绿，仅顶部黄条提示重启；避免"勾选了还爆红"的误判。
-        val pendingRestart = !runtimeOk && (lspState == 3 || moduleState == 3 || scopeState == 3)
+        // v0.5.10：已移除"配置 OK 但未加载"黄条（重启一次即生效，不再二次重启）；
+        // LSP 框架没在跑（daemon 死）= lsp/module/scope 全红 → 环境异常并引导一键启用。
         val level: Color = when {
             !rootOk -> CRed
             allOk -> CGreen
@@ -214,9 +230,9 @@ echo ==END""") }.getOrNull()
             else -> "部分环境未就绪"
         }
         val passed = listOf(rootOk, ksuOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
-        // 已启用但运行态未加载：黄色提示重启（不爆红，如实反映"已勾选但未生效"）
-        val pendingHint = if (pendingRestart)
-            "LSP 模块已启用但尚未生效，请重启设备后重新检测" else null
+        // 框架未运行时的引导提示（用户诉求：不启用就要马上检测出来并要求启用）
+        val pendingHint = if (!rootOk || lspState == 0)
+            "LSP 框架未在运行，请启用后重启设备生效" else null
 
         Row(
             modifier = Modifier
