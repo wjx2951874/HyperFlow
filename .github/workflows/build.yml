@@ -68,6 +68,7 @@ jobs:
           cp "$APK" flash/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk
           cp "$APK" flash/HyperFlowPlus.apk
           cp hyperflow-miuix/ksu-module/service.sh flash/service.sh
+          cp hyperflow-miuix/ksu-module/customize.sh flash/customize.sh
           sed "s/^versionCode=.*/versionCode=${VERSION_CODE}/; s/^version=.*/version=${VERSION_NAME}/; s/^name=.*/name=HyperFlow/" \
             hyperflow-miuix/ksu-module/module.prop > flash/module.prop
           cp hyperflow-miuix/ksu-module/README.txt flash/README.txt

@@ -72,35 +72,52 @@ public class HookRemoteOpen {
     /** 分身空间用户 id（MIUI 应用双开基于 user 999） */
     private static final int USER_CLONE = 999;
 
+    /**
+     * 双类 hook（v0.6.0）：Android 12+ 的 Activity 启动主路径在
+     * ActivityTaskManagerService（ATMS），AMS.startActivity 在多数机型已不被调用。
+     * 只 hook AMS 时 milink 的"远程打开"请求会漏网 → 先按 user 0 打开主空间应用（"先开 0"），
+     * 后续再被某个重载改写才开 999（"再开 999"）。两处都 hook 后，第一发请求
+     * 就被改到 999，主空间 0 不再出现。
+     *
+     * 幂等性：改写 userId=999 后，AMS 内部委托给 ATMS 的调用携带 user 999，
+     * 两个 hook 的 redirectToClone 都会因 userId != 0（==999）直接 proceed，
+     * 不会二次改写/二次重发 → 天然幂等，不会"双 999"。
+     */
     public static void installSystem(ClassLoader cl) {
-        try {
-            Class<?> ams = Class.forName("com.android.server.am.ActivityManagerService", false, cl);
-            int found = 0;
-            for (Method m : ams.getDeclaredMethods()) {
-                // 拦截所有带 Intent 参数的 startActivity / startActivityAsUser（多版本签名兜底）
-                if (!m.getName().equals("startActivity") && !m.getName().equals("startActivityAsUser")) {
-                    continue;
+        String[] hostClasses = {
+                "com.android.server.am.ActivityManagerService",   // 经典路径
+                "com.android.server.wm.ActivityTaskManagerService" // Android 12+ 主路径（v0.6.0 补）
+        };
+        for (String host : hostClasses) {
+            try {
+                Class<?> cls = Class.forName(host, false, cl);
+                int found = 0;
+                for (Method m : cls.getDeclaredMethods()) {
+                    // 拦截所有带 Intent 参数的 startActivity / startActivityAsUser（多版本签名兜底）
+                    if (!m.getName().equals("startActivity") && !m.getName().equals("startActivityAsUser")) {
+                        continue;
+                    }
+                    if (!hasIntentParam(m)) {
+                        continue;
+                    }
+                    try {
+                        m.setAccessible(true);
+                        XposedEntry.get().hook(m)
+                                .setExceptionMode(ExceptionMode.PROTECTIVE)
+                                .intercept(new Hooker() {
+                                    @Override
+                                    public Object intercept(Chain chain) throws Throwable {
+                                        return redirectToClone(chain);
+                                    }
+                                });
+                        found++;
+                    } catch (Throwable ignored) {
+                    }
                 }
-                if (!hasIntentParam(m)) {
-                    continue;
-                }
-                try {
-                    m.setAccessible(true);
-                    XposedEntry.get().hook(m)
-                            .setExceptionMode(ExceptionMode.PROTECTIVE)
-                            .intercept(new Hooker() {
-                                @Override
-                                public Object intercept(Chain chain) throws Throwable {
-                                    return redirectToClone(chain);
-                                }
-                            });
-                    found++;
-                } catch (Throwable ignored) {
-                }
+                MiflowLog.i("HookRemoteOpen[" + host + "] installed, hooked " + found + " startActivity methods");
+            } catch (Throwable t) {
+                MiflowLog.w("HookRemoteOpen[" + host + "] not available: " + t.getMessage());
             }
-            MiflowLog.i("HookRemoteOpen[system] installed, hooked " + found + " startActivity methods");
-        } catch (Throwable t) {
-            MiflowLog.e("HookRemoteOpen[system] install failed", t);
         }
     }
 
