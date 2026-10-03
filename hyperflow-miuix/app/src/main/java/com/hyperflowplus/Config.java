@@ -168,7 +168,7 @@ public final class Config {
     }
 
     public static boolean isForceTransferEnabled() {
-        return getBool(KEY_FORCE_TRANSFER, true);
+        return getBool(KEY_FORCE_TRANSFER, false);
     }
 
     public static boolean isCloneTransferEnabled() {

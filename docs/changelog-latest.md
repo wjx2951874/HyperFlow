@@ -1,3 +1,10 @@
+# v0.6.9
+
+1. 来电流转恢复 milink 原始逻辑（只改电话，其他通知本轮不动）：
+   - 来电通知（CATEGORY_CALL / incallui / dialer / phone）在流转门控 isDeviceSupported 直接交给系统原生判定——亮屏拒绝流转、锁屏按系统分流（OS4 走 voip 全屏接听 / OS3 降级通知卡片），模块零干预；
+   - 删除 KeyguardManager / PowerManager 模拟锁屏 hook（上一版实为强制放行：isDeviceSupported 一律 true + 模拟锁屏，导致系统原本亮屏拒绝的来电卡片也被流转，且锁屏双份、接听后多一条"电话"通知）；
+   - 其他通知维持 v0.6.8 的亮屏强制流转（功能①），运行状态卡拦截保留。
+
 # v0.6.8
 
 1. 首页大标题重做：改为 Miuix 官方 TopAppBar 大标题模式（学 KernelSU 管理器 / HyperModifier）——标题字号更大、位置更靠下，随内容滚动平滑收起居中；四个 tab（首页/流转/消息/设置）统一，切 tab 自动重置展开。

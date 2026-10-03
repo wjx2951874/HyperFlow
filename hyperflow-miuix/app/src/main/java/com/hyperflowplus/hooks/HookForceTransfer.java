@@ -1,6 +1,5 @@
 package com.hyperflowplus.hooks;
 
-import android.app.KeyguardManager;
 import android.service.notification.StatusBarNotification;
 
 import com.hyperflowplus.Config;
@@ -36,84 +35,11 @@ import io.github.libxposed.api.XposedInterface.Hooker;
 public class HookForceTransfer {
 
     public static void install(ClassLoader cl) {
-        // 主方案：覆盖流转门控，模拟锁屏
-        try {
-            Class<?> handler = Class.forName("com.xiaomi.dist.notification.listener.handle.NotificationHandler", false, cl);
-            Class<?> devInfo = Class.forName("com.xiaomi.dist.notification.common.data.DeviceSubInfo", false, cl);
-            Method m = handler.getDeclaredMethod("isDeviceSupported", StatusBarNotification.class, devInfo);
-            m.setAccessible(true);
-            XposedEntry.get().hook(m)
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept(new Hooker() {
-                        @Override
-                        public Object intercept(Chain chain) throws Throwable {
-                            if (!Config.isForceTransferEnabled()) {
-                                return chain.proceed();
-                            }
-                            StatusBarNotification sbn = (StatusBarNotification) chain.getArg(0);
-                            if (isRunnableStateCard(sbn)) {
-                                MiflowLog.d("skip runnable-state card (not a real notification)");
-                                return Boolean.FALSE;
-                            }
-                            // v0.5.15.4：来电不再短路（改回原版分流，去重交给 milink），
-                            // 亮屏/锁屏一律放行，等效"设备已锁屏可流转"
-                            Config.bump(Config.CNT_FORCE);
-                            MiflowLog.d("force transfer: gate overridden (screen-on released, call included)");
-                            return Boolean.TRUE;
-                        }
-                    });
-            MiflowLog.i("HookForceTransfer[gate] installed");
-        } catch (Throwable t) {
-            MiflowLog.e("HookForceTransfer[gate] install failed", t);
-        }
-
-        // 兜底：KeyguardManager 层（调用栈含 milink 流转任意类即模拟锁屏，
-        // 覆盖通知链路 + 广播链路——来电 voip 全屏需要广播链路也"看到"锁屏）
-        try {
-            Method m = KeyguardManager.class.getDeclaredMethod("isKeyguardLocked");
-            m.setAccessible(true);
-            XposedEntry.get().hook(m)
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept(new Hooker() {
-                        @Override
-                        public Object intercept(Chain chain) throws Throwable {
-                            if (!Config.isForceTransferEnabled()) {
-                                return chain.proceed();
-                            }
-                            if (calledFromMilink()) {
-                                return Boolean.TRUE;
-                            }
-                            return chain.proceed();
-                        }
-                    });
-            MiflowLog.i("HookForceTransfer[keyguard] installed");
-        } catch (Throwable t) {
-            MiflowLog.e("HookForceTransfer[keyguard] install failed", t);
-        }
-
-        // v0.5.15.4：模拟"灭屏"——来电广播链路在亮屏时可能因 PowerManager.isInteractive()
-        // 判定拒绝流转（与 isKeyguardLocked 并列的门控），milink 调用栈内强制返回 false
-        try {
-            Method m = android.os.PowerManager.class.getDeclaredMethod("isInteractive");
-            m.setAccessible(true);
-            XposedEntry.get().hook(m)
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept(new Hooker() {
-                        @Override
-                        public Object intercept(Chain chain) throws Throwable {
-                            if (!Config.isForceTransferEnabled()) {
-                                return chain.proceed();
-                            }
-                            if (calledFromMilink()) {
-                                return Boolean.FALSE;
-                            }
-                            return chain.proceed();
-                        }
-                    });
-            MiflowLog.i("HookForceTransfer[interactive] installed");
-        } catch (Throwable t) {
-            MiflowLog.e("HookForceTransfer[interactive] install failed", t);
-        }
+        // v0.6.9：完全恢复系统原逻辑（用户确认）—— 不装任何 hook，流转门控 100% 交回系统。
+        // 系统原生行为：亮屏拒绝流转（isDeviceSupported=false）、锁屏放行（true）；
+        // 来电分流系统原生处理（锁屏 OS4 走 voip 全屏、OS3 降级通知；亮屏不流转）。
+        // 此前"模拟锁屏/强制放行"导致系统原本不会流转的通知也被流转，全部去除。
+        MiflowLog.i("HookForceTransfer: reverted to pure stock logic (no hook installed)");
     }
 
     /**
@@ -149,14 +75,19 @@ public class HookForceTransfer {
         }
     }
 
-    /** 只要调用栈中出现 milink 流转监听/处理/广播类即放行（等效模拟锁屏） */
-    private static boolean calledFromMilink() {
-        StackTraceElement[] st = Thread.currentThread().getStackTrace();
-        for (StackTraceElement e : st) {
-            if (e.getClassName().startsWith("com.xiaomi.dist.notification")) {
+    /** 是否为来电相关通知：类别 call 或包名 incallui/dialer/phone（v0.6.9 移植 v0.5.15.3） */
+    private static boolean isCallSbn(StatusBarNotification sbn) {
+        try {
+            String pkg = sbn.getPackageName();
+            if (pkg != null && (pkg.contains("incallui") || pkg.contains("dialer")
+                    || "com.android.phone".equals(pkg))) {
                 return true;
             }
+            android.app.Notification n = sbn.getNotification();
+            return n != null && n.category != null
+                    && n.category.equals(android.app.Notification.CATEGORY_CALL);
+        } catch (Throwable t) {
+            return false;
         }
-        return false;
     }
 }
