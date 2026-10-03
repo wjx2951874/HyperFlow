@@ -115,10 +115,15 @@ echo ==P_MILINK;
 cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
+SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
+MLPID=$(ps -A 2>/dev/null | grep -E ' com.milink.service$' | awk '{print $1}' | head -1)
 for m in $(grep -ilE "hyperflow" /proc/[0-9]*/maps 2>/dev/null); do
   p=${'$'}{m%/*}
-  case " ${'$'}APP_PID " in *" ${'$'}{p##*/} "*) continue;; esac
-  echo "==LOADED ${'$'}{p##*/}"
+  pid=${'$'}{p##*/}
+  case " ${'$'}APP_PID " in *" ${'$'}pid "*) continue;; esac
+  case " ${'$'}SYSPID " in *" ${'$'}pid "*) echo "==SYS_LOADED"; continue;; esac
+  case " ${'$'}MLPID " in *" ${'$'}pid "*) echo "==ML_LOADED"; continue;; esac
+  echo "==LOADED ${'$'}pid"
 done
 echo ==END""") }.getOrNull()
             val r = out?.substringAfter("==ID")?.substringBefore("==KSU")?.trim() == "0"
@@ -127,13 +132,20 @@ echo ==END""") }.getOrNull()
             val m = out?.substringAfter("==MILINK")?.substringBefore("==LSPD")?.contains("package:") == true
             val lspdSeg = out?.substringAfter("==LSPD")?.substringBefore("==P_ADB") ?: ""
             val lspdAlive = lspdSeg.lines().any { it.isNotBlank() }
-            // 双探针：android 作用域（system_server）与 milink 作用域（小米互联）各自 48h 内注入证据
+            val fresh = { t: Long? -> t != null && System.currentTimeMillis() - t < 48 * 3600 * 1000L }
+            // v0.5.15.3：注入证据以实时 maps 为主（模块 dex 出现在哪个进程），文件探针兜底。
+            // 探针文件不可靠：/data/adb 只有 root 能写，而 system_server uid=system(1000) 写不进去
+            // → 注入明明生效但探针永远缺失 → 检测永远误报"未勾选"。maps 证据无权限问题。
+            val mapsSeg = out?.substringAfter("==MAPS") ?: ""
+            val sysLoaded = mapsSeg.contains("==SYS_LOADED")
+            val mlLoaded = mapsSeg.contains("==ML_LOADED")
+            val mapsHit = mapsSeg.contains("==LOADED") || sysLoaded || mlLoaded
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
             val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==MAPS")?.trim()?.toLongOrNull()
-            val fresh = { t: Long? -> t != null && System.currentTimeMillis() - t < 48 * 3600 * 1000L }
-            val androidInjected = fresh(adbProbe)
-            val milinkInjected = fresh(milinkProbe)
-            val mapsHit = out?.substringAfter("==MAPS")?.contains("==LOADED") == true
+            // 系统框架（system_server 注入）：maps 实时证据优先，探针 48h 内命中兜底
+            val androidInjected = sysLoaded || fresh(adbProbe)
+            // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
+            val milinkInjected = mlLoaded || fresh(milinkProbe)
             // 框架活跃 = daemon 存活，或模块已被注入任意进程（maps 命中必然框架在跑）
             val lspInstalled = lspdAlive || mapsHit
             // 模块已启用 = 框架在跑 且 有运行时证据（任一进程注入）

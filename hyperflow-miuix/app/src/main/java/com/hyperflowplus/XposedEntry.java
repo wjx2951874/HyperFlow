@@ -19,9 +19,10 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
  *   module.prop    → minApiVersion=101 / targetApiVersion=102
  *   scope.list     → com.milink.service（旧版框架作用域文件）
  *
- * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 2 项：
+ * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 3 项：
  *   com.milink.service（小米互联：通知流转 6 个 hook，写 milink 数据目录探针）
- *   android（system_server：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen，写 /data/adb 探针）
+ *   android（经典 LSPosed 的系统框架标识：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen，写 /data/adb 探针）
+ *   system（新版 Vector 的系统框架标识，JingMatrix 分支用 system 而非 android）
  * 本 App（com.hyperflowplus）自身进程无需被 hook，不在推荐作用域内。
  *
  * 入口在 onPackageLoaded 中按包名分发装配 hook：

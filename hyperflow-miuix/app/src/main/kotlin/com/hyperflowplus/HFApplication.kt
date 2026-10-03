@@ -89,7 +89,9 @@ class HFApplication : Application() {
                             "echo '==MODULES_LIST==';\n" +
                             "cat /data/adb/lspd/config/modules.list 2>/dev/null; cat /data/adb/modules/lsposed/config/modules.list 2>/dev/null;\n" +
                             "echo '==DB_SCOPE==';\n" +
-                            "for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do [ -f \"\$db\" ] && { echo \"-- \$db\"; sqlite3 \"\$db\" 'SELECT m.module_pkg_name,s.app_pkg_name,s.user_id FROM modules m LEFT JOIN scope s ON s.mid=m.mid' 2>/dev/null; }; done;\n" +
+                            "if command -v sqlite3 >/dev/null 2>&1; then " +
+                            "for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do [ -f \"\$db\" ] && { echo \"-- \$db\"; sqlite3 \"\$db\" 'SELECT m.module_pkg_name,s.app_pkg_name,s.user_id FROM modules m LEFT JOIN scope s ON s.mid=m.mid' 2>/dev/null; }; done; " +
+                            "else echo '(环境无 sqlite3 命令，db 无法脚本写入，需在 LSPosed UI 手动勾选)'; fi;\n" +
                             "echo '==FRAMEWORK==';\n" +
                             "pm list packages 2>/dev/null | grep -iE 'lsp|matrix|vector|xposed';\n" +
                             "ps -A 2>/dev/null | grep -iE 'lspd|zygisk|ksud' | head -5;\n" +
