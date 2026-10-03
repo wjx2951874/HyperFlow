@@ -109,14 +109,12 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf<Lib?>(null) }
 
     Column(modifier.fillMaxSize()) {
-        // V0.6.15：Miuix TopAppBar（同首页大标题样式，标题字号/间距与首页一致）
-        // + 统一 MIUI 返回箭头（MiuixBackButton，42dp）
+        // V0.6.15.1：KSU 同款单行标题顶栏（无 largeTitle）——顶栏矮、箭头贴左上、
+        // 标题紧随箭头同一行（字号即 Miuix 普通标题字号，与二级页一致）
         TopAppBar(
             title = "开放源代码许可",
-            largeTitle = "开放源代码许可",
             color = MiuixTheme.colorScheme.surface,
             titleColor = MiuixTheme.colorScheme.onSurface,
-            largeTitleColor = MiuixTheme.colorScheme.onSurface,
             navigationIcon = { MiuixBackButton(onClick = onBack) }
         )
 

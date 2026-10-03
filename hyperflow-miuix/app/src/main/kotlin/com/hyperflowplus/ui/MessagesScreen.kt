@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -104,7 +105,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         return
     }
-    val convos = remember(state.flow, state.archiveSort, state.sortVersion, state.msgMode, state.deletedVersion) {
+    val convos = remember(state.flow, state.localFlow, state.archiveSort, state.sortVersion, state.msgMode, state.deletedVersion) {
         // V0.6.15 删除防回写：已删消息（小米端还能实时搜到的）过滤掉 → 本地隐藏不再出现
         val raw = state.flow.lines()
             .filterNot { line -> state.isDeletedFlowLine(line) }
@@ -114,9 +115,15 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             // 仅显示实时：本地存档隐藏（不删除）
             "live" -> parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) != "local" } }
                 .filter { it.second.isNotEmpty() }
-            // 仅显示本地：小米端实时行隐藏，只留本地存档（可删除）
-            "local" -> parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) == "local" } }
-                .filter { it.second.isNotEmpty() }
+            // V0.6.15.1：仅显示本地 → 直接解析本地历史文件（localFlow），
+            // 不再从合并后的 flow 过滤（否则小米端实时记录还在时同 id 被 live 行覆盖 → 显示为空）
+            "local" -> {
+                val lRaw = state.localFlow.lines()
+                    .filterNot { line -> state.isDeletedFlowLine(line) }
+                    .joinToString("\n")
+                parseFlow(lRaw, state.archiveSort)
+                    .filter { it.second.isNotEmpty() }
+            }
             // 默认：实时与本地合并显示
             else -> parsed
         }
@@ -232,37 +239,57 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // v0.6.14：placeholder"搜索消息"字号调小（textStyle 覆盖，跟随输入样式）
-                InputField(
-                    query = query,
-                    onQueryChange = { query = it },
-                    onSearch = {},
-                    expanded = false,
-                    onExpandedChange = {},
-                    modifier = Modifier.weight(1f),
-                    label = "搜索消息",
-                    textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "搜索",
-                            tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
+                // V0.6.15.1：占位"搜索消息"改为视觉居中（学小米短信：图标+文字整体居中）。
+                // Miuix InputField 的 label 靠左 → 弃用 label，query 为空时叠一层居中占位层
+                //（纯视觉，无点击拦截 → 事件穿透给输入框，聚焦/键盘不受影响）
+                Box(modifier = Modifier.weight(1f)) {
+                    InputField(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onSearch = {},
+                        expanded = false,
+                        onExpandedChange = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "",
+                        textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                        leadingIcon = {},
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "清空",
+                                    tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { query = "" }
+                                )
+                            }
+                        }
+                    )
+                    if (query.isEmpty()) {
+                        // 占位层：靠左但不像 label 原版贴框最左（学小米短信：图标距框左缘一段距离）
+                        Row(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(start = 20.dp),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "清空",
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "搜索",
                                 tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { query = "" }
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "搜索消息",
+                                style = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                             )
                         }
                     }
-                )
+                }
                 // V0.6.15：显示模式设置已移至页面右上角（MainActivity TopAppBar actions，
                 // 排序图标右侧）；搜索框独占一行，保持小米短信搜索栏干净样式
             }

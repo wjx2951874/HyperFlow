@@ -41,6 +41,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 import java.text.SimpleDateFormat
@@ -124,39 +125,33 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        // 顶部栏：统一 MIUI 返回箭头（V0.6.15）+ 标题 + 数量
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            MiuixBackButton(onClick = onBack)
-            Text(
-                "日志列表",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                "${logs.size} 份",
-                fontSize = 13.sp,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            // v0.5.15.5：一键删除全部（数量 > 0 时显示，删除前弹确认）
-            if (logs.isNotEmpty()) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "删除全部",
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .clickable { confirmDelAll = true }
+        // V0.6.15.1：顶部栏改用 Miuix TopAppBar（KSU 单行样式，与开源许可页完全一致：
+        // 箭头贴左上 32dp、标题同行、右侧 actions 放数量+一键删除）
+        TopAppBar(
+            title = "日志列表",
+            color = MiuixTheme.colorScheme.surface,
+            titleColor = MiuixTheme.colorScheme.onSurface,
+            navigationIcon = { MiuixBackButton(onClick = onBack) },
+            actions = {
+                Text(
+                    "${logs.size} 份",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(end = 8.dp)
                 )
+                // v0.5.15.5：一键删除全部（数量 > 0 时显示，删除前弹确认）
+                if (logs.isNotEmpty()) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "删除全部",
+                        tint = MiuixTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .clickable { confirmDelAll = true }
+                    )
+                }
             }
-        }
+        )
         Spacer(Modifier.height(2.dp))
 
         if (logs.isEmpty()) {

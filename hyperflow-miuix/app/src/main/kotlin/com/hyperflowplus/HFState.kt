@@ -15,6 +15,9 @@ object HFState {
 
     var cfg by mutableStateOf(JSONObject())
     var flow by mutableStateOf("")
+    // V0.6.15.1：仅本地数据源 —— 直接读本地历史文件（local 行），
+    // 不经 mergeFlow 合并覆盖（否则小米端实时记录还在时同 id 被 live 行覆盖 → 仅本地过滤为空）
+    var localFlow by mutableStateOf("")
     var rootInfo by mutableStateOf("su 不可用")
     var loading by mutableStateOf(false)
     var subtitle by mutableStateOf("澎湃OS 互联通知流转增强")
@@ -78,13 +81,18 @@ object HFState {
                     var display: String? = null
                     val live = f != null && f.isNotBlank()
                     if (live) {
+                        // V0.6.15.1：归档开关（archiveApp）开着才存本地；关着不存
+                        val hist = if (archiveApp) readHistory() else null
                         if (archiveApp) {
-                            val hist = readHistory()
-                            display = if (hist != null) mergeFlow(hist, tagSource(f, "live")) else tagSource(f, "live")
                             persistHistory(f)
-                        } else {
-                            display = tagSource(f, "live")
+                            // 同步"仅本地"数据源（local 行，不合并覆盖）
+                            val lf = readHistory()
+                            handler.post { if (lf != null && lf != localFlow) localFlow = lf }
                         }
+                        display = if (hist != null) mergeFlow(hist, tagSource(f, "live")) else tagSource(f, "live")
+                    } else {
+                        // 小米端实时记录清空/暂无数据 → 本地历史兜底显示（仅本地模式也能看）
+                        display = readHistory()
                     }
                     val finalDisplay = display
                     handler.post {
@@ -436,18 +444,22 @@ object HFState {
             }
             // ===== 后台重查（真值） =====
             saveCache(finalCfg, finalFlow, finalDev)   // 文件 IO 留在后台线程
+            // V0.6.15.1：归档开关开着才并入/初始化本地历史；关着本地数据源为空
+            val archOn = finalCfg != null && runCatching { JSONObject(finalCfg).optBoolean("archive_app", false) }.getOrDefault(false)
+            val hist = if (archOn) readHistory() else null
             val mergedFlow = if (finalFlow != null) {
-                if (finalCfg != null && runCatching { JSONObject(finalCfg).optBoolean("archive_app", false) }.getOrDefault(false)) {
-                    val hist = readHistory()
-                    if (hist != null) mergeFlow(hist, tagSource(finalFlow, "live")) else tagSource(finalFlow, "live")
-                } else {
-                    tagSource(finalFlow, "live")
-                }
-            } else null
+                if (hist != null) mergeFlow(hist, tagSource(finalFlow, "live")) else tagSource(finalFlow, "live")
+            } else {
+                // 小米端实时记录为空 → 本地历史兜底（仅本地模式也能看）
+                hist
+            }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 if (finalCfg != null) cfg = runCatching { JSONObject(finalCfg) }.getOrDefault(JSONObject())
                 if (mergedFlow != null) flow = mergedFlow
                 else if (finalFlow != null) flow = finalFlow
+                // V0.6.15.1：初始化"仅本地"数据源（local 行）
+                val lf = if (archOn) readHistory() else null
+                if (lf != null && lf != localFlow) localFlow = lf
                 rootInfo = finalRoot
                 miuiOsVersion = fMiui
                 androidVersion = fAndroid

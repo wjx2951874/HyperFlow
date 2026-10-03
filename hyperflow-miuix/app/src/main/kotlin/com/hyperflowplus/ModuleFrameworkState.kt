@@ -69,18 +69,22 @@ object ModuleFrameworkState {
     }
 
     /**
-     * V0.6.15："重新检测"实时补刷作用域（等价退出重进效果）。
+     * V0.6.15.1："重新检测"实时补刷作用域（等价退出重进效果）。
      * service 绑定只发生在 App 启动时，作用域列表是绑定瞬间快照；
      * 用户在 LSPosed 里勾选后不重启 App，旧快照不更新 → 首页三项不变。
      * 此处用 shell 实时读作用域文件（路径/格式已在本设备验证：
      * /data/adb/lspd/config/scope/com.hyperflowplus，每行一个包名），
      * 仅刷新 scope，connected/apiVersion 仍由 service 事件保证（模块真禁用 → onServiceDied 归零）。
+     * @param scopeLines 作用域文件内容（可为空 = 用户已全部取消勾选）
+     * @param fileExists 作用域文件是否存在；不存在时保留 service 快照（无法判断，不覆盖）
      */
-    fun refreshScopeFromShell(scopeLines: List<String>) {
+    fun refreshScopeFromShell(scopeLines: List<String>, fileExists: Boolean) {
         val cur = mutableSnapshot.value
         if (!cur.connected) return
+        if (!fileExists) return
         val scopes = scopeLines.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toSet()
-        if (scopes.isNotEmpty() && scopes != cur.scope) {
+        // 允许空集合覆盖：全取消勾选 = 空 scope = 未就绪（原 isNotEmpty 条件导致永远刷不进 → 取消勾选仍显示就绪）
+        if (scopes != cur.scope) {
             mutableSnapshot.value = cur.copy(scope = scopes)
         }
     }

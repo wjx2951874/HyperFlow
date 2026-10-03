@@ -487,7 +487,12 @@ fun HyperFlowApp() {
                 if (!state.navFloat) {
                     LiquidNavBar(
                         selectedTabIndex = tab,
-                        onTabSelected = { tab = it },
+                        onTabSelected = {
+                            // V0.6.15：日志列表/开源许可整页模式下，点底部导航先退出二级页再切 tab
+                            showLogs = false
+                            showLicenses = false
+                            tab = it
+                        },
                         items = tabs.map { it.icon to it.title },
                         floatEnabled = false,
                         glassEnabled = false,
@@ -551,7 +556,13 @@ fun HyperFlowApp() {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                             LiquidNavBar(
                                 selectedTabIndex = tab,
-                                onTabSelected = { i -> if (conversation != null) state.currentConversation = null; tab = i },
+                                onTabSelected = { i ->
+                                    // V0.6.15.1：悬浮胶囊点击同样先退出日志/许可二级页再切 tab
+                                    showLogs = false
+                                    showLicenses = false
+                                    if (conversation != null) state.currentConversation = null
+                                    tab = i
+                                },
                                 items = tabs.map { it.icon to it.title },
                                 floatEnabled = true,
                                 glassEnabled = state.glassEffect,

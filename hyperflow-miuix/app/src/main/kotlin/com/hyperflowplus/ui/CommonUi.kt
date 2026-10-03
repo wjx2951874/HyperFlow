@@ -23,14 +23,14 @@ fun GroupTitle(text: String) {
     )
 }
 
-/** 统一 MIUI 返回箭头（V0.6.15）：MiuixIcons.Back，42dp 同 MIUI 标准，所有二级页共用 */
+/** 统一 MIUI 返回箭头（V0.6.15）：MiuixIcons.Back，32dp 左上标准尺寸，所有二级页共用 */
 @Composable
 fun MiuixBackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     IconButton(onClick = onClick, modifier = modifier) {
         Icon(
             imageVector = MiuixIcons.Back,
             contentDescription = "返回",
-            modifier = Modifier.size(42.dp)
+            modifier = Modifier.size(32.dp)
         )
     }
 }

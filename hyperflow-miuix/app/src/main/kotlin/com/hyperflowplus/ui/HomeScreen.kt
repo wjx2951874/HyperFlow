@@ -117,6 +117,8 @@ echo ==P_MILINK;
 cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
 echo ==SCOPE;
 cat /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
+echo ==SCOPE_EXISTS;
+[ -f /data/adb/lspd/config/scope/com.hyperflowplus ] && echo yes || echo no
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
@@ -146,14 +148,15 @@ echo ==END""") }.getOrNull()
             val mapsHit = mapsSeg.contains("==LOADED") || sysLoaded || mlLoaded
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
             val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==SCOPE")?.trim()?.toLongOrNull()
-            // V0.6.15："重新检测"实时补刷作用域快照（等价退出重进效果）——
+            // V0.6.15.1："重新检测"实时补刷作用域快照（等价退出重进效果）——
             // service 绑定只在启动时发生，作用域是绑定瞬间快照；勾选后不重启 App 不更新。
-            // 这里用 shell 实时读 scope 文件刷进 ModuleFrameworkState（connected 仍由 service 保证）
-            val scopeLines = out?.substringAfter("==SCOPE")?.substringBefore("==MAPS")
-                ?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-            if (scopeLines.isNotEmpty()) {
-                com.hyperflowplus.ModuleFrameworkState.refreshScopeFromShell(scopeLines)
-            }
+            // 这里用 shell 实时读 scope 文件刷进 ModuleFrameworkState（connected 仍由 service 保证）。
+            // 支持"全取消勾选"= 空 scope = 未就绪（文件存在时以 shell 内容为准覆盖 service 旧快照）
+            val scopeSeg = out?.substringAfter("==SCOPE")?.substringBefore("==SCOPE_EXISTS") ?: ""
+            val scopeLines = scopeSeg.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            val scopeFileExists = out?.substringAfter("==SCOPE_EXISTS")?.substringBefore("==MAPS")
+                ?.trim()?.contains("yes") == true
+            com.hyperflowplus.ModuleFrameworkState.refreshScopeFromShell(scopeLines, scopeFileExists)
             // 系统框架（system_server 注入）：maps 实时证据优先，探针 48h 内命中兜底
             val androidInjected = sysLoaded || fresh(adbProbe)
             // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
@@ -199,27 +202,25 @@ echo ==END""") }.getOrNull()
 
     LaunchedEffect(Unit) { detect() }
 
-    // v0.6.4：libxposed service 秒级快照（参考 HyperModifier）——模块在 LSPosed 启用时
-    // App 进程实时绑定框架 daemon，直接拿到框架实时作用域配置，替代"ps/maps/文件探针"慢探测。
-    // v0.6.7：LSP 启用与作用域合一，全部以 service 实时连接为准（学 HyperModifier：模块停用
-    // → service 断开 → 直接显示"未连接/未启用"，不再回退 shell 的"daemon 存活"判定——
-    // daemon 活着≠模块启用，之前的回退导致关掉框架仍显示"已启用"）。
-    // shell detect() 仍跑（root/ksu/milink 检测与诊断），LSP 三件套不再回退。
+    // V0.6.15.1：回退 LSP 判定到 shell 实时检测（用户实测：service 启动快照在取消勾选作用域后
+    // 仍返回旧 scope → 冷启动重进也显示"就绪"。改回 detect() 的 maps/探针/scope 文件实时判定：
+    // 勾选作用域 → 退出 → 重进 → 检测结果正确；重新检测按钮也实时刷新）。
+    // 保留 service 断开硬信号：模块被禁用 → onServiceDied → 强制显示"未连接"（shell 的
+    // daemon 存活无法区分模块禁用，之前那版会导致关掉框架仍显示已启用）。
     val fw = com.hyperflowplus.ModuleFrameworkState.snapshot.value
     val fwActive = fw.active
-    val effLspOk = fwActive
-    val effModuleOk = fwActive
-    val effScopeOk = fwActive && fw.scopeReady
+    // LSPosed 模块三态：0=未连接（模块被禁用/service 断开，或框架无存活证据）红；
+    // 1=已启用但推荐作用域不全 黄；3=启用+作用域全 绿
+    val lspModuleState = when {
+        !fwActive -> 0                                   // 模块被禁用/service 断开 → 未连接
+        scopeState == 3 -> 3                             // 系统框架 + 小米互联都注入 → 推荐作用域就绪
+        lspState == 0 -> 0                               // 框架 daemon 无存活证据 → 未检测到框架
+        else -> 1                                        // 框架在但作用域不全 → 部分未就绪
+    }
+    val lspModuleOk = lspModuleState == 3
 
     // v0.6.8：6 项检测合一为 3 项 —— ①Root 环境（root 或 KSU 任一）②小米互联 ③LSPosed 模块（启用+作用域三态）
     val rootEnvOk = rootOk || ksuOk
-    // LSPosed 模块三态：0=未连接（模块未启用/框架未装）红；1=已启用但推荐作用域不全 黄；3=启用+作用域全 绿
-    val lspModuleState = when {
-        !fwActive -> 0
-        fw.scopeReady -> 3
-        else -> 1
-    }
-    val lspModuleOk = lspModuleState == 3
 
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录，见 MainActivity 注释）
     val hScroll = rememberScrollState()
@@ -306,15 +307,15 @@ echo ==END""") }.getOrNull()
         // V0.6.15：solveItem（去解决引导）提升到红卡/黄卡共用作用域
         var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
         if (!rootOk) {
-            // V0.6.15：无 Root 红卡 → 点击进详情（Root=红叉，其余两项=灰色叹号"无法检测"）+ 去解决完整引导
+            // V0.6.15.1：无 Root 红卡 → 标题"未获取到 Root 权限"，0/3 项通过（其余项不可测）
             var showRootDetail by remember { mutableStateOf(false) }
             HomeStatusCard(
                 containerColor = if (isDark) Color(0xFF381A1A) else Color(0xFFFAEEEE),
                 iconColor = Color(0xFFD13636),
                 bgIcon = Icons.Rounded.ErrorOutline,
-                title = "环境异常",
+                title = "未获取到 Root 权限",
                 desc = "点击查看情况",
-                extra = "$passed/3 项通过",
+                extra = "0/3 项通过",
                 onClick = { showRootDetail = true }
             )
             if (showRootDetail) {
@@ -334,6 +335,12 @@ echo ==END""") }.getOrNull()
                                 .clickable {
                                     reTap++
                                     detect()
+                                    // V0.6.15.1：弹底部提示 —— 强行停止本 App 重进后检测最准
+                                    android.widget.Toast.makeText(
+                                        ctx,
+                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
@@ -398,6 +405,12 @@ echo ==END""") }.getOrNull()
                                     // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
                                     reTap++
                                     detect()
+                                    // V0.6.15.1：弹底部提示 —— 强行停止本 App 重进后检测最准
+                                    android.widget.Toast.makeText(
+                                        ctx,
+                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
@@ -461,81 +474,83 @@ echo ==END""") }.getOrNull()
                     }
                 }
             }
-            // 去解决：步骤弹窗（打开 KernelSU / LSPosed / 一键写入配置）
-            solveItem?.let { (title, guide) ->
-                val steps: List<String>
-                val actionLabel: String?
-                val action: () -> Unit
-                when (guide) {
-                    GuideType.ROOT -> {
-                        // V0.6.15：引导完整化（KSU 授权界面无法直接打开 → 纯步骤引导，不放打开按钮）
-                        steps = listOf(
-                            "1. 打开 KernelSU 管理器（桌面应用列表里找 KernelSU）",
-                            "2. 底部切换到「超级用户」页面",
-                            "3. 找到 HyperFlow（com.hyperflowplus），点击它",
-                            "4. 打开授权开关，授予超级用户权限",
-                            "5. 返回本应用，点右上角「重新检测」",
-                            "如果列表里没有 HyperFlow：先随便进一次本应用（触发权限申请），再回 KernelSU 查看"
-                        )
-                        actionLabel = null
-                        action = {}
-                    }
-                    GuideType.LSPOSED -> {
-                        steps = listOf(
-                            "1. 打开 KernelSU 管理器 → 底部「模块」页",
-                            "2. 确认已安装 LSPosed（Zygisk 版）且已启用，然后重启设备",
-                            "3. 重启后打开 LSPosed 管理器（通知栏入口或桌面图标）",
-                            "4. 进入「模块」页，找到 HyperFlow 并启用它",
-                            "5. 勾选下方推荐作用域：系统框架 + 小米互联服务",
-                            "6. 保存并重启设备，回首页重新检测"
-                        )
-                        actionLabel = "打开 KernelSU"
-                        action = { launchKernelSu() }
-                    }
-                    GuideType.MODULE_SCOPE -> {
-                        steps = listOf(
-                            "1. 打开 LSPosed → 模块 → HyperFlow",
-                            "2. 勾选作用域：系统框架 + 小米互联服务（推荐作用域）",
-                            "3. 保存并重启设备（或点下方按钮写入配置后软重启）",
-                            "4. 重启后回首页重新检测，三项全绿即就绪"
-                        )
-                        actionLabel = "一键写入配置（重启生效）"
-                        action = { fixLsp() }
-                    }
-                    GuideType.MILINK -> {
-                        steps = listOf(
-                            "小米互联服务（com.milink.service）未安装",
-                            "它是澎湃/小米系统自带组件，请确认设备支持互联流转"
-                        )
-                        actionLabel = null
-                        action = {}
-                    }
+        }
+
+        // V0.6.15.1：去解决步骤弹窗提到三态分支之外 —— 红卡/绿卡/黄卡点「去解决」都能正常弹出
+        // 去解决：步骤弹窗（打开 KernelSU / LSPosed / 一键写入配置）
+        solveItem?.let { (title, guide) ->
+            val steps: List<String>
+            val actionLabel: String?
+            val action: () -> Unit
+            when (guide) {
+                GuideType.ROOT -> {
+                    // V0.6.15：引导完整化（KSU 授权界面无法直接打开 → 纯步骤引导，不放打开按钮）
+                    steps = listOf(
+                        "1. 打开 KernelSU 管理器（桌面应用列表里找 KernelSU）",
+                        "2. 底部切换到「超级用户」页面",
+                        "3. 找到 HyperFlow（com.hyperflowplus），点击它",
+                        "4. 打开授权开关，授予超级用户权限",
+                        "5. 返回本应用，点右上角「重新检测」",
+                        "如果列表里没有 HyperFlow：先随便进一次本应用（触发权限申请），再回 KernelSU 查看"
+                    )
+                    actionLabel = null
+                    action = {}
                 }
-                HyperDialog(
-                    title = title,
-                    show = solveItem != null,
-                    onDismiss = { solveItem = null }
-                ) {
-                    Column(Modifier.padding(horizontal = 8.dp)) {
-                        steps.forEach { step ->
-                            Text(
-                                step,
-                                style = MiuixTheme.textStyles.body2,
-                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-                        }
-                        if (actionLabel != null) {
-                            Spacer(Modifier.height(10.dp))
-                            Button(
-                                onClick = {
-                                    solveItem = null
-                                    action()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(actionLabel, fontSize = 15.sp)
-                            }
+                GuideType.LSPOSED -> {
+                    steps = listOf(
+                        "1. 打开 KernelSU 管理器 → 底部「模块」页",
+                        "2. 确认已安装 LSPosed（Zygisk 版）且已启用，然后重启设备",
+                        "3. 重启后打开 LSPosed 管理器（通知栏入口或桌面图标）",
+                        "4. 进入「模块」页，找到 HyperFlow 并启用它",
+                        "5. 勾选下方推荐作用域：系统框架 + 小米互联服务",
+                        "6. 保存并重启设备，回首页重新检测"
+                    )
+                    actionLabel = "打开 KernelSU"
+                    action = { launchKernelSu() }
+                }
+                GuideType.MODULE_SCOPE -> {
+                    steps = listOf(
+                        "1. 打开 LSPosed → 模块 → HyperFlow",
+                        "2. 勾选作用域：系统框架 + 小米互联服务（推荐作用域）",
+                        "3. 保存并重启设备（或点下方按钮写入配置后软重启）",
+                        "4. 重启后回首页重新检测，三项全绿即就绪"
+                    )
+                    actionLabel = "一键写入配置（重启生效）"
+                    action = { fixLsp() }
+                }
+                GuideType.MILINK -> {
+                    steps = listOf(
+                        "小米互联服务（com.milink.service）未安装",
+                        "它是澎湃/小米系统自带组件，请确认设备支持互联流转"
+                    )
+                    actionLabel = null
+                    action = {}
+                }
+            }
+            HyperDialog(
+                title = title,
+                show = solveItem != null,
+                onDismiss = { solveItem = null }
+            ) {
+                Column(Modifier.padding(horizontal = 8.dp)) {
+                    steps.forEach { step ->
+                        Text(
+                            step,
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    if (actionLabel != null) {
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                solveItem = null
+                                action()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(actionLabel, fontSize = 15.sp)
                         }
                     }
                 }
