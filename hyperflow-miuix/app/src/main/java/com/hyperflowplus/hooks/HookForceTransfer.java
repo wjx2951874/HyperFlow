@@ -104,18 +104,19 @@ public class HookForceTransfer {
                             }
                             DEDUP.put(fp, nowMs);
                             if (isCallSbn(sbn)) {
-                                // v0.6.14 精准强制流转：isDeviceSupported 首个参数就是 sbn，
-                                // 可精确区分来电——只对来电返回 TRUE（等效仅来电的亮屏判定放行），
-                                // 亮屏来电也能流转；接收端能力判定（OS4→voip 全屏 / OS3·苹果→降级
-                                // 卡片）与同 key 去重交给 milink 原生。不再全局模拟锁屏
-                                //（HookCallSimLock 误伤 system_server 正常通话流程，已移除）。
-                                Config.bump(Config.CNT_CALL_RELAY);
+                                // V0.6.16.1 实测结论（用户）：来电 voip 走 milink 广播链路，
+                                // 不经 isDeviceSupported —— 亮屏时原生不广播 → 亮屏来电不可流转
+                                // （已知限制，标注后期修复）；锁屏时原生广播 voip → 来电可流转。
+                                // 本分支只影响"来电通知卡片"：强制不放行 → 锁屏流转时不再多出一张
+                                // 冗余卡片（接收端 OS4 走 voip 全屏接听，卡片不需要）。
+                                // 注意：OS3/苹果等不支持 voip 的接收端原本靠这张降级卡片接听，
+                                // 屏蔽后此类接收端将收不到来电（与用户当前实测环境一致：接收端可 voip）。
                                 android.app.Notification callN = sbn.getNotification();
-                                MiflowLog.d("call notification: MATCH pkg=" + sbn.getPackageName()
+                                MiflowLog.d("call notification: block extra card pkg=" + sbn.getPackageName()
                                         + " category=" + (callN != null ? callN.category : "null")
                                         + " key=" + sbn.getKey()
-                                        + " -> force gate (precise, stock degrade on receiver)");
-                                return Boolean.TRUE;
+                                        + " (voip broadcast handles relay; screen-on call relay = known limitation)");
+                                return Boolean.FALSE;
                             }
                             if (isRunnableStateCard(sbn)) {
                                 MiflowLog.d("skip runnable-state card (not a real notification)");

@@ -503,7 +503,13 @@ fun HyperFlowApp() {
             ) { padding ->
                 val contentMod = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    // V0.6.16.1：二级页（日志列表/开源许可）自带 TopAppBar 且主顶栏已隐藏，
+                    // Scaffold 仍会给 topBar 槽保留高度把自带顶栏推下去 → 顶部 padding 归零，
+                    // 自带 TopAppBar（自带状态栏 inset）顶到最上，与主界面标题同位置
+                    .padding(
+                        top = if (showLogs || showLicenses) 0.dp else padding.calculateTopPadding(),
+                        bottom = padding.calculateBottomPadding()
+                    )
                     // v0.5.10：学 KSU/安装工具 —— 内容区铺满到底（无底部留白），
                     // 悬浮胶囊 overlay 覆盖其上；被胶囊盖住的部分可看不到，周围内容正常显示
                 Box(

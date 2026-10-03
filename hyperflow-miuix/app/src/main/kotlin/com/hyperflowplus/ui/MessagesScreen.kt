@@ -251,7 +251,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         onExpandedChange = {},
                         modifier = Modifier.fillMaxWidth(),
                         label = "",
-                        textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                        textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 14.sp),
                         leadingIcon = {},
                         trailingIcon = {
                             if (query.isNotEmpty()) {
@@ -284,7 +284,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                             Spacer(Modifier.width(5.dp))
                             Text(
                                 "搜索消息",
-                                style = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                                style = MiuixTheme.textStyles.body2.copy(fontSize = 14.sp),
                                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                             )
                         }
