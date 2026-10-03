@@ -65,12 +65,18 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
     var viewing by remember { mutableStateOf<File?>(null) }
     var confirmDel by remember { mutableStateOf<File?>(null) }
+    var confirmDelAll by remember { mutableStateOf(false) }
     val fmt = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
 
     fun refresh() {
         logs = File(ctx.filesDir, "hf_logs").listFiles()
             ?.filter { it.isFile && it.name.endsWith(".txt") }
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
+    }
+
+    fun deleteFile(f: File) {
+        f.delete()
+        refresh()
     }
 
     fun shareFile(f: File) {
@@ -145,8 +151,19 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 "${logs.size} 份",
                 fontSize = 13.sp,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.padding(end = 12.dp)
+                modifier = Modifier.padding(end = 8.dp)
             )
+            // v0.5.15.5：一键删除全部（数量 > 0 时显示，删除前弹确认）
+            if (logs.isNotEmpty()) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "删除全部",
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .clickable { confirmDelAll = true }
+                )
+            }
         }
         Spacer(Modifier.height(2.dp))
 
@@ -312,14 +329,53 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Spacer(Modifier.width(10.dp))
                     Button(
                         onClick = {
-                            df.delete()
+                            deleteFile(df)
                             confirmDel = null
-                            refresh()
                             Toast.makeText(ctx, "已删除", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColorsPrimary(),
                         modifier = Modifier.weight(1f)
                     ) { Text("删除") }
+                }
+            }
+        }
+    }
+
+    // v0.5.15.5：一键删除全部确认弹窗
+    if (confirmDelAll) {
+        HyperDialog(
+            title = "删除全部日志",
+            show = true,
+            onDismiss = { confirmDelAll = false }
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    "确定删除全部 ${logs.size} 份日志吗？\n此操作不可恢复。",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { confirmDelAll = false },
+                        colors = ButtonDefaults.buttonColors(),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("取消") }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        onClick = {
+                            File(ctx.filesDir, "hf_logs").listFiles()
+                                ?.filter { it.isFile && it.name.endsWith(".txt") }
+                                ?.forEach { it.delete() }
+                            confirmDelAll = false
+                            refresh()
+                            Toast.makeText(ctx, "已删除全部日志", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("全部删除") }
                 }
             }
         }

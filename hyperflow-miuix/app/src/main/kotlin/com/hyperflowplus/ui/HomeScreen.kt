@@ -197,7 +197,9 @@ echo ==END""") }.getOrNull()
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(hScroll)
-            .padding(horizontal = 12.dp)
+            // v0.5.15.5：首页内容整体下移（顶部留白 26dp，对齐 LSPosed/KSU 的首页间距，
+            // 状态卡不再紧贴顶部标题）
+            .padding(top = 26.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
         val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk

@@ -4,11 +4,13 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -21,11 +23,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import com.hyperflowplus.ui.fixLspScript
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -110,18 +115,52 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 // v0.5.15：一键软重启框架（写入 LSP 配置 + zygote 软重启，无需整机重启）
+                // v0.5.15.5：点击先弹确认框（原直执行易误触）
+                var confirmSoftReboot by remember { mutableStateOf(false) }
                 ArrowPreference(
                     title = "软重启框架",
                     summary = "写入推荐作用域并立即重启 LSP 注入（无需重启设备）",
-                    onClick = {
-                        Thread {
-                            runCatching { RootExec.su(fixLspScript() + "\nsetprop ctl.restart zygote") }
-                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                Toast.makeText(ctx, "已写入配置并软重启框架，稍后请重新打开 App", Toast.LENGTH_LONG).show()
-                            }
-                        }.start()
-                    }
+                    onClick = { confirmSoftReboot = true }
                 )
+                if (confirmSoftReboot) {
+                    HyperDialog(
+                        title = "软重启框架",
+                        show = true,
+                        onDismiss = { confirmSoftReboot = false }
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                "将写入推荐作用域配置并软重启 LSP 注入，\nApp 会暂时失去响应，确定继续吗？",
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Row(Modifier.fillMaxWidth()) {
+                                Button(
+                                    onClick = { confirmSoftReboot = false },
+                                    colors = ButtonDefaults.buttonColors(),
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("取消") }
+                                Spacer(Modifier.width(10.dp))
+                                Button(
+                                    onClick = {
+                                        confirmSoftReboot = false
+                                        Thread {
+                                            runCatching { RootExec.su(fixLspScript() + "\nsetprop ctl.restart zygote") }
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                Toast.makeText(ctx, "已写入配置并软重启框架，稍后请重新打开 App", Toast.LENGTH_LONG).show()
+                                            }
+                                        }.start()
+                                    },
+                                    colors = ButtonDefaults.buttonColorsPrimary(),
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("软重启") }
+                            }
+                        }
+                    }
+                }
                 // v0.5.15：重装引导（原"版本连点 3 次"机关移除，改调试区独立入口，防误触）
                 ArrowPreference(
                     title = "重新引导",
