@@ -2,6 +2,8 @@ package com.hyperflowplus
 
 import android.app.Application
 import android.content.Context
+import io.github.libxposed.service.XposedService
+import io.github.libxposed.service.XposedServiceHelper
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -11,8 +13,12 @@ import java.io.StringWriter
  * 1) 每次闪退把堆栈写到私有文件 hf_crash.log（无需终端抓日志）；
  * 2) v0.5.11：连续闪退计数 —— 10 分钟内连续闪退达 3 次，自动捕获一次 logcat 快照
  *    存到 filesDir/hf_logs/，供反馈问题时一键分享/定位（替代原"调试模式"开关）。
+ *
+ * v0.6.4：同时作为 libxposed service 监听者 —— 模块在 LSPosed 中启用时 App 进程
+ * 立即绑定 LSPosed daemon，onServiceBind 实时拿到框架版本与模块作用域，
+ * 首页环境检测"推荐作用域"判定改为框架实时配置（秒更新，参考 HyperModifier）。
  */
-class HFApplication : Application() {
+class HFApplication : Application(), XposedServiceHelper.OnServiceListener {
     override fun onCreate() {
         super.onCreate()
         // 连续闪退计数（10 分钟内连续，超出重置）：
@@ -27,6 +33,9 @@ class HFApplication : Application() {
             Thread { runCatching { captureLogcat(this) } }.start()
         }
 
+        // v0.6.4：注册 libxposed service 监听（模块启用时立即连接 LSPosed daemon）
+        runCatching { XposedServiceHelper.registerListener(this) }
+
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
@@ -38,6 +47,25 @@ class HFApplication : Application() {
             }
             prev?.uncaughtException(thread, throwable)
         }
+    }
+
+    override fun onServiceBind(service: XposedService) {
+        ModuleFrameworkState.onServiceBound(
+            apiVersion = service.apiVersion,
+            frameworkName = service.frameworkName,
+            frameworkVersion = service.frameworkVersion,
+            frameworkVersionCode = service.frameworkVersionCode,
+            scope = service.scope,
+        )
+    }
+
+    override fun onServiceDied(service: XposedService) {
+        ModuleFrameworkState.onServiceDied()
+    }
+
+    override fun onTerminate() {
+        ModuleFrameworkState.onServiceDied()
+        super.onTerminate()
     }
 
     companion object {

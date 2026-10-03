@@ -1,9 +1,13 @@
-# v0.6.3
- 
+# v0.6.4
 
- 
+1. 环境检测升级为秒级实时：采用 libxposed service 绑定（参考 HyperModifier 同款机制）——模块在 LSPosed 启用时 App 进程实时连接框架 daemon，直接拿到框架实时返回的模块作用域配置。推荐作用域/模块启用判定不再依赖 root + ps/maps/文件探针慢探测，毫秒更新、无 root 依赖，勾选即绿。
+2. 更新下载修复：update.json 的 zipUrl 此前停在 v0.6.1（历次发版只同步了 version/versionCode），导致 App/KSU 检测到新版、实际下载却拿到 0.6.1 安装包。
+3. KSU 刷入安装 APK 再加固：find 不限深度搜索 + 打印模块目录诊断，若仍找不到可从安装日志直接定位 APK 实际位置。
+4. KSU 刷入时静默安装 APK（v0.6.3）：KSU 安装 zip 为白名单式解压，zip 根目录 APK 不会解压到模块目录，改为 find 全树搜索兜底命中 system/priv-app 实体 APK。
+
+## v0.6.3
+
 1. KSU 刷入时静默安装 APK 修复：KSU 安装 zip 为白名单式解压，zip 根目录的 APK 不会解压到模块目录（v0.6.0~0.6.2 因此报 "HyperFlowPlus.apk not found"，App 装不上）。customize.sh/service.sh 改为 find 全树搜索 APK，兜底命中 system/priv-app 下的实体 APK，重启一次模块与 App 全部到位。
- 
 
 ## v0.6.2
 

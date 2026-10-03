@@ -13,10 +13,10 @@ else
 fi
 
 # 自动安装/更新管理 App（后台等待系统启动完成；未安装则装，版本旧则覆盖更新）
-# v0.6.3：同 customize.sh，APK 用 find 全树搜索（KSU 白名单解压，根 APK 不会在模块目录）
+# v0.6.4：同 customize.sh，find 不限深度（模块完整落盘后 system/priv-app 实体必然在）
 APK="$MODDIR/HyperFlowPlus.apk"
-[ -f "$APK" ] || APK=$(find "$MODDIR" -maxdepth 4 -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
-[ -f "$APK" ] || APK=$(find "$MODDIR" -maxdepth 4 -name "*.apk" 2>/dev/null | head -1)
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)
 if [ -n "$APK" ] && [ -f "$APK" ]; then
   (
     n=0

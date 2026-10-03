@@ -187,6 +187,16 @@ echo ==END""") }.getOrNull()
 
     LaunchedEffect(Unit) { detect() }
 
+    // v0.6.4：libxposed service 秒级快照（参考 HyperModifier）——模块在 LSPosed 启用时
+    // App 进程实时绑定框架 daemon，直接拿到框架实时作用域配置，替代"ps/maps/文件探针"慢探测。
+    // 已连接 → 模块启用/推荐作用域判定以框架实时配置为准（毫秒更新、无 root 依赖）；
+    // 未连接 → 回退 shell 探测结果。
+    val fw = com.hyperflowplus.ModuleFrameworkState.snapshot.value
+    val fwActive = fw.active
+    val effLspOk = if (fwActive) true else lspOk
+    val effModuleOk = if (fwActive) true else moduleOk
+    val effScopeOk = if (fwActive) fw.scopeReady else scopeOk
+
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录，见 MainActivity 注释）
     val hScroll = rememberScrollState()
     LaunchedEffect(hScroll) {
@@ -202,7 +212,7 @@ echo ==END""") }.getOrNull()
             .padding(top = 26.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然） =====
-        val allOk = rootOk && ksuOk && lspOk && moduleOk && scopeOk && milinkOk
+        val allOk = rootOk && ksuOk && effLspOk && effModuleOk && effScopeOk && milinkOk
         // v0.5.10：已移除"配置 OK 但未加载"黄条（重启一次即生效，不再二次重启）；
         // LSP 框架没在跑（daemon 死）= lsp/module/scope 全红 → 环境异常并引导一键启用。
         val level: Color = when {
@@ -215,9 +225,9 @@ echo ==END""") }.getOrNull()
             allOk -> "环境已就绪"
             else -> "部分环境未就绪"
         }
-        val passed = listOf(rootOk, ksuOk, lspOk, moduleOk, scopeOk, milinkOk).count { it }
+        val passed = listOf(rootOk, ksuOk, effLspOk, effModuleOk, effScopeOk, milinkOk).count { it }
         // 框架未运行时的引导提示（用户诉求：不启用就要马上检测出来并要求启用）
-        val pendingHint = if (!rootOk || lspState == 0)
+        val pendingHint = if (!rootOk || (!fwActive && lspState == 0))
             "LSP 框架未在运行，请启用后重启设备生效" else null
 
         if (showLspTrouble) {
@@ -336,9 +346,9 @@ echo ==END""") }.getOrNull()
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
                         EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
-                        EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
-                        EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
-                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）")
+                        EnvDetailRow("LSPosed 框架", effLspOk, "框架存在" to "未检测到 LSPosed")
+                        EnvDetailRow("模块已启用", effModuleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
+                        EnvDetailRow("推荐作用域", effScopeOk, "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）")
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
                 }
@@ -392,10 +402,10 @@ echo ==END""") }.getOrNull()
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvItemRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 权限" to GuideType.ROOT }
                         EnvItemRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU", GuideType.ROOT) { solveItem = "KSU 内核" to GuideType.ROOT }
-                        EnvItemRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED) { solveItem = "LSPosed 框架" to GuideType.LSPOSED }
-                        EnvItemRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE) { solveItem = "模块已启用" to GuideType.MODULE_SCOPE }
+                        EnvItemRow("LSPosed 框架", effLspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED) { solveItem = "LSPosed 框架" to GuideType.LSPOSED }
+                        EnvItemRow("模块已启用", effModuleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE) { solveItem = "模块已启用" to GuideType.MODULE_SCOPE }
                         EnvItemRow(
-                            "推荐作用域", scopeOk,
+                            "推荐作用域", effScopeOk,
                             "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）",
                             GuideType.MODULE_SCOPE
                         ) { solveItem = "推荐作用域" to GuideType.MODULE_SCOPE }

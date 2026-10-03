@@ -11,8 +11,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 103
-        versionName = "0.6.3"
+        versionCode = 104
+        versionName = "0.6.4"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -77,6 +77,8 @@ dependencies {
 
 
     // LSPosed libxposed API（compileOnly；官方 Maven 坐标，与 LSPosed 2.2.x 运行时混淆签名一致）
+    // libxposed service：App 侧绑定 LSPosed daemon，秒级实时获取框架连接与模块作用域（参考 HyperModifier）
+    implementation("io.github.libxposed:service:102.0.0")
     compileOnly("io.github.libxposed:api:102.0.0")
 
     implementation("org.json:json:20240303")
