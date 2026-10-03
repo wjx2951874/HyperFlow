@@ -228,7 +228,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         backgroundColor = MiuixTheme.colorScheme.surfaceContainer
                     ),
                     insideMargin = DpSize(10.dp, 6.dp),
-                    label = "搜索短信",
+                    label = "搜索消息",
                     useLabelAsPlaceholder = true,
                     singleLine = true,
                     leadingIcon = {

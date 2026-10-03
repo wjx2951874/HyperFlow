@@ -116,7 +116,7 @@ cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
-MLPID=$(ps -A 2>/dev/null | grep -E ' com.milink.service$' | awk '{print $1}' | head -1)
+MLPID=$(ps -A 2>/dev/null | grep -iE 'milink' | awk '{print $1}' | head -1)
 for m in $(grep -ilE "hyperflow" /proc/[0-9]*/maps 2>/dev/null); do
   p=${'$'}{m%/*}
   pid=${'$'}{p##*/}

@@ -186,10 +186,13 @@ fun ConversationScreen(
                 .collect { MainHolder.scrollTick++ }
         }
         // v0.5.15：最早在前（asc）时打开会话默认定位到最新消息（列表底部，最新一条在导航栏避让区上方）；
-        // 最新在前（desc）时最新消息本就在顶部，保持默认位置不动
+        // v0.6.2：切换排序后都重新定位锚点 —— 最新在前滚到顶部（index 0 = 最新消息），
+        //         最早在前滚到底部（最后一条 = 最新消息，避让区上方可见）。
+        //         修复"切到最新在前列表停在原位、看不到最前面的消息"。
         LaunchedEffect(sorted, desc, state.sortVersion) {
-            if (!desc && sorted.isNotEmpty()) {
-                cList.scrollToItem(sorted.lastIndex)
+            if (sorted.isNotEmpty()) {
+                if (desc) cList.scrollToItem(0)
+                else cList.scrollToItem(sorted.lastIndex)
             }
         }
         LazyColumn(

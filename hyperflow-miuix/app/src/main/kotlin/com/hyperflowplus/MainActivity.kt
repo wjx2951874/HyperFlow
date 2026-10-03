@@ -816,7 +816,9 @@ private fun CustomTopBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 10.dp),
+            // v0.6.2：标题整体下移（top 18 → 30dp），四个 tab 页标题统一往下靠，
+            // 与首页/流转/消息/设置的内容一起下移对齐
+            .padding(start = 20.dp, end = 12.dp, top = 30.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
