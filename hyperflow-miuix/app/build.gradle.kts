@@ -11,8 +11,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 109
-        versionName = "0.6.9"
+        versionCode = 110
+        versionName = "0.6.10"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")

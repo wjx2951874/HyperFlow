@@ -1,3 +1,15 @@
+# v0.6.10
+
+1. 来电流转强制全屏接听（与 KSU / HyperModifier 等工具一致）：
+   - 新增 HookCallSimLock：注入 system_server（android 作用域），白名单限定来电链路
+     （com.android.server.telecom / com.android.phone / incallui / dialer / android.telecom
+     调用栈）模拟"锁屏 + 灭屏"——亮屏来电也走 voip 广播全屏流转，接收端在线接听；
+     非来电调用栈一律原样放行，不影响系统其他逻辑；
+   - milink 进程抑制来电通知卡片（CATEGORY_CALL / incallui / dialer / phone）：
+     voip 走广播链路由 system_server 模拟锁屏放行，卡片若流转会造成"电话+卡片"双份
+     （锁屏）与接听后"电话"通知残留，一律拦截；
+   - 其他通知维持亮屏强制流转（功能①），运行状态卡过滤保留。
+
 # v0.6.9
 
 1. 来电流转恢复 milink 原始逻辑（只改电话，其他通知本轮不动）：
