@@ -299,14 +299,16 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    if (checking) return@clickable
-                                    detect()
+                                    // 先计数再动作（不拦点击）：连点 3 次（800ms 窗口）弹隐藏入口；
+                                    // 未到 3 次才触发重新检测
                                     val now = System.currentTimeMillis()
                                     reTap = if (now - lastTap < 800) reTap + 1 else 1
                                     lastTap = now
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
+                                    } else {
+                                        detect()
                                     }
                                 }
                         )
@@ -353,14 +355,16 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    if (checking) return@clickable
-                                    detect()
+                                    // 先计数再动作（不拦点击）：连点 3 次（800ms 窗口）弹隐藏入口；
+                                    // 未到 3 次才触发重新检测
                                     val now = System.currentTimeMillis()
                                     reTap = if (now - lastTap < 800) reTap + 1 else 1
                                     lastTap = now
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
+                                    } else {
+                                        detect()
                                     }
                                 }
                         )

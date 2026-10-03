@@ -203,8 +203,11 @@ private fun launchKernelSu(ctx: android.content.Context) {
 }
 
 /** 一键启用模块 + 勾选推荐作用域的 su 脚本（与首页 fixLsp 一致，供引导页复用）。
- *  仅写入：模块启用（modules.list）+ 推荐作用域 scope（milink + android，不含本 App——
- *  本 App 自身进程无需被 hook，LSPosed 里勾不了属正常）。 */
+ *  推荐作用域 = 小米互联服务(com.milink.service) + 系统框架：
+ *   - 经典 LSPosed：scope 文件写包名（android=系统框架）
+ *   - 新版 LSPosed/Vector：作用域存 modules_config.db，系统框架标识为 "system"
+ *  脚本双写兼容：scope 文件写 system+android 两行；同时 sqlite3 直接插入 scope 表。
+ *  本 App 自身进程无需被 hook，不写入。 */
 fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules/lsposed/config /data/adb/modules/zygisk_lsposed/config; do
   [ -e "${'$'}d" ] || continue
   mkdir -p "${'$'}d/scope"
@@ -212,11 +215,19 @@ fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules
   sc2="${'$'}d/scope/com.hyperflowplus"
   if [ -f "${'$'}sc2" ]; then
     grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
+    grep -qx 'system' "${'$'}sc2" || echo 'system' >> "${'$'}sc2"
     grep -qx 'android' "${'$'}sc2" || echo 'android' >> "${'$'}sc2"
   else
-    { echo 'com.milink.service'; echo 'android'; } > "${'$'}sc2"
+    { echo 'com.milink.service'; echo 'system'; echo 'android'; } > "${'$'}sc2"
   fi
 done
 chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
 chown -R 0:0 /data/adb/lspd/config 2>/dev/null
+# 新版 LSPosed/Vector：直接写 modules_config.db 的 scope 表（系统框架标识 system，user 0）
+for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
+  [ -f "${'$'}db" ] || continue
+  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'com.milink.service',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
+  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'system',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
+  chown 0:0 "${'$'}db" 2>/dev/null
+done
 echo done"""
