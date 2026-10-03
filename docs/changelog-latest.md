@@ -1,4 +1,13 @@
-# v0.6.5
+# v0.6.6
+
+1. App 刷入时联网直装：KSU 执行 customize.sh 阶段压缩包尚未解压（已实证），v0.6.6 起 workflow 将 APK 独立上传为 GitHub Release asset，customize.sh 刷入时联网直下 APK（gh-proxy 镜像 + GitHub 直连双通道）并 pm install —— 刷入即装好 App，无需等 boot；下载失败静默，由 service.sh 在重启后兜底（压缩包内 APK 仍保留兜底）。
+
+## v0.6.5
+
+1. App 自动安装机制修正（安装失败的真正根因）：实测 KSU 执行 customize.sh 时模块目录里只有 module.prop，其余文件（含 APK）尚未解压——这是执行时机问题，不是路径问题，find 在此阶段永远找不到 APK。改为：customize.sh 阶段能装则装（部分变体可见），找不到不报错，由 service.sh 在 boot 后（模块完整落盘）自动安装 App 并输出安装日志到 /data/local/tmp/hyperflow_install.log。刷入后重启一次，模块与 App 全部到位。
+2. update.json zipUrl 同步修复：此前发版只同步 version/versionCode，zipUrl 停在 v0.6.1，导致"检测到新版但下载到旧包"。自本版起三处（version/versionCode/zipUrl）一并同步。
+
+
 
 1. App 自动安装机制修正（安装失败的真正根因）：实测 KSU 执行 customize.sh 时模块目录里只有 module.prop，其余文件（含 APK）尚未解压——这是执行时机问题，不是路径问题，find 在此阶段永远找不到 APK。改为：customize.sh 阶段能装则装（部分变体可见），找不到不报错，由 service.sh 在 boot 后（模块完整落盘）自动安装 App 并输出安装日志到 /data/local/tmp/hyperflow_install.log。刷入后重启一次，模块与 App 全部到位。
 2. update.json zipUrl 同步修复：此前发版只同步 version/versionCode，zipUrl 停在 v0.6.1，导致"检测到新版但下载到旧包"。自本版起三处（version/versionCode/zipUrl）一并同步。

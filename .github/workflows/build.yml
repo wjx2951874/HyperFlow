@@ -89,7 +89,11 @@ jobs:
           VERSION_NAME: ${{ env.VERSION_NAME }}
         run: |
           TAG=${GITHUB_REF#refs/tags/}
+          # v0.6.6：APK 独立上传为 Release asset —— KSU 执行 customize.sh 时压缩包尚未解压，
+          # 模块 App 改由 customize.sh 联网直下 APK 安装（压缩包内 APK 仅作 service.sh 兜底）
+          cp hyperflow-miuix/app/build/outputs/apk/release/app-release.apk "HyperFlow-${VERSION_NAME}.apk"
           gh release create "$TAG" \
             "HyperFlow-${VERSION_NAME}-flashable.zip" \
+            "HyperFlow-${VERSION_NAME}.apk" \
             --title "HyperFlow V${VERSION_NAME}" \
             --notes "Miuix UI 重构版 · 酷安@翰德姆" || true
