@@ -19,10 +19,10 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
  *   module.prop    → minApiVersion=101 / targetApiVersion=102
  *   scope.list     → com.milink.service（旧版框架作用域文件）
  *
- * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 3 项：
- *   com.milink.service（小米互联：通知流转 5 个 hook）
- *   com.hyperflowplus（本 App：写运行态标记时间戳，供首页检测判断"模块真被加载"）
- *   android（system_server：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen）
+ * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 2 项：
+ *   com.milink.service（小米互联：通知流转 6 个 hook，写 milink 数据目录探针）
+ *   android（system_server：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen，写 /data/adb 探针）
+ * 本 App（com.hyperflowplus）自身进程无需被 hook，不在推荐作用域内。
  *
  * 入口在 onPackageLoaded 中按包名分发装配 hook：
  *   - android            → 注入 system_server（HookRemoteOpen）
@@ -100,15 +100,18 @@ public class XposedEntry extends XposedModule {
         }
     }
 
-    /** 写运行态标记（双路径，任一命中即视为"模块被 LSP 真正加载"）：
-     *  1) /data/adb/hyperflowplus/xposed_loaded —— zygote/system_server（root 进程）可写
-     *  2) /data/user/0/com.hyperflowplus/files/xposed_loaded —— App 自身进程可写
-     *     （作用域勾选本 App 后 onPackageLoaded("com.hyperflowplus") 触发，普通进程有权限）
-     *  失败静默，不影响功能。
+    /** 写运行态标记（三路径，按注入进程区分，任一命中即视为"模块被 LSP 真正加载"）：
+     *  1) /data/adb/hyperflowplus/xposed_loaded —— zygote/system_server（root 进程，对应 android 作用域）可写
+     *  2) /data/user/0/com.milink.service/files/hf_loaded —— milink 服务进程（非 root、非本 App uid，
+     *     只能写自己的数据目录；对应 com.milink.service 作用域）可写
+     *  3) /data/user/0/com.hyperflowplus/files/xposed_loaded —— 本 App 自身进程可写（保留，兼容旧版）
+     *  检测端按路径区分：1=android 作用域已生效，2=milink 作用域已生效。
+     *  本 App 自身已从推荐作用域移除（无需被 hook），路径 3 仅作兼容。失败静默，不影响功能。
      */
     private static void markLoaded() {
         long now = System.currentTimeMillis();
         writeStamp("/data/adb/hyperflowplus/xposed_loaded", now);
+        writeStamp("/data/user/0/com.milink.service/files/hf_loaded", now);
         writeStamp("/data/user/0/com.hyperflowplus/files/xposed_loaded", now);
     }
 

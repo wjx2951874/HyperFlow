@@ -45,6 +45,8 @@ fun HyperDialog(
     show: Boolean,
     title: String? = null,
     summary: String? = null,
+    // v0.5.15：标题行右侧动作位（如环境检测弹窗右上角小"重新检测"按钮），不参与居中布局
+    titleAction: (@Composable () -> Unit)? = null,
     onDismiss: () -> Unit,
     bottomInset: Dp = smartInset,
     content: @Composable ColumnScope.() -> Unit = {}
@@ -89,14 +91,19 @@ fun HyperDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (title != null) {
-                    Text(
-                        title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        Text(
+                            title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        titleAction?.let {
+                            Box(Modifier.align(Alignment.CenterEnd)) { it() }
+                        }
+                    }
                     Spacer(Modifier.height(10.dp))
                 }
                 if (summary != null) {

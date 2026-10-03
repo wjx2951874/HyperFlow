@@ -97,7 +97,7 @@ fun GuideScreen(type: GuideType, onBack: () -> Unit) {
                             GuideStep("4", "重启设备后返回本页重新检测")
                         }
                         GuideType.MODULE_SCOPE -> {
-                            GuideText("本模块需要：①在 LSPosed 中启用；②勾选推荐作用域（本 App + 小米互联服务）。")
+                            GuideText("本模块需要：①在 LSPosed 中启用；②勾选推荐作用域（小米互联服务 + Android 系统框架）。本 App 自身无需被勾选。")
                             Spacer(Modifier.height(10.dp))
                             GuideStep("1", "点击下方按钮，自动写入启用 + 勾选配置")
                             GuideStep("2", "重启设备让配置生效")
@@ -202,18 +202,19 @@ private fun launchKernelSu(ctx: android.content.Context) {
     Toast.makeText(ctx, "未找到 KernelSU，请从官网安装", Toast.LENGTH_SHORT).show()
 }
 
-/** 一键启用模块 + 勾选推荐作用域的 su 脚本（与首页 fixLsp 一致，供引导页复用） */
+/** 一键启用模块 + 勾选推荐作用域的 su 脚本（与首页 fixLsp 一致，供引导页复用）。
+ *  仅写入：模块启用（modules.list）+ 推荐作用域 scope（milink + android，不含本 App——
+ *  本 App 自身进程无需被 hook，LSPosed 里勾不了属正常）。 */
 fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules/lsposed/config /data/adb/modules/zygisk_lsposed/config; do
   [ -e "${'$'}d" ] || continue
   mkdir -p "${'$'}d/scope"
   if [ -f "${'$'}d/modules.list" ]; then grep -q 'com.hyperflowplus' "${'$'}d/modules.list" || echo 'com.hyperflowplus' >> "${'$'}d/modules.list"; fi
   sc2="${'$'}d/scope/com.hyperflowplus"
   if [ -f "${'$'}sc2" ]; then
-    grep -qx 'com.hyperflowplus' "${'$'}sc2" || echo 'com.hyperflowplus' >> "${'$'}sc2"
     grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
     grep -qx 'android' "${'$'}sc2" || echo 'android' >> "${'$'}sc2"
   else
-    { echo 'com.hyperflowplus'; echo 'com.milink.service'; echo 'android'; } > "${'$'}sc2"
+    { echo 'com.milink.service'; echo 'android'; } > "${'$'}sc2"
   fi
 done
 chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null

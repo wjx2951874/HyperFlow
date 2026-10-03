@@ -25,6 +25,8 @@ import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFApplication
 import com.hyperflowplus.HFState
+import com.hyperflowplus.RootExec
+import com.hyperflowplus.ui.fixLspScript
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -101,6 +103,25 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
+                // v0.5.15：一键软重启框架（写入 LSP 配置 + zygote 软重启，无需整机重启）
+                ArrowPreference(
+                    title = "软重启框架",
+                    summary = "写入推荐作用域并立即重启 LSP 注入（无需重启设备）",
+                    onClick = {
+                        Thread {
+                            runCatching { RootExec.su(fixLspScript() + "\nsetprop ctl.restart zygote") }
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                Toast.makeText(ctx, "已写入配置并软重启框架，稍后请重新打开 App", Toast.LENGTH_LONG).show()
+                            }
+                        }.start()
+                    }
+                )
+                // v0.5.15：重装引导（原"版本连点 3 次"机关移除，改调试区独立入口，防误触）
+                ArrowPreference(
+                    title = "重新引导",
+                    summary = "重新打开首次使用引导页",
+                    onClick = { MainHolder.onReopenOnboarding() }
+                )
                 // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"系统"行连点 5 次，
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
                 // v0.5.12：分享改为文件分享（FileProvider 分享 .txt 日志本体）
@@ -162,9 +183,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                var hiddenClicks by remember { mutableIntStateOf(0) }
-                // v0.5.12：版本行常驻提示"点击可检查更新"；自动检查更新已有（打开 App 检测一次）
-                // 连点 3 次 = 重进引导页
+                // v0.5.15：版本行只做"点击可检查更新"（原连点 3 次重进引导的机关已移到调试区）
                 ArrowPreference(
                     title = "版本",
                     summary = buildString {
@@ -173,15 +192,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                         append("点击可检查更新 · v${BuildConfig.VERSION_NAME}")
                     },
-                    onClick = {
-                        hiddenClicks++
-                        if (hiddenClicks >= 3) {
-                            hiddenClicks = 0
-                            MainHolder.onReopenOnboarding()   // 连点 3 次：重进引导页
-                        } else {
-                            MainHolder.onCheckUpdate()
-                        }
-                    }
+                    onClick = { MainHolder.onCheckUpdate() }
                 )
                 ArrowPreference(
                     title = "作者",

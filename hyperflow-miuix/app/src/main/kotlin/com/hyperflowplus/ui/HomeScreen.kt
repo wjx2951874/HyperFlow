@@ -19,6 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -38,6 +42,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyperflowplus.BuildConfig
@@ -86,70 +91,29 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
     fun detect() {
         checking = true
         Thread {
-            // v0.5.9：一次 su 会话完成全部检测（原 4 次独立 su 会话 → 每次 1-3s，合计可达 10s+）
-            // 段标记解析：==ID / ==KSU / ==MILINK / ==LSP / ==LSPD / ==MODULES / ==SCOPE / ==DB / ==RUNNING / ==MAPS
+            // v0.5.15：检测脚本重写 —— 去掉 /data/adb 全盘 find 遍历（最慢）与
+            // modules.list / scope 文件 / DB 解析（LSPosed 变体路径格式差异是误报根源），
+            // 只保留 4 类判定源：root / KSU / 框架 daemon / 运行时探针。
+            // 运行时证据 = XposedEntry 注入时写的探针时间戳：
+            //   /data/adb/hyperflowplus/xposed_loaded（system_server=android 作用域，root 可写）
+            //   /data/user/0/com.milink.service/files/hf_loaded（milink=小米互联作用域，milink 进程可写）
+            // 探针 48h 内命中 = 模块被 LSPosed 真正注入该进程 = 该作用域已生效（配置态不再参与判定，
+            // 天然免疫"关闭框架后目录残留 / 模块被禁用后 db 残留"两类误报）。
             val out = runCatching { RootExec.su("""echo ==ID;
 id -u 2>/dev/null
 echo ==KSU;
 ksud -V 2>/dev/null || echo none
 echo ==MILINK;
 pm path com.milink.service 2>/dev/null
-echo ==LSP;
-for d in /data/adb/lspd/config /data/adb/lspd /data/adb/modules/lsposed/config /data/adb/modules/lsposed /data/adb/modules/zygisk_lsposed/config /data/adb/modules/zygisk_lspd/config /data/adb/modules/zygisk_lspd /data/adb/modules/lspd/config /data/adb/modules/lspd /data/adb/modules/ksu_lspd /data/adb/modules/ksu_lsposed /data/adb/riru/modules/lsposed/config; do
-  [ -e "${'$'}d" ] && echo "==DIR ${'$'}d"
-done
 echo ==LSPD;
-# v0.5.10：框架活跃判定 = daemon 进程存活（目录残留≠框架在跑）。
-# LSPosed(zygisk) 守护进程名 lspd；KernelSU 内嵌版同名；riru 版 lspd/riru_lspd。
-# 用户"不启动 LSP"（框架禁用/未激活）时目录可能仍在 → 靠进程判定才能真正反映框架状态。
 pidof lspd 2>/dev/null
 pidof lspd_64 2>/dev/null
 ps -A 2>/dev/null | grep -w lspd | grep -v grep | awk '{print ${'$'}NF}'
-ps -A 2>/dev/null | grep -iE "riru.*lspd|lspd.*daemon" | grep -v grep | awk '{print ${'$'}NF}'
-echo ==MODULES;
-# 标准路径 + find 全盘遍历（覆盖所有 LSPosed 变体，如 KernelSU 内嵌版的不同目录）
-for f in /data/adb/lspd/config/modules.list /data/adb/lspd/modules.list /data/adb/modules/lsposed/config/modules.list /data/adb/modules/lsposed/modules.list /data/adb/modules/zygisk_lsposed/config/modules.list /data/adb/riru/modules/lsposed/config/modules.list; do
-  [ -f "${'$'}f" ] && { echo "==ML ${'$'}f"; cat "${'$'}f"; }
-done
-find /data/adb -maxdepth 6 -name "modules.list" -type f 2>/dev/null | while read f; do
-  case "${'$'}f" in *lspd*|*lsposed*) echo "==MLX ${'$'}f"; cat "${'$'}f";; esac
-done
-echo ==SCOPE;
-for f in /data/adb/lspd/config/scope/* /data/adb/lspd/scope/* /data/adb/modules/lsposed/config/scope/* /data/adb/modules/lsposed/scope/* /data/adb/modules/zygisk_lsposed/config/scope/* /data/adb/riru/modules/lsposed/config/scope/*; do
-  [ -f "${'$'}f" ] && echo "==FILE ${'$'}(basename ${'$'}f)"
-done
-find /data/adb -maxdepth 7 -path "*scope*" -type f 2>/dev/null | while read f; do
-  case "${'$'}f" in *lspd*|*lsposed*) echo "==FILEX ${'$'}(basename ${'$'}f)";; esac
-done
-echo ==DB;
-# LSPosed 1.9+（含 KernelSU 内嵌版）：启用状态存在 SQLite 数据库 modules_config.db，无 modules.list/scope 文件
-for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
-  [ -f "${'$'}db" ] && { echo "==DBFILE ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"; }
-done
-find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
-  echo "==DBX ${'$'}db"; grep -a "com.hyperflowplus" "${'$'}db" 2>/dev/null && echo "==HF_IN_DB"
-done
-echo ==DBQ;
-# v0.5.12：模块启用标志精确检测 —— db 里 grep 到包名 ≠ 启用（enabled 列才决定）！
-# 用户实测：在 LSPosed 里关掉 HyperFlow 模块后，包名仍留在 modules_config.db，
-# 旧逻辑 dbHit=true → 误判"已启用/环境正常"。设备有 sqlite3 时直接查 enabled 列：
-# 输出 "com.hyperflowplus|1"（启用）/ "com.hyperflowplus|0"（禁用），供解析段区分。
-for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
-  [ -f "${'$'}db" ] && { echo "==DBQF ${'$'}db"; command -v sqlite3 >/dev/null 2>&1 && sqlite3 "${'$'}db" "SELECT module_pkg_name, enabled FROM modules_config WHERE module_pkg_name LIKE '%hyperflow%';" 2>/dev/null; }
-done
-find /data/adb -maxdepth 6 -name "modules_config.db" -type f 2>/dev/null | while read db; do
-  echo "==DBQX ${'$'}db"; command -v sqlite3 >/dev/null 2>&1 && sqlite3 "${'$'}db" "SELECT module_pkg_name, enabled FROM modules_config WHERE module_pkg_name LIKE '%hyperflow%';" 2>/dev/null
-done
-echo ==RUNNING;
+echo ==P_ADB;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
-cat /data/user/0/com.hyperflowplus/files/xposed_loaded 2>/dev/null
+echo ==P_MILINK;
+cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
 echo ==MAPS;
-# 运行态证据：模块 APK 被加载进进程后 maps 里有其路径。
-# v0.5.9 修复误报：本模块是 priv-app 安装（/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk），
-# 旧版只 grep "modules/hyperflowplus"（模块目录路径）永远匹配不上 → 重启生效后仍黄条"请重启"。
-# 大小写不敏感多模式单次 grep -l（一次遍历全部进程 maps，不再逐进程 for+grep）；
-# 排除本 App 自身进程（App 运行中 maps 必含自身 APK 路径，不代表模块被 LSPosed 加载），
-# 命中其它进程（zygote / milink 等作用域进程）= 模块真正被加载。
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 for m in $(grep -ilE "hyperflow" /proc/[0-9]*/maps 2>/dev/null); do
   p=${'$'}{m%/*}
@@ -160,86 +124,35 @@ echo ==END""") }.getOrNull()
             val r = out?.substringAfter("==ID")?.substringBefore("==KSU")?.trim() == "0"
             val ksuRaw = out?.substringAfter("==KSU")?.substringBefore("==MILINK")?.trim()
             val k = r && !ksuRaw.isNullOrBlank() && ksuRaw != "none"
-            // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查（LSP 配置路径因框架版本而异）
+            val m = out?.substringAfter("==MILINK")?.substringBefore("==LSPD")?.contains("package:") == true
+            val lspdSeg = out?.substringAfter("==LSPD")?.substringBefore("==P_ADB") ?: ""
+            val lspdAlive = lspdSeg.lines().any { it.isNotBlank() }
+            // 双探针：android 作用域（system_server）与 milink 作用域（小米互联）各自 48h 内注入证据
+            val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
+            val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==MAPS")?.trim()?.toLongOrNull()
+            val fresh = { t: Long? -> t != null && System.currentTimeMillis() - t < 48 * 3600 * 1000L }
+            val androidInjected = fresh(adbProbe)
+            val milinkInjected = fresh(milinkProbe)
+            val mapsHit = out?.substringAfter("==MAPS")?.contains("==LOADED") == true
+            // 框架活跃 = daemon 存活，或模块已被注入任意进程（maps 命中必然框架在跑）
+            val lspInstalled = lspdAlive || mapsHit
+            // 模块已启用 = 框架在跑 且 有运行时证据（任一进程注入）
+            val moduleOkV = if (lspInstalled && (androidInjected || milinkInjected || mapsHit)) 3 else 0
+            // 推荐作用域 = android 与 milink 两进程都被注入（各自探针 48h 内）——
+            // 不再要求"本 App"（模块自身进程无需被 hook，LSPosed 里勾不了属正常）
+            val scopeOkV = if (lspInstalled && androidInjected && milinkInjected) 3 else 0
+            val lspOkV = if (lspInstalled) 3 else 0
+            // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查
             if (!out.isNullOrBlank()) {
                 runCatching { RootExec.su("mkdir -p /data/adb/hyperflowplus && echo '${'$'}out' > /data/adb/hyperflowplus/detect.log") }
             }
-            // 解析：LSPosed 存在 / 模块已启用（modules.list 内容=模块包名）/ 作用域已勾选（scope 目录下存在本模块文件）
-            // 兼容不同 LSPosed 变体：包名/短名/大小写模糊匹配（用户已启用但检测不到 = 路径或格式差异）
-            // v0.5.10：框架"活跃"判定升级 —— 目录存在 且 daemon(lspd) 进程存活。
-            // 用户关闭框架（zygisk 停用/未激活）时目录仍残留，旧逻辑误判框架在线 → 环境一直"正常"；
-            // 现在框架不在跑 = lspInstalled=false → 环境异常并引导启用（用户诉求：不启用就要检测出来）。
-            val lspSeg = out?.substringAfter("==LSP", "")?.substringBefore("==LSPD") ?: ""
-            val lspdSeg = out?.substringAfter("==LSPD", "")?.substringBefore("==MODULES") ?: ""
-            val lspDirHit = lspSeg.contains("==DIR") && (lspSeg.contains("lspd") || lspSeg.contains("lsposed"))
-            // daemon 存活：==LSPD 段有任意输出（pidof 的 pid 或 ps 的进程行）即框架在跑
-            val lspdAlive = lspdSeg.lines().any { it.isNotBlank() }
-            val modsSeg = out?.substringAfter("==MODULES", "")?.substringBefore("==SCOPE") ?: ""
-            val scopeSeg = out?.substringAfter("==SCOPE", "") ?: ""
-            val dbSeg = out?.substringAfter("==DB", "")?.substringBefore("==RUNNING") ?: ""
-            // 运行态双保险：模块被 LSPosed 真正加载时 XposedEntry 会写时间戳。
-            // 配置态（db/scope 文件）在"框架整体关闭/去作用域"时会残留 → 曾误判"环境正常"。
-            // 以最近 48h 内加载过为准（装好后没重启=不加载=如实显示未启用）。
-            val runSeg = out?.substringAfter("==RUNNING", "")?.substringBefore("==END")?.trim() ?: ""
-            // 双路径任一最近 48h 内加载过即生效（/data/adb=root 进程写入，/data/user/0/<app>=App 进程写入）
-            // MAPS 证据：非 root 作用域进程（milink 等）加载模块时写不进 /data/adb 时间戳，
-            // 但 /proc/*/maps 里能看到模块 APK 已被 mmap —— 命中即视为已生效。
-            val mapsHit = runSeg.contains("==LOADED")
-            val runStamp = runSeg.lines().mapNotNull { it.trim().toLongOrNull() }.maxOrNull()
-            val runtimeOkLocal = mapsHit || (runStamp?.let {
-                System.currentTimeMillis() - it < 48 * 3600 * 1000L
-            } ?: false)
-            // v0.5.13：daemon 名因 LSPosed 变体而异（lspd / lspd_64 / riru_lspd / KernelSU 内嵌别名）——
-            // 补充运行时证据：maps 命中 = 模块已被注入某个作用域进程，框架必然在跑，直接视为活跃。
-            val lspInstalled = (lspDirHit && lspdAlive) || mapsHit
-            // v0.5.10：模块/作用域"启用"以框架活跃为前提（lspInstalled 已含 daemon 存活）——
-            // 用户关闭 LSP 框架时 db/scope 文件残留 → 旧逻辑误判已启用 → 环境一直"正常"；
-            // 现在框架没在跑 = 全部 LSP 相关项为异常（红），页面引导去启用（一键启用按钮）。
-            val dbHit = dbSeg.contains("==HF_IN_DB")
-            val hasModName = { seg: String -> seg.contains("com.hyperflowplus") || seg.contains("hyperflowplus") || seg.contains("hyperflow", ignoreCase = true) }
-            // v0.5.12：db enabled 精确标志（==DBQ 段 sqlite3 输出 "com.hyperflowplus|1"/"|0"）。
-            // LSPosed 1.9+ 里模块被禁用时包名仍留在 modules_config.db → 旧 dbHit 误判已启用。
-            // v0.5.13 修复误报"未启用"：段头（==DBQF/==DBQX）不算数据行——设备无 sqlite3 时
-            // dbqSeg 非空但无数据，旧 `dbqSeg.isBlank()` 兜底失效 → 模块明明已启用却报红。
-            // 改为只统计 sqlite3 数据行（含 "|" 且含 hyperflow），无数据行 = 无法判定 → 运行时证据兜底。
-            val dbqSeg = out?.substringAfter("==DBQ", "")?.substringBefore("==RUNNING") ?: ""
-            val dbqRows = dbqSeg.lines().filter {
-                it.contains("hyperflow", ignoreCase = true) && it.contains("|")
-            }
-            val dbEnabled = dbqRows.any { it.trim().endsWith("|1") }
-            val dbDisabled = dbqRows.any { it.trim().endsWith("|0") }
-            val dbqUsable = dbqRows.isNotEmpty()
-            // 无 sqlite3 时（dbqSeg 为空）无法知道 enabled → 用运行时证据兜底：
-            // 最近 48h 内被 LSPosed 真正加载过（maps/时间戳）才算"模块已启用"。
-            // 用户场景：在 LSPosed 关闭模块并重启 → 模块不再被加载 → 时间戳过期/maps 无命中
-            // → runtimeOkLocal=false → modEnabled=false → 环境如实显示异常。
-            // v0.5.13：runtimeOkLocal 升级为强证据——用户已重启且生效（模块被真正加载）时
-            // 即使配置文件判定路径缺失（如 KernelSU 内嵌版无 modules.list、无 sqlite3）也如实绿；
-            // dbDisabled 仍最高优先（用户明确在 LSP 里关闭过 → 必须红）。
-            val cfgEnabled = hasModName(modsSeg) || dbEnabled
-            val cfgScope = scopeSeg.contains("==FILE hyperflow", ignoreCase = true) || dbEnabled
-            val modEnabled = lspInstalled && !dbDisabled && (
-                cfgEnabled || runtimeOkLocal || (!dbqUsable && dbHit)
-                )
-            val scopeOkV = lspInstalled && !dbDisabled && (
-                cfgScope || runtimeOkLocal || (!dbqUsable && dbHit)
-                )
-            // 生效判定 = 配置态为准（db/scope 命中即绿）。
-            // v0.5.10：不再设"配置 OK 但未加载"的黄条 —— 用户诉求"LSP 不动，重启一次刷完就完事"：
-            // 框架活跃(daemon)+模块配置命中 = 直接绿；框架不活跃 = 异常并要求启用。
-            // 运行时证据（maps/时间戳）仅作内部参考，不再驱动红绿/黄条（曾因 milink 非 zygote 进程
-            // 不注入、App 无 root 写时间戳失败等导致"重启后仍黄"的假阴性）。
-            val moduleOkV = if (modEnabled) 3 else 0
-            val scopeOkV2 = if (scopeOkV) 3 else 0
-            val lspOkV = if (lspInstalled) 3 else 0
-            val m = out?.substringAfter("==MILINK")?.substringBefore("==LSP")?.contains("package:") == true
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 rootOk = r; ksuOk = k; lspOk = lspOkV > 0
-                moduleOk = moduleOkV > 0; scopeOk = scopeOkV2 > 0; milinkOk = m
-                lspState = lspOkV; moduleState = moduleOkV; scopeState = scopeOkV2
-                runtimeOk = runtimeOkLocal
+                moduleOk = moduleOkV > 0; scopeOk = scopeOkV > 0; milinkOk = m
+                lspState = lspOkV; moduleState = moduleOkV; scopeState = scopeOkV
+                runtimeOk = mapsHit || androidInjected || milinkInjected
                 checking = false
-                state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV2 > 0, m)
+                state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV > 0, m)
             }
         }.start()
     }
@@ -288,59 +201,6 @@ echo ==END""") }.getOrNull()
         val pendingHint = if (!rootOk || lspState == 0)
             "LSP 框架未在运行，请启用后重启设备生效" else null
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 汇总行图标：Google Material Rounded 圆环家族（v0.5.13 与大卡同源，
-            // 绿=CheckCircleOutline 黄/红=ErrorOutline，InstallerX 同款开源图标）
-            Icon(
-                imageVector = if (allOk) Icons.Rounded.CheckCircleOutline else Icons.Rounded.ErrorOutline,
-                contentDescription = null,
-                tint = level,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                levelText,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = level
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "$passed/6",
-                style = MiuixTheme.textStyles.body2,
-                color = level.copy(alpha = 0.85f)
-            )
-            Spacer(Modifier.weight(1f))
-            if (checking) {
-                Text("检测中…", style = MiuixTheme.textStyles.body2, color = level)
-            } else {
-                // v0.5.13：连点「重新检测」3 次（800ms 窗口）弹出隐藏入口
-                // "环境正常为何无法使用？" —— 含一键软重启 + 复制检测日志（用户要求不显眼）
-                var reTap by remember { mutableIntStateOf(0) }
-                var lastTap by remember { mutableLongStateOf(0L) }
-                Text(
-                    "重新检测",
-                    style = MiuixTheme.textStyles.body2,
-                    fontWeight = FontWeight.Medium,
-                    color = level.copy(alpha = 0.9f),
-                    modifier = Modifier.clickable {
-                        detect()
-                        val now = System.currentTimeMillis()
-                        reTap = if (now - lastTap < 800) reTap + 1 else 1
-                        lastTap = now
-                        if (reTap >= 3) {
-                            reTap = 0
-                            showLspTrouble = true
-                        }
-                    }
-                )
-            }
-        }
         if (showLspTrouble) {
             HyperDialog(
                 title = "环境正常为何无法使用？",
@@ -426,14 +286,38 @@ echo ==END""") }.getOrNull()
                 HyperDialog(
                     title = "环境检测",
                     show = showEnvDetail,
-                    onDismiss = { showEnvDetail = false }
+                    onDismiss = { showEnvDetail = false },
+                    // v0.5.15：标题右侧小"重新检测"（连点 3 次弹隐藏入口，原首页汇总行按钮移除）
+                    titleAction = {
+                        var reTap by remember { mutableIntStateOf(0) }
+                        var lastTap by remember { mutableLongStateOf(0L) }
+                        Text(
+                            if (checking) "检测中…" else "重新检测",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    if (checking) return@clickable
+                                    detect()
+                                    val now = System.currentTimeMillis()
+                                    reTap = if (now - lastTap < 800) reTap + 1 else 1
+                                    lastTap = now
+                                    if (reTap >= 3) {
+                                        reTap = 0
+                                        showLspTrouble = true
+                                    }
+                                }
+                        )
+                    }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
                         EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
                         EnvDetailRow("LSPosed 框架", lspOk, "框架存在" to "未检测到 LSPosed")
                         EnvDetailRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
-                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）")
+                        EnvDetailRow("推荐作用域", scopeOk, "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）")
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
                 }
@@ -456,7 +340,31 @@ echo ==END""") }.getOrNull()
                 HyperDialog(
                     title = "环境检测",
                     show = showMore,
-                    onDismiss = { showMore = false }
+                    onDismiss = { showMore = false },
+                    // v0.5.15：标题右侧小"重新检测"（连点 3 次弹隐藏入口）
+                    titleAction = {
+                        var reTap by remember { mutableIntStateOf(0) }
+                        var lastTap by remember { mutableLongStateOf(0L) }
+                        Text(
+                            if (checking) "检测中…" else "重新检测",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    if (checking) return@clickable
+                                    detect()
+                                    val now = System.currentTimeMillis()
+                                    reTap = if (now - lastTap < 800) reTap + 1 else 1
+                                    lastTap = now
+                                    if (reTap >= 3) {
+                                        reTap = 0
+                                        showLspTrouble = true
+                                    }
+                                }
+                        )
+                    }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvItemRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 权限" to GuideType.ROOT }
@@ -465,7 +373,7 @@ echo ==END""") }.getOrNull()
                         EnvItemRow("模块已启用", moduleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE) { solveItem = "模块已启用" to GuideType.MODULE_SCOPE }
                         EnvItemRow(
                             "推荐作用域", scopeOk,
-                            "已勾选（本 App + milink + android）" to "未勾选推荐作用域（含 android）",
+                            "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）",
                             GuideType.MODULE_SCOPE
                         ) { solveItem = "推荐作用域" to GuideType.MODULE_SCOPE }
                         EnvItemRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK) { solveItem = "小米互联服务" to GuideType.MILINK }
@@ -499,7 +407,7 @@ echo ==END""") }.getOrNull()
                     GuideType.MODULE_SCOPE -> {
                         steps = listOf(
                             "1. 打开 LSPosed 作用域设置",
-                            "2. 勾选：HyperFlow + 小米互联服务 + Android 系统框架",
+                            "2. 勾选：小米互联服务 + Android 系统框架",
                             "3. 保存后重启设备生效（也可用下方按钮一键写入配置）"
                         )
                         actionLabel = "一键写入配置（重启生效）"
@@ -545,7 +453,8 @@ echo ==END""") }.getOrNull()
             }
         }
 
-        // ===== 设备信息（v0.5.12：一个统一 Card 内单行列表，行间黑色分割线分隔——学安装工具样式） =====
+        // ===== 设备信息（v0.5.15：改为 KernelSU 管理器 InfoCard 同款 —— 图标 24dp + 标题加粗 + 内容灰字，
+        // 行间不用分割线（改 24dp 间距），逐项对齐安装工具首页设备卡） =====
         GroupTitle("设备信息")
 
         // 解析各字段（机型行格式：机型：Redmi Note 12 Turbo（23049RP8BC））
@@ -582,53 +491,17 @@ echo ==END""") }.getOrNull()
             }
         }
 
-        // 设备行数据（学安装工具：左标签右值，单行列表）
-        // v0.5.13：按用户要求精简 —— 只留 机型 / 系统（含安卓版本）/ 内核 / 模块版本，
-        // 去掉 Root / 框架 / 互联行（这些状态在环境检测卡里体现，首页信息行只报设备本体）。
-        val devRows = listOf(
-            "机型" to (if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName),
-            "系统" to (if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
-            else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})"),
-            "内核" to kernV.ifEmpty { "未知" },
-            "模块" to "HyperFlow v${BuildConfig.VERSION_NAME}"
-        )
+        // v0.5.13：按用户要求精简 —— 只留 机型 / 系统（含安卓版本）/ 内核 / 模块版本
         Card(Modifier.fillMaxWidth()) {
-            Column {
-                devRows.forEachIndexed { idx, (label, value) ->
-                    // 行间黑色细分割线（安装工具同款分隔；机型/系统行点击触发机关除外，仅系统行机关）
-                    if (idx > 0) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .height(1.dp)
-                                .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (label == "系统") Modifier.clickable { onSysTap() }
-                                else Modifier
-                            )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            label,
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                            modifier = Modifier.width(64.dp)
-                        )
-                        Text(
-                            value,
-                            style = MiuixTheme.textStyles.body1,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f),
-                            maxLines = 1
-                        )
-                    }
-                }
+            Column(Modifier.padding(16.dp)) {
+                DevInfoRow(Icons.Filled.Smartphone, "机型",
+                    if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName)
+                DevInfoRow(Icons.Filled.Tag, "系统",
+                    if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
+                    else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})",
+                    onTap = { onSysTap() })
+                DevInfoRow(Icons.Filled.DeveloperBoard, "内核", kernV.ifEmpty { "未知" })
+                DevInfoRow(Icons.Filled.Fingerprint, "模块", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
             }
         }
 
@@ -652,6 +525,50 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
                 if (ok) texts.first else texts.second,
                 style = MiuixTheme.textStyles.body2,
                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+    }
+}
+
+/** 设备信息行（v0.5.15：KernelSU 管理器 InfoCard 同款 —— 图标 24dp + 标题加粗 + 内容灰字，
+ *  行间距默认 24dp（最后一行 0），无分割线） */
+@Composable
+private fun DevInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    content: String,
+    bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
+    onTap: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .padding(bottom = bottomPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            modifier = Modifier
+                .padding(end = 12.dp)
+                .size(24.dp),
+            tint = MiuixTheme.colorScheme.onBackground
+        )
+        Column {
+            Text(
+                title,
+                fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onBackground
+            )
+            Text(
+                content,
+                fontSize = MiuixTheme.textStyles.body2.fontSize,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }

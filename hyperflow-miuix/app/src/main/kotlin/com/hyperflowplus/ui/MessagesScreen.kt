@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextFieldDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -133,6 +135,10 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     }
     // 会话删除确认（长按会话）
     var delTarget by remember { mutableStateOf<Pair<String, List<Array<String>>>?>(null) }
+    // v0.5.15：会话多选模式（长按进入，学小米短信 ActionMode：勾选 + 底部操作栏）
+    var selMode by remember { mutableStateOf(false) }
+    var selConvos by remember { mutableStateOf(setOf<String>()) }
+    var batchDel by remember { mutableStateOf(false) }
     // 小米端读不到数据：当前显示的是本地保存的历史记录（避免误以为小米互联还有数据）
     val localOnly = convos.isNotEmpty() && !state.liveAvailable
     // 搜索结果"信息"分组：跨会话收集所有匹配消息（composable 作用域计算，勿移入 LazyColumn DSL）
@@ -156,6 +162,54 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
         )
     ) {
+        // v0.5.15：多选操作栏（长按会话进入，小米短信 ActionMode 同款：已选 N 个会话 + 删除 + 取消）
+        if (selMode) {
+            item(key = "actionMode") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "已选 ${selConvos.size} 个会话",
+                        style = MiuixTheme.textStyles.body1,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(
+                                enabled = selConvos.isNotEmpty(),
+                                onClick = { if (selConvos.isNotEmpty()) batchDel = true }
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "删除",
+                            tint = MiuixTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "删除",
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.error
+                        )
+                    }
+                    TextButton(
+                        text = "取消",
+                        onClick = {
+                            selMode = false
+                            selConvos = emptySet()
+                        }
+                    )
+                }
+            }
+        }
         // 搜索框固定在列表顶部（Miuix TextField = 小米短信搜索栏同款组件）
         item(key = "search") {
             Row(
@@ -168,15 +222,12 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
-                    // v0.5.10：对齐小米短信 MIUI 搜索栏参数（反编译实测）
-                    // 圆角 22dp（miuix_appcompat_search_view_bg_radius）、
-                    // 背景 surfaceContainer（miuix_appcompat_edit_text_search_bg_color 同族）、
-                    // 内容边距 12dp（miuix_search_padding_horizontal_common）
+                    // v0.5.15：再压一档高度（垂直内边距 16→6dp），更贴近小米短信搜索栏紧凑尺寸
                     cornerRadius = 22.dp,
                     colors = TextFieldDefaults.textFieldColors(
                         backgroundColor = MiuixTheme.colorScheme.surfaceContainer
                     ),
-                    insideMargin = DpSize(12.dp, 16.dp),
+                    insideMargin = DpSize(10.dp, 6.dp),
                     label = "搜索短信",
                     useLabelAsPlaceholder = true,
                     singleLine = true,
@@ -185,7 +236,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                             imageVector = Icons.Filled.Search,
                             contentDescription = "搜索",
                             tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     },
                     trailingIcon = {
@@ -195,7 +246,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                                 contentDescription = "清空",
                                 tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                                 modifier = Modifier
-                                    .size(18.dp)
+                                    .size(16.dp)
                                     .clickable { query = "" }
                             )
                         }
@@ -233,7 +284,24 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 if (filtered.isNotEmpty()) {
                     item(key = "grpHdrConv") { SearchGroupHeader("会话") }
                     items(filtered, key = { "conv_" + it.first }) { (sender, rows) ->
-                        ConversationRow(state, sender, rows, onOpen = { state.currentConversation = sender to rows }, onDelete = { delTarget = sender to rows })
+                        ConversationRow(
+                            state, sender, rows,
+                            isSel = selMode && selConvos.contains(sender),
+                            selectionMode = selMode,
+                            onOpen = {
+                                if (selMode) {
+                                    selConvos = if (selConvos.contains(sender)) selConvos - sender else selConvos + sender
+                                    if (selConvos.isEmpty()) selMode = false
+                                } else {
+                                    state.currentConversation = sender to rows
+                                }
+                            },
+                            onLongClick = {
+                                selMode = true
+                                selConvos = selConvos + sender
+                            },
+                            onDelete = { delTarget = sender to rows }
+                        )
                     }
                 }
                 if (allMsgs.isNotEmpty()) {
@@ -267,7 +335,24 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 }
             }
             items(filtered, key = { it.first }) { (sender, rows) ->
-                ConversationRow(state, sender, rows, onOpen = { state.currentConversation = sender to rows }, onDelete = { delTarget = sender to rows })
+                ConversationRow(
+                    state, sender, rows,
+                    isSel = selMode && selConvos.contains(sender),
+                    selectionMode = selMode,
+                    onOpen = {
+                        if (selMode) {
+                            selConvos = if (selConvos.contains(sender)) selConvos - sender else selConvos + sender
+                            if (selConvos.isEmpty()) selMode = false
+                        } else {
+                            state.currentConversation = sender to rows
+                        }
+                    },
+                    onLongClick = {
+                        selMode = true
+                        selConvos = selConvos + sender
+                    },
+                    onDelete = { delTarget = sender to rows }
+                )
             }
         }
     }
@@ -302,6 +387,41 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             )
         }
     }
+    // v0.5.15：会话多选批量删除确认
+    if (batchDel) {
+        val selRows = convos.filter { selConvos.contains(it.first) }
+        val selLocal = selRows.flatMap { it.second }.filter { it.getOrNull(3) == "local" }
+        val selLive = selRows.map { it.second }.flatten().size - selLocal.size
+        if (selLocal.isEmpty()) {
+            Toast.makeText(
+                androidx.compose.ui.platform.LocalContext.current,
+                "小米端消息无法删除，仅支持删除本地存档",
+                Toast.LENGTH_SHORT
+            ).show()
+            batchDel = false
+            selMode = false
+            selConvos = emptySet()
+        } else {
+            ConfirmDialog(
+                show = true,
+                
+                title = "删除",
+                content = buildString {
+                    append("确定要删除选中的 ${selLocal.size} 条信息吗？")
+                    if (selLive > 0) append("\n小米端实时消息（$selLive 条）无法删除。")
+                },
+                confirmText = "删除",
+                confirmDanger = true,
+                onConfirm = {
+                    state.deleteFlowRows(selLocal)
+                    batchDel = false
+                    selMode = false
+                    selConvos = emptySet()
+                },
+                onDismiss = { batchDel = false }
+            )
+        }
+    }
 }
 
 /** 搜索分组标题（短信 search_fragment_header 同款：灰色小字，minHeight 35dp） */
@@ -317,13 +437,17 @@ private fun SearchGroupHeader(title: String) {
     )
 }
 
-/** 会话行（短信 conversation_item 样式：发送人 17sp 加粗 + 时间｜设备 + 正文预览） */
+/** 会话行（短信 conversation_item 样式：发送人 17sp 加粗 + 时间｜设备 + 正文预览）
+ *  v0.5.15：长按进入会话多选（学小米短信）；多选模式下点击切换选中、选中行描边高亮 */
 @Composable
 private fun ConversationRow(
     state: HFState,
     sender: String,
     rows: List<Array<String>>,
+    isSel: Boolean,
+    selectionMode: Boolean,
     onOpen: () -> Unit,
+    onLongClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     val latest = rows.maxByOrNull { timeToEpoch(it[0]) } ?: return
@@ -332,9 +456,13 @@ private fun ConversationRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                if (isSel) MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+                else androidx.compose.ui.graphics.Color.Transparent
+            )
             .combinedClickable(
                 onClick = onOpen,
-                onLongClick = onDelete
+                onLongClick = onLongClick
             )
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

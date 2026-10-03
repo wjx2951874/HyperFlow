@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- LSPosed 预勾选作用域：小米互联服务 + 本 App + android（点击分身打开需拦截 system_server） -->
+    <!-- LSPosed 预勾选作用域：小米互联服务（通知流转 6 个 hook）+ android（system_server，点击分身通知打开 999）。
+         本 App（com.hyperflowplus）自身进程无需被 hook，不再列入推荐作用域（LSPosed 中勾不了也属正常）。 -->
     <string-array name="xposedscope">
         <item>com.milink.service</item>
-        <item>com.hyperflowplus</item>
         <item>android</item>
     </string-array>
 </resources>

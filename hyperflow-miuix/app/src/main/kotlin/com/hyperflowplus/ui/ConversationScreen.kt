@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -101,8 +102,8 @@ fun ConversationScreen(
     }
     // 页面底 = 主题 surface（浅 #F7F7F7 / 暗 #000000）＝ 真实短信详情页底色
     Column(modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-        // 多选操作栏：已选 N 条 + 删除 / 取消（系统短信长按多选同款交互；
-        // v0.5.13 起多选不再提供复制——小米短信多选只有删除，复制在单条长按菜单）
+        // 多选操作栏：已选 N 条 + 复制（仅单选）/ 删除 / 取消（系统短信长按多选同款交互；
+        // v0.5.15：单选时提供复制（用户：哪有一口气复制两条的），多选多条时隐藏复制）
         if (selectionMode) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -114,6 +115,36 @@ fun ConversationScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
+                // 复制（仅单选时显示，复制该条正文到剪贴板）
+                if (selected.size == 1) {
+                    Row(
+                        modifier = Modifier
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                            .clickable {
+                                val body = selectedRows.firstOrNull()?.getOrElse(2) { "" } ?: ""
+                                runCatching {
+                                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("HyperFlow消息", body))
+                                    Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "复制",
+                            tint = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "复制",
+                            style = MiuixTheme.textStyles.body1,
+                            color = MiuixTheme.colorScheme.primary
+                        )
+                    }
+                }
                 // 删除：MIUI ActionMode 同款（红色垃圾桶 + 红色文字，短信 App 删除语义）
                 Row(
                     modifier = Modifier
@@ -153,6 +184,13 @@ fun ConversationScreen(
         LaunchedEffect(cList) {
             androidx.compose.runtime.snapshotFlow { cList.firstVisibleItemIndex to cList.firstVisibleItemScrollOffset }
                 .collect { MainHolder.scrollTick++ }
+        }
+        // v0.5.15：最早在前（asc）时打开会话默认定位到最新消息（列表底部，最新一条在导航栏避让区上方）；
+        // 最新在前（desc）时最新消息本就在顶部，保持默认位置不动
+        LaunchedEffect(sorted, desc, state.sortVersion) {
+            if (!desc && sorted.isNotEmpty()) {
+                cList.scrollToItem(sorted.lastIndex)
+            }
         }
         LazyColumn(
             modifier = Modifier

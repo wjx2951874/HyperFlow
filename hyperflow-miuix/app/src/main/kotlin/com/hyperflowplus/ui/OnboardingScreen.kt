@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.state.ToggleableState
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
@@ -71,12 +72,14 @@ fun OnboardingScreen(state: HFState) {
             ),
         contentAlignment = Alignment.BottomCenter
     ) {
-        val maxCardH = LocalConfiguration.current.screenHeightDp.dp * 0.78f
+        // v0.5.15：弹窗大小学 KSU 更新日志弹窗（限高 0.62 屏高），底部间距加大使整体上移，
+        // 修正"上半部分偏下"问题（底部对齐不变）
+        val maxCardH = LocalConfiguration.current.screenHeightDp.dp * 0.62f
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp)
+                .padding(bottom = 64.dp)
                 .heightIn(max = maxCardH)
                 .clip(RoundedCornerShape(24.dp))
                 .background(
@@ -136,8 +139,8 @@ private fun StageAgreement(
 ) {
     Text(
         "欢迎使用 HyperFlow",
-        style = MiuixTheme.textStyles.title1,
-        fontWeight = FontWeight.Bold
+        fontSize = 17.sp,
+        fontWeight = FontWeight.SemiBold
     )
     Spacer(Modifier.height(6.dp))
     Text(
@@ -277,8 +280,8 @@ private fun StageCoolapk(
 ) {
     Text(
         "来酷安关注作者",
-        style = MiuixTheme.textStyles.title1,
-        fontWeight = FontWeight.Bold
+        fontSize = 17.sp,
+        fontWeight = FontWeight.SemiBold
     )
     Spacer(Modifier.height(8.dp))
     Text(
@@ -322,7 +325,7 @@ private fun StageFeedback(
     ctx: android.content.Context,
     onDone: () -> Unit
 ) {
-    var countdown by remember { mutableIntStateOf(10) }
+    var countdown by remember { mutableIntStateOf(5) }
     LaunchedEffect(Unit) {
         while (countdown > 0) {
             kotlinx.coroutines.delay(1000)
@@ -331,8 +334,8 @@ private fun StageFeedback(
     }
     Text(
         "后期反馈去哪里",
-        style = MiuixTheme.textStyles.title1,
-        fontWeight = FontWeight.Bold
+        fontSize = 17.sp,
+        fontWeight = FontWeight.SemiBold
     )
     Spacer(Modifier.height(8.dp))
     Text(
