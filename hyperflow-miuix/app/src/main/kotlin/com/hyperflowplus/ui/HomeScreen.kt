@@ -202,20 +202,20 @@ echo ==END""") }.getOrNull()
 
     LaunchedEffect(Unit) { detect() }
 
-    // V0.6.15.1：回退 LSP 判定到 shell 实时检测（用户实测：service 启动快照在取消勾选作用域后
-    // 仍返回旧 scope → 冷启动重进也显示"就绪"。改回 detect() 的 maps/探针/scope 文件实时判定：
-    // 勾选作用域 → 退出 → 重进 → 检测结果正确；重新检测按钮也实时刷新）。
-    // 保留 service 断开硬信号：模块被禁用 → onServiceDied → 强制显示"未连接"（shell 的
-    // daemon 存活无法区分模块禁用，之前那版会导致关掉框架仍显示已启用）。
+    // V0.6.16.1：作用域判定回到 libxposed service 快照（用户确认过 v0.6.14 判定准确：
+    // 勾选全部作用域 → service.scope 含 milink+android/system → 就绪；模块禁用 →
+    // onServiceDied 归零 → 未连接）。v0.6.16 改回 shell maps/探针判定导致"全部勾选仍提示
+    // 未勾选全"（milink/system_server 进程 maps 读不到模块 dex）→ 回退。
+    // "重新检测"仍由 detect() 用 shell 实时读 scope 文件刷新 service 快照（文件存在时以
+    // shell 内容为准、允许空集=全取消勾选），兼顾"取消后不重启也能刷出未就绪"。
     val fw = com.hyperflowplus.ModuleFrameworkState.snapshot.value
     val fwActive = fw.active
-    // LSPosed 模块三态：0=未连接（模块被禁用/service 断开，或框架无存活证据）红；
+    // LSPosed 模块三态：0=未连接（模块被禁用/service 断开）红；
     // 1=已启用但推荐作用域不全 黄；3=启用+作用域全 绿
     val lspModuleState = when {
         !fwActive -> 0                                   // 模块被禁用/service 断开 → 未连接
-        scopeState == 3 -> 3                             // 系统框架 + 小米互联都注入 → 推荐作用域就绪
-        lspState == 0 -> 0                               // 框架 daemon 无存活证据 → 未检测到框架
-        else -> 1                                        // 框架在但作用域不全 → 部分未就绪
+        fw.scopeReady -> 3                               // service scope 含 milink + android/system → 推荐作用域就绪
+        else -> 1                                        // 已启用但作用域不全 → 部分未就绪
     }
     val lspModuleOk = lspModuleState == 3
 
@@ -335,9 +335,10 @@ echo ==END""") }.getOrNull()
                                 .clickable {
                                     reTap++
                                     detect()
-                                    // V0.6.15.1：弹底部提示 —— 强行停止本 App 重进后检测最准
+                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
+                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
                                     android.widget.Toast.makeText(
-                                        ctx,
+                                        ctx.applicationContext,
                                         "强行停止本 App 再次进入，可获得更准确的检测结果",
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
@@ -405,9 +406,10 @@ echo ==END""") }.getOrNull()
                                     // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
                                     reTap++
                                     detect()
-                                    // V0.6.15.1：弹底部提示 —— 强行停止本 App 重进后检测最准
+                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
+                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
                                     android.widget.Toast.makeText(
-                                        ctx,
+                                        ctx.applicationContext,
                                         "强行停止本 App 再次进入，可获得更准确的检测结果",
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
@@ -459,6 +461,13 @@ echo ==END""") }.getOrNull()
                                     // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
                                     reTap++
                                     detect()
+                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
+                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
+                                    android.widget.Toast.makeText(
+                                        ctx.applicationContext,
+                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true

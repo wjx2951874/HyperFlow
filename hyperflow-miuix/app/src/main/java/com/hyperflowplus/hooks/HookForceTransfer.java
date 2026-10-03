@@ -85,6 +85,24 @@ public class HookForceTransfer {
                                     return chain.proceed();
                                 }
                             }
+                            // V0.6.16.1：解锁二次流转去重 —— 30s 内同内容指纹只强制放行一次。
+                            // 锁屏首流转后，解锁瞬间 milink 对同一通知重新评估（屏幕状态刷新触发
+                            // 通知重发/重评估），原生因"亮屏"本应拒绝，但下方无条件 TRUE 覆盖导致
+                            // 二次流转。命中指纹 → proceed 交还原生（亮屏原生拒绝 → 不再流转）；
+                            // 新通知（新指纹）→ 照常强制流转。键用内容指纹而非通知 key：
+                            // 解锁重发的通知 key 可能变化，内容不变。
+                            String fp = fingerprintFor(sbn);
+                            Long lastDedup = DEDUP.get(fp);
+                            long nowMs = System.currentTimeMillis();
+                            if (lastDedup != null && nowMs - lastDedup < DEDUP_WINDOW_MS) {
+                                MiflowLog.d("dedup: recently force-transferred -> stock decision: pkg="
+                                        + sbn.getPackageName() + " fp=" + fp + " key=" + sbn.getKey());
+                                return chain.proceed();
+                            }
+                            if (DEDUP.size() > 64) {
+                                DEDUP.entrySet().removeIf(e -> nowMs - e.getValue() > CLEANUP_MS);
+                            }
+                            DEDUP.put(fp, nowMs);
                             if (isCallSbn(sbn)) {
                                 // v0.6.14 精准强制流转：isDeviceSupported 首个参数就是 sbn，
                                 // 可精确区分来电——只对来电返回 TRUE（等效仅来电的亮屏判定放行），
@@ -112,6 +130,35 @@ public class HookForceTransfer {
             MiflowLog.i("HookForceTransfer[gate] installed (v0.6.15: call=precise force, others=forced, sms echo excluded)");
         } catch (Throwable t) {
             MiflowLog.e("HookForceTransfer[gate] install failed", t);
+        }
+    }
+
+    // ===== V0.6.16.1 解锁二次流转去重 =====
+    private static final long DEDUP_WINDOW_MS = 30 * 1000L;
+    private static final long CLEANUP_MS = 60 * 1000L;
+    private static final java.util.Map<String, Long> DEDUP = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 内容指纹：来电=call|pkg|标题(号码/联系人)；短信=sms|pkg|发送人|正文；
+     * 其他通知=other|pkg|标题|正文。同一内容在去重窗口内只强制流转一次。
+     */
+    private static String fingerprintFor(StatusBarNotification sbn) {
+        try {
+            String pkg = sbn.getPackageName();
+            android.app.Notification n = sbn.getNotification();
+            CharSequence t = n != null ? n.extras.getCharSequence("android.title") : null;
+            CharSequence tx = n != null ? n.extras.getCharSequence("android.text") : null;
+            String title = t == null ? "" : t.toString();
+            String text = tx == null ? "" : tx.toString();
+            if (isCallSbn(sbn)) {
+                return "call|" + pkg + "|" + title;
+            }
+            if (isSmsSbn(sbn)) {
+                return "sms|" + pkg + "|" + smsTitle(sbn) + "|" + smsBody(sbn);
+            }
+            return "other|" + pkg + "|" + title + "|" + text;
+        } catch (Throwable t) {
+            return "";
         }
     }
 
