@@ -1,3 +1,13 @@
+# v0.6.13
+
+1. 刷入安装 App 不再联网（真根因修复）：KSU 实际用 `. $MODPATH/customize.sh` source 方式
+   执行脚本，$0 是外层 installer.sh 而非脚本自身路径——此前 MODDIR=${0%/*} 推错目录，
+   导致本地 APK 明明已解压（KSU 日志确认先 "Extracting module files" 再跑 installer）
+   却找不到，被迫联网下 47MB APK。
+   v0.6.13 改为从 module.prop 实际位置反推模块目录（/data/adb/modules_update/hyperflow），
+   通道顺序：① 模块目录本地 APK（system/priv-app/ 下必中）→ ② 模块 zip 源提取 → ③ 联网兜底。
+   刷入 = 一次 25MB zip，App 本地安装，不再二次下载。
+
 # v0.6.12
 
 1. 刷入不再二次下载 APK：customize.sh 新增通道①——从 KSU 下载的模块 zip 源文件（

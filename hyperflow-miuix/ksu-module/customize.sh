@@ -4,16 +4,39 @@
 # 压缩包内 APK 尚未解压 → 本地 find 在此阶段永远找不到。
 # 因此 v0.6.6 起：customize.sh 联网直下 GitHub Release 独立 APK asset 安装，
 # 找不到 curl/wget 或下载失败时静默，由 service.sh 在 boot 后（模块完整落盘）兜底安装。
-MODDIR=${0%/*}
-[ -d "$MODDIR" ] || MODDIR=$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")
-[ -d "$MODDIR" ] || MODDIR=$(pwd)
+# v0.6.13：KSU 用 `. $MODPATH/customize.sh` source 方式执行，$0 是外层 installer.sh，
+# 不能用来推模块目录。改从 module.prop 实际位置反推（KSU 日志确认模块解压在
+# /data/adb/modules_update/hyperflow，解压先于 customize.sh 执行，APK 已在本地）。
+MODDIR=""
+for BASE in /data/adb/modules_update /data/adb/modules; do
+  [ -d "$BASE" ] || continue
+  MP=$(find "$BASE" -maxdepth 4 -path "*hyperflow*" -name module.prop 2>/dev/null | head -1)
+  [ -n "$MP" ] || MP=$(find "$BASE" -maxdepth 3 -name module.prop 2>/dev/null | head -1)
+  if [ -n "$MP" ]; then MODDIR=$(dirname "$MP"); break; fi
+done
+[ -d "$MODDIR" ] || MODDIR=/data/adb/modules_update/hyperflow
+[ -d "$MODDIR" ] || MODDIR=${0%/*}
 
 install_apk() { # $1=apk路径
   pm install -r -g "$1" 2>/dev/null
 }
 
-# 通道1：从 KSU 下载的模块 zip 源文件提取 APK（v0.6.12）——不走网络，省 47MB 二次下载。
-# KSU 刷写时 zip 常见存放路径：/data/adb/modules_update/、/data/adb/、/data/local/tmp/、/data/cache/
+# 通道1（v0.6.13 提升）：模块目录本地 APK —— KSU 先完整解压再 source 执行 customize.sh，
+# MODDIR 反推正确后，system/priv-app/HyperFlowPlus/HyperFlowPlus.apk 必在本地，直接安装，
+# 不再走网络。
+APK="$MODDIR/HyperFlowPlus.apk"
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)
+if [ -n "$APK" ] && [ -f "$APK" ]; then
+  if install_apk "$APK"; then
+    echo "HyperFlow: App installed/updated from module dir ($APK)"
+    exit 0
+  fi
+  echo "HyperFlow: local APK found ($APK) but install failed, fallback"
+fi
+
+# 通道2：从 KSU 下载的模块 zip 源文件提取 APK（v0.6.12）——本地 APK 不可用时
+# 走此通道。KSU 刷写时 zip 常见存放路径：/data/adb/modules_update/、/data/adb/、/data/local/tmp/、/data/cache/
 ZIP_SRC=""
 for D in /data/adb/modules_update /data/adb /data/local/tmp /data/cache; do
   [ -d "$D" ] || continue
@@ -41,18 +64,7 @@ else
   echo "HyperFlow: no module zip source found (looked: modules_update /adb /local/tmp /cache), fallback"
 fi
 
-# 通道2：模块目录本地 APK（部分 KSU/Magisk 变体解压可见）
-APK="$MODDIR/HyperFlowPlus.apk"
-[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
-[ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)
-if [ -n "$APK" ] && [ -f "$APK" ]; then
-  if install_apk "$APK"; then
-    echo "HyperFlow: App installed/updated from module dir ($APK)"
-    exit 0
-  fi
-fi
-
-# 通道2：联网直下 GitHub Release 独立 APK（v0.6.6；镜像 gh-proxy + 直连双通道）
+# 通道3：联网直下 GitHub Release 独立 APK（v0.6.6；镜像 gh-proxy + 直连双通道）
 # v0.6.11：App 已装且版本不低于模块 → 直接跳过联网下载（老用户刷入不再多下 47MB APK）
 VER=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
 MOD_CODE=$(grep '^versionCode=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
