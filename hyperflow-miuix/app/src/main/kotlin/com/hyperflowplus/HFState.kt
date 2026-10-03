@@ -153,7 +153,9 @@ object HFState {
     fun isDeletedFlowLine(line: String): Boolean {
         if (deletedKeys.isEmpty() || line.isBlank()) return false
         val t = Regex("content_title=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
-        val b = Regex("content_description=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
+        // V0.6.16.4：正文与删除指纹同口径 —— 都过 sanitizeFlowBody（原始行带 [N条] 前缀时
+        // 若不过滤，与 recordDeleted 的清洗后指纹不匹配 → 已删短信重新显示）
+        val b = sanitizeFlowBody(Regex("content_description=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty())
         val tm = Regex("content_time=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
         return deletedKeys.contains(fingerprint(t, b, tm))
     }
@@ -284,7 +286,11 @@ object HFState {
         val f = historyFile ?: return
         try {
             val old = if (f.exists()) f.readText() else ""
-            val merged = mergeFlow(old, tagSource(realtime, "local"))
+            // V0.6.16.4：已删除的短信不再写回本地历史（live 轮询重新拉回也不残留）
+            val kept = tagSource(realtime, "local").lines()
+                .filterNot { isDeletedFlowLine(it) }
+                .joinToString("\n")
+            val merged = mergeFlow(old, kept)
             if (merged.isNotBlank()) {
                 f.parentFile?.mkdirs()
                 f.writeText(merged)

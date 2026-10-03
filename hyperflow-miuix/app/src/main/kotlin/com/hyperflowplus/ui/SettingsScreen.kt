@@ -99,30 +99,24 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 // v0.6.2：软重启框架条目暂时移除（用户：放调试区仍易误触，先去掉）
                 // v0.5.15：重装引导（原"版本连点 3 次"机关移除，改调试区独立入口，防误触）
-                // V0.6.16.3：点击弹确认框（提示可能清除本地数据，短信除外），10 秒倒计时后确认，
-                // 确认后再等 10 秒进入引导页
+                // V0.6.16.4：重新引导 —— 仅重新显示首次使用引导页，不清空本地数据；
+                // 确认按钮 10 秒倒计时后才可点击（ConfirmDialog countdownSec 语义），点确认立即进入
                 var showReGuide by remember { mutableStateOf(false) }
                 ArrowPreference(
                     title = "重新引导",
-                    summary = "重新打开首次使用引导页（确认并倒计时后进入）",
+                    summary = "重新显示首次使用引导页",
                     onClick = { showReGuide = true }
                 )
                 if (showReGuide) {
                     ConfirmDialog(
                         show = showReGuide,
                         title = "重新引导",
-                        content = "重新引导可能清除本地数据（短信消息除外）。\n确认后等待 10 秒进入引导页。",
+                        content = "重新引导会重新显示第一次使用引导，为避免误操作，请等待10秒后点击确定继续操作（该操作不会清空本地数据）",
                         countdownSec = 10,
-                        confirmText = "确认",
+                        confirmText = "确定",
                         onConfirm = {
                             showReGuide = false
-                            Toast.makeText(
-                                ctx.applicationContext,
-                                "10 秒后打开引导页…",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            android.os.Handler(android.os.Looper.getMainLooper())
-                                .postDelayed({ MainHolder.onReopenOnboarding() }, 10_000)
+                            MainHolder.onReopenOnboarding()
                         },
                         onDismiss = { showReGuide = false }
                     )
@@ -241,4 +235,6 @@ object MainHolder {
     // v0.5.12：悬浮胶囊避让 —— MainActivity 按 navFloat 设置，页面滚动容器尾部
     // 加同高间距，保证内容最后一行可滚到胶囊上沿（不遮挡、不留白）
     var bottomPad by androidx.compose.runtime.mutableStateOf(androidx.compose.ui.unit.Dp.Unspecified)
+    // V0.6.16.4：消息页搜索态 —— 右上角搜索图标（排序左侧）打开，搜索框退出时关闭
+    var msgSearchOpen by androidx.compose.runtime.mutableStateOf(false)
 }

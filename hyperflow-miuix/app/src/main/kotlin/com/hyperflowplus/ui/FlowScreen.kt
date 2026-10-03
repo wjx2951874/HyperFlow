@@ -82,7 +82,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 SwitchPreference(
                     title = "写入系统短信",
-                    summary = "流转短信写入系统收件箱（若另一台设备未安装本模块会导致部分短信写入后不显示），推荐使用App内消息。",
+                    summary = "流转短信写入系统收件箱（若另一台设备未安装本模块会导致部分短信写入后不显示），推荐使用App内消息",
                     checked = state.smsPersist,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "sms"   // 10 秒倒计时确认
@@ -106,7 +106,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启亮屏流转嘛？",
-            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
+            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。\n\nOS4亮屏电话流转接听可能不可用",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )

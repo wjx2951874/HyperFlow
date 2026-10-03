@@ -366,7 +366,7 @@ echo ==END""") }.getOrNull()
                                     } else {
                                         android.widget.Toast.makeText(
                                             ctx.applicationContext,
-                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            "LSPosed模块及作用域状态需要关闭并重新打开本应用以完成检测，正在自动操作。如未自动打开请手动打开",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         android.os.Handler(android.os.Looper.getMainLooper())
@@ -444,7 +444,7 @@ echo ==END""") }.getOrNull()
                                     } else {
                                         android.widget.Toast.makeText(
                                             ctx.applicationContext,
-                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            "LSPosed模块及作用域状态需要关闭并重新打开本应用以完成检测，正在自动操作。如未自动打开请手动打开",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         android.os.Handler(android.os.Looper.getMainLooper())
@@ -506,7 +506,7 @@ echo ==END""") }.getOrNull()
                                     } else {
                                         android.widget.Toast.makeText(
                                             ctx.applicationContext,
-                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            "LSPosed模块及作用域状态需要关闭并重新打开本应用以完成检测，正在自动操作。如未自动打开请手动打开",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         android.os.Handler(android.os.Looper.getMainLooper())

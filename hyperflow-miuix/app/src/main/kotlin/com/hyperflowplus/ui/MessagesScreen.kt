@@ -46,6 +46,7 @@ import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
@@ -231,6 +232,8 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 }
             }
         }
+        // V0.6.16.4：搜索框不再常驻 —— 右上角搜索图标（排序左侧）打开，此处显示；退出按钮关闭
+        if (MainHolder.msgSearchOpen) {
         // 搜索框固定在列表顶部（Miuix SearchBar.InputField = 小米短信搜索栏同款组件）
         item(key = "search") {
             Row(
@@ -290,10 +293,26 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     }
                 }
+                // V0.6.16.4：退出搜索（置回列表）
+                IconButton(
+                    onClick = {
+                        MainHolder.msgSearchOpen = false
+                        query = ""
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "退出搜索",
+                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
                 // V0.6.15：显示模式设置已移至页面右上角（MainActivity TopAppBar actions，
                 // 排序图标右侧）；搜索框独占一行，保持小米短信搜索栏干净样式
             }
         }
+        } // V0.6.16.4：搜索框按需显示（if MainHolder.msgSearchOpen）
         if (localOnly) {
             item(key = "localOnly") {
                 Text(

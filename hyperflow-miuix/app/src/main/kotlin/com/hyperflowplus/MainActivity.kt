@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
@@ -303,6 +304,13 @@ fun HyperFlowApp() {
                         scrollBehavior = topBarScroll,
                         actions = {
                         if (tab == 2) {
+                        // V0.6.16.4：搜索图标（排序左侧）——点击打开消息页搜索框
+                        IconButton(onClick = { MainHolder.msgSearchOpen = true }) {
+                            top.yukonga.miuix.kmp.basic.Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "搜索消息"
+                            )
+                        }
                         Box {
                             IconButton(onClick = { showSort = true }) {
                                 top.yukonga.miuix.kmp.basic.Icon(
