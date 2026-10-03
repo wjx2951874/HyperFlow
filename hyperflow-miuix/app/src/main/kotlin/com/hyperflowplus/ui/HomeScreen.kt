@@ -143,8 +143,13 @@ echo ==END""") }.getOrNull()
             val scopeOkV = if (lspInstalled && androidInjected && milinkInjected) 3 else 0
             val lspOkV = if (lspInstalled) 3 else 0
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查
+            // 注意：不能用单引号包 $out（shell 不展开 → 日志永远只有字面 $out）；
+            // 用 base64 传递内容，杜绝一切 shell 转义/换行/特殊字符问题
             if (!out.isNullOrBlank()) {
-                runCatching { RootExec.su("mkdir -p /data/adb/hyperflowplus && echo '${'$'}out' > /data/adb/hyperflowplus/detect.log") }
+                val b64 = android.util.Base64.encodeToString(
+                    out.toByteArray(), android.util.Base64.NO_WRAP
+                )
+                runCatching { RootExec.su("mkdir -p /data/adb/hyperflowplus && echo '$b64' | base64 -d > /data/adb/hyperflowplus/detect.log") }
             }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 rootOk = r; ksuOk = k; lspOk = lspOkV > 0

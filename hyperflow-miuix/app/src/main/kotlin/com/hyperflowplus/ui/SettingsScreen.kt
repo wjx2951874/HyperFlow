@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
-import com.hyperflowplus.HFApplication
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import com.hyperflowplus.ui.fixLspScript
@@ -37,6 +36,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
+
+    // v0.5.15.2：日志列表二级页（整页替换设置页内容，避免与外层滚动冲突）
+    var showLogs by remember { mutableStateOf(false) }
+    if (showLogs) {
+        LogListScreen(onBack = { showLogs = false }, modifier = modifier)
+        return
+    }
 
     fun browse(url: String) {
         runCatching {
@@ -124,9 +130,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"系统"行连点 5 次，
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
-                // v0.5.12：分享改为文件分享（FileProvider 分享 .txt 日志本体）
                 // v0.5.13：仅当存在已捕获的日志文件时才显示该条目（没有就不显示，
                 // 也不提示如何触发捕获）；机关捕获成功后下次进设置页自动出现。
+                // v0.5.15.2：入口改为"日志列表"——查看/删除/分享/下载全部日志
                 var hasLog by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     hasLog = java.io.File(ctx.filesDir, "hf_logs")
@@ -134,45 +140,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 }
                 if (hasLog) {
                     ArrowPreference(
-                        title = "分享运行日志",
-                        summary = "导出日志文件用于反馈问题",
-                        onClick = {
-                            val ctxA = ctx
-                            Thread {
-                                // 优先分享最近一次已保存的日志文件；无则实时捕获一份
-                                val dir = java.io.File(ctxA.filesDir, "hf_logs")
-                                var file: java.io.File? = dir.listFiles()
-                                    ?.filter { it.name.endsWith(".txt") }
-                                    ?.maxByOrNull { it.lastModified() }
-                                if (file == null || !file.exists()) {
-                                    file = runCatching { HFApplication.captureLogcat(ctxA) }.getOrNull()
-                                }
-                                val f = file
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    if (f == null) {
-                                        Toast.makeText(ctxA, "日志捕获失败", Toast.LENGTH_SHORT).show()
-                                        return@post
-                                    }
-                                    runCatching {
-                                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                                            ctxA,
-                                            "com.hyperflowplus.fileprovider",
-                                            f
-                                        )
-                                        val send = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_SUBJECT, "HyperFlow v${BuildConfig.VERSION_NAME} 运行日志")
-                                            putExtra(Intent.EXTRA_TEXT, "HyperFlow v${BuildConfig.VERSION_NAME} 运行日志\n详见附件文件")
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        ctxA.startActivity(Intent.createChooser(send, "分享日志文件"))
-                                    }.onFailure {
-                                        Toast.makeText(ctxA, "无可用分享应用", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }.start()
-                        }
+                        title = "日志列表",
+                        summary = "查看、删除、分享、下载已捕获的日志",
+                        onClick = { showLogs = true }
                     )
                 }
             }
