@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
@@ -125,21 +124,14 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        // 顶部栏：返回 + 标题 + 数量
+        // 顶部栏：统一 MIUI 返回箭头（V0.6.15）+ 标题 + 数量
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Filled.ArrowBack,
-                contentDescription = "返回",
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier
-                    .padding(8.dp)
-                    .clickable { onBack() }
-            )
+            MiuixBackButton(onClick = onBack)
             Text(
                 "日志列表",
                 fontSize = 18.sp,

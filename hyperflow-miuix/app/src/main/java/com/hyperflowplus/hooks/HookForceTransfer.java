@@ -72,6 +72,19 @@ public class HookForceTransfer {
                                 MiflowLog.d("force transfer DISABLED: stock decision (no gate)");
                                 return chain.proceed();
                             }
+                            // V0.6.15：回灌排除——功能①开启时，"流转来源"的短信通知不强制
+                            // （走系统原判定，系统对流转来源消息拒绝二次流转 → 不再双份）。
+                            // 接收侧 HookSmsPersist 已记录最近流转短信指纹，命中则 proceed。
+                            // 本机真实收到的短信通知不在指纹里 → 功能①照常强制流转。
+                            if (isSmsSbn(sbn)) {
+                                String sender = smsTitle(sbn);
+                                String body = smsBody(sbn);
+                                if (HookSmsPersist.matchRecentSms(sender, body)) {
+                                    MiflowLog.d("flow-source sms notification -> skip force (prevent echo): pkg="
+                                            + sbn.getPackageName() + " sender=" + sender + " key=" + sbn.getKey());
+                                    return chain.proceed();
+                                }
+                            }
                             if (isCallSbn(sbn)) {
                                 // v0.6.14 精准强制流转：isDeviceSupported 首个参数就是 sbn，
                                 // 可精确区分来电——只对来电返回 TRUE（等效仅来电的亮屏判定放行），
@@ -96,9 +109,40 @@ public class HookForceTransfer {
                             return Boolean.TRUE;
                         }
                     });
-            MiflowLog.i("HookForceTransfer[gate] installed (v0.6.14: call=precise force, others=forced)");
+            MiflowLog.i("HookForceTransfer[gate] installed (v0.6.15: call=precise force, others=forced, sms echo excluded)");
         } catch (Throwable t) {
             MiflowLog.e("HookForceTransfer[gate] install failed", t);
+        }
+    }
+
+    // ===== V0.6.15 短信回灌排除 =====
+    private static final java.util.Set<String> SMS_PKGS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.android.mms", "com.miui.mms", "com.android.phone",
+            "com.android.messaging", "com.google.android.apps.messaging"));
+
+    private static boolean isSmsSbn(StatusBarNotification sbn) {
+        return SMS_PKGS.contains(sbn.getPackageName());
+    }
+
+    private static String smsTitle(StatusBarNotification sbn) {
+        try {
+            android.app.Notification n = sbn.getNotification();
+            if (n == null) return "";
+            CharSequence t = n.extras.getCharSequence(android.app.Notification.EXTRA_TITLE);
+            return t == null ? "" : t.toString();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private static String smsBody(StatusBarNotification sbn) {
+        try {
+            android.app.Notification n = sbn.getNotification();
+            if (n == null) return "";
+            CharSequence t = n.extras.getCharSequence(android.app.Notification.EXTRA_TEXT);
+            return t == null ? "" : t.toString();
+        } catch (Throwable t) {
+            return "";
         }
     }
 

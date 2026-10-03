@@ -11,12 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,11 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -108,30 +104,21 @@ private val LIBS = listOf(
 
 /** 开放源代码许可页（AboutLibraries 样式：每库一卡，点开弹窗看许可全文 + 访问主页） */
 @Composable
-fun LicensesScreen(onBack: () -> Unit) {
+fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     var selected by remember { mutableStateOf<Lib?>(null) }
 
-    Column(Modifier.fillMaxSize()) {
-        // 页头：返回 + 大标题（与其他页顶栏统一）
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(start = 8.dp, end = 20.dp, top = 18.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
-            }
-            Text(
-                "开放源代码许可",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-        }
+    Column(modifier.fillMaxSize()) {
+        // V0.6.15：Miuix TopAppBar（同首页大标题样式，标题字号/间距与首页一致）
+        // + 统一 MIUI 返回箭头（MiuixBackButton，42dp）
+        TopAppBar(
+            title = "开放源代码许可",
+            largeTitle = "开放源代码许可",
+            color = MiuixTheme.colorScheme.surface,
+            titleColor = MiuixTheme.colorScheme.onSurface,
+            largeTitleColor = MiuixTheme.colorScheme.onSurface,
+            navigationIcon = { MiuixBackButton(onClick = onBack) }
+        )
 
         Column(
             modifier = Modifier
@@ -193,7 +180,7 @@ fun LicensesScreen(onBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp)
+                    .heightIn(max = 480.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(

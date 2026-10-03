@@ -113,6 +113,51 @@ object HFState {
     private val historyFile: java.io.File?
         get() = ctx?.getFileDir("hf_flow_history.txt")
 
+    // ===== V0.6.15 删除防回写 =====
+    /** 已删消息指纹文件（删除后小米端还能实时搜到的也不再保存/显示 → 本地隐藏） */
+    private val deletedFile: java.io.File?
+        get() = ctx?.getFileDir("hf_deleted.txt")
+
+    private val deletedKeys: MutableSet<String> by lazy {
+        val s = LinkedHashSet<String>()
+        runCatching {
+            deletedFile?.takeIf { it.exists() }?.readText()?.lines()
+                ?.forEach { if (it.isNotBlank()) s.add(it) }
+        }
+        s
+    }
+
+    /** 删除版本号：删除操作自增，MessagesScreen remember 依赖它触发重组 */
+    var deletedVersion by mutableStateOf(0)
+        private set
+
+    /** 指纹：title+body+time（body 截断到第一个逗号，与 flow 行 content_description 解析一致） */
+    private fun fingerprint(t: String, b: String, tm: String): String =
+        t + "\u0001" + b.substringBefore(",") + "\u0001" + tm
+
+    /** flow 行是否已被删除（防回写过滤） */
+    fun isDeletedFlowLine(line: String): Boolean {
+        if (deletedKeys.isEmpty() || line.isBlank()) return false
+        val t = Regex("content_title=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
+        val b = Regex("content_description=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
+        val tm = Regex("content_time=([^,]+)").find(line)?.groupValues?.get(1)?.trim().orEmpty()
+        return deletedKeys.contains(fingerprint(t, b, tm))
+    }
+
+    /** 记录已删指纹（供 deleteFlowRows 调用） */
+    private fun recordDeleted(keys: List<Array<String>>) {
+        runCatching {
+            keys.forEach { r ->
+                val t = r.getOrNull(4).orEmpty()
+                val b = r.getOrNull(2).orEmpty()
+                val tm = r.getOrNull(0).orEmpty()
+                deletedKeys.add(fingerprint(t, b, tm))
+            }
+            deletedFile?.writeText(deletedKeys.joinToString("\n"))
+            deletedVersion++
+        }
+    }
+
     // ===== 开关状态（与 Config.java 的 key 一致） =====
     // 首次安装全部默认关闭，用户进首页自行开启（V0.4.28 起）
     val forceTransfer: Boolean get() = cfg.optBoolean("force_transfer", false)
@@ -123,8 +168,14 @@ object HFState {
     val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏
     val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃
     val debugMode: Boolean get() = cfg.optBoolean("debug_mode", false)       // 调试模式
-    // 消息第一层显示模式：false=本地+实时一起显示（默认）；true=仅显示实时获取（本地隐藏但不删除）
-    val msgLiveOnly: Boolean get() = cfg.optBoolean("msg_live_only", false)
+    // 消息第一层显示模式（V0.6.15 三态）：all=实时与本地合并显示（默认）/ live=仅显示实时 / local=仅显示本地
+    val msgMode: String get() = cfg.optString("msg_mode", if (cfg.optBoolean("msg_live_only", false)) "live" else "all")
+
+    fun setMsgMode(mode: String) {
+        cfg = JSONObject(cfg.toString()).put("msg_mode", mode)
+        saveCfgLater()
+        refreshArchive()
+    }
     // 列表排序：name_asc/name_desc（发送人名）/time_asc/time_desc（最近接收时间）；默认按发送人名 A→Z
     val archiveSort: String get() = cfg.optString("archive_sort", "time_desc")
     val detailSort: String get() = cfg.optString("detail_sort", "desc")
@@ -245,6 +296,7 @@ object HFState {
      *  本地历史（hf_source=local）行为持久删除。 */
     fun deleteFlowRows(keys: List<Array<String>>) {
         Thread {
+            recordDeleted(keys)
             fun parseTs(s: String): Long {
                 val fmt1 = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.US)
                 fmt1.isLenient = false

@@ -1,132 +1,23 @@
-# v0.6.14
+# v0.6.15
 
-1. **回灌双份流转根因修复（重大）**：`isDeviceSupported` hook 之前**未接入"亮屏强制流转"开关**，
-   对非来电通知无条件强制放行——接收端收到流转短信后，系统生成的该短信通知又被强制
-   流转到互联组内其他设备 → 双份。现在开关接入：关闭时完全走系统原判定（milink 对
-   带流转来源标记的消息在接收端自行拒绝二次流转）。
-2. **来电流转精准 hook**：移除 system_server 全局模拟锁屏（HookCallSimLock，误伤正常
-   通话流程已删除），改为在 milink 的 isDeviceSupported 内仅对来电通知（isCallSbn）
-   精准强制放行——亮屏来电也可流转，接收端降级（OS4→voip / OS3·苹果→卡片）与去重
-   交回系统原生；附带详细打点日志（包名/类别/key），供实测校准。
-3. 首页环境检测 6 项合一为 3 项：计数改"X/3 项通过"，全部就绪详情弹窗列表对齐 3 行
-   （Root 环境 / LSPosed 模块 / 小米互联服务）。
-4. 首页顶部留白 26dp→12dp，对齐 KSU HomeMiuix 间距规范（内容区 12dp + 首卡顶 12dp）。
-5. "重新检测"逻辑重做：每次点击都执行一次真实检测，累计第 3 次点击时弹出
-   "环境正常为何无法使用"引导提示（不再是 800ms 窗口连点）。
-6. 消息页显示模式移入消息页：搜索框右侧新增设置按钮（一起显示 / 仅实时弹窗选择），
-   设置页原"仅显示实时消息"开关移除。
-7. 消息页搜索框换 Miuix SearchBar.InputField（小米短信同款），占位文字"搜索消息"
-   字号调小。
-
-# v0.6.14
-
-1. 来电精准强制流转（重做）：移除 system_server 全局模拟锁屏（HookCallSimLock 误伤
-   正常通话流程，连锁屏来电都断）；改为在 milink 进程 isDeviceSupported 内只对来电
-   通知返回放行（首个参数即 sbn，可精确区分来电）——亮屏来电也能流转，接收端
-   voip/卡片降级与同 key 去重交系统原生，来电卡片（OS3/苹果降级通道）不再误杀。
-   已加打点日志（包名/类别/key），配合实测校准。
-2. 首页环境检测 UI 修正：计数/详情统一为 3 项（Root 环境 / LSPosed 模块 / 小米互联），
-   顶部间距对齐 KSU 规范（12dp）。
-3. 检测提示逻辑：点击"重新检测"每次都执行真实检测，累计第 3 次弹出
-   "环境正常为何无法使用"引导（不再要求 800ms 连点）。
-4. 消息显示模式（一起显示/仅实时）从设置页移到消息页：搜索栏右侧设置按钮。
-5. 消息页搜索栏"搜索消息"提示字号调小。
-
-# v0.6.13
-
-1. 刷入安装 App 不再联网（真根因修复）：KSU 实际用 `. $MODPATH/customize.sh` source 方式
-   执行脚本，$0 是外层 installer.sh 而非脚本自身路径——此前 MODDIR=${0%/*} 推错目录，
-   导致本地 APK 明明已解压（KSU 日志确认先 "Extracting module files" 再跑 installer）
-   却找不到，被迫联网下 47MB APK。
-   v0.6.13 改为从 module.prop 实际位置反推模块目录（/data/adb/modules_update/hyperflow），
-   通道顺序：① 模块目录本地 APK（system/priv-app/ 下必中）→ ② 模块 zip 源提取 → ③ 联网兜底。
-   刷入 = 一次 25MB zip，App 本地安装，不再二次下载。
-
-# v0.6.12
-
-1. 刷入不再二次下载 APK：customize.sh 新增通道①——从 KSU 下载的模块 zip 源文件（
-   /data/adb/modules_update/、/data/adb/、/data/local/tmp/、/data/cache/）直接 unzip 提取
-   APK 安装，刷一次只下载 25MB zip（此前是 25MB zip + 47MB APK 两次下载）；
-   提取失败依次回退：模块目录已解压 APK → 联网下载（gh-proxy/ghfast/直连三通道）。
-2. 刷写日志输出 zip 源文件路径与提取结果，便于定位不同 KSU 变体的 zip 存放位置。
-
-# v0.6.11
-
-1. 刷入提速：App 已安装且版本不低于模块 → customize.sh 直接跳过联网下载 APK（老用户刷入
-   只下载 ~25MB 模块 zip，不再多下 47MB 独立 APK）；仅首次刷入 / App 缺失 / 版本旧时才联网下载。
-2. APK 下载镜像增加 ghfast.top 第三通道（gh-proxy.com → ghfast.top → GitHub 直连）。
-3. 刷写日志增加阶段提示（"下载中 ~47MB" / "App 已是最新，跳过下载"）。
-
-# v0.6.10
-
-1. 来电流转强制全屏接听（与 KSU / HyperModifier 等工具一致）：
-   - 新增 HookCallSimLock：注入 system_server（android 作用域），白名单限定来电链路
-     （com.android.server.telecom / com.android.phone / incallui / dialer / android.telecom
-     调用栈）模拟"锁屏 + 灭屏"——亮屏来电也走 voip 广播全屏流转，接收端在线接听；
-     非来电调用栈一律原样放行，不影响系统其他逻辑；
-   - milink 进程抑制来电通知卡片（CATEGORY_CALL / incallui / dialer / phone）：
-     voip 走广播链路由 system_server 模拟锁屏放行，卡片若流转会造成"电话+卡片"双份
-     （锁屏）与接听后"电话"通知残留，一律拦截；
-   - 其他通知维持亮屏强制流转（功能①），运行状态卡过滤保留。
-
-# v0.6.9
-
-1. 来电流转恢复 milink 原始逻辑（只改电话，其他通知本轮不动）：
-   - 来电通知（CATEGORY_CALL / incallui / dialer / phone）在流转门控 isDeviceSupported 直接交给系统原生判定——亮屏拒绝流转、锁屏按系统分流（OS4 走 voip 全屏接听 / OS3 降级通知卡片），模块零干预；
-   - 删除 KeyguardManager / PowerManager 模拟锁屏 hook（上一版实为强制放行：isDeviceSupported 一律 true + 模拟锁屏，导致系统原本亮屏拒绝的来电卡片也被流转，且锁屏双份、接听后多一条"电话"通知）；
-   - 其他通知维持 v0.6.8 的亮屏强制流转（功能①），运行状态卡拦截保留。
-
-# v0.6.8
-
-1. 首页大标题重做：改为 Miuix 官方 TopAppBar 大标题模式（学 KernelSU 管理器 / HyperModifier）——标题字号更大、位置更靠下，随内容滚动平滑收起居中；四个 tab（首页/流转/消息/设置）统一，切 tab 自动重置展开。
-2. 环境检测 6 项合一为 3 项：① Root 环境（Root 或 KernelSU 任一即绿，砍掉单独的 KSU 内核检测）② 小米互联服务 ③ LSPosed 模块（启用 + 推荐作用域合一，三态：红=未启用/未连接，黄=已启用但作用域不全，绿=就绪）。
-3. LSPosed 检测更智能：以 libxposed service 实时连接为准（模块停用 → 连接断开 → 直接显示未启用，不再误报"已启用"），推荐作用域读取框架实时配置。
-4. 引导提示词全面重写：按缺失场景一步步引导（装 Root → 装 LSPosed → 启用模块 → 勾选作用域），"去解决"步骤与弹窗文案同步更新。
-
-# v0.6.6
-
-1. App 刷入时联网直装：KSU 执行 customize.sh 阶段压缩包尚未解压（已实证），v0.6.6 起 workflow 将 APK 独立上传为 GitHub Release asset，customize.sh 刷入时联网直下 APK（gh-proxy 镜像 + GitHub 直连双通道）并 pm install —— 刷入即装好 App，无需等 boot；下载失败静默，由 service.sh 在重启后兜底（压缩包内 APK 仍保留兜底）。
-
-## v0.6.5
-
-1. App 自动安装机制修正（安装失败的真正根因）：实测 KSU 执行 customize.sh 时模块目录里只有 module.prop，其余文件（含 APK）尚未解压——这是执行时机问题，不是路径问题，find 在此阶段永远找不到 APK。改为：customize.sh 阶段能装则装（部分变体可见），找不到不报错，由 service.sh 在 boot 后（模块完整落盘）自动安装 App 并输出安装日志到 /data/local/tmp/hyperflow_install.log。刷入后重启一次，模块与 App 全部到位。
-2. update.json zipUrl 同步修复：此前发版只同步 version/versionCode，zipUrl 停在 v0.6.1，导致"检测到新版但下载到旧包"。自本版起三处（version/versionCode/zipUrl）一并同步。
-
-
-
-1. App 自动安装机制修正（安装失败的真正根因）：实测 KSU 执行 customize.sh 时模块目录里只有 module.prop，其余文件（含 APK）尚未解压——这是执行时机问题，不是路径问题，find 在此阶段永远找不到 APK。改为：customize.sh 阶段能装则装（部分变体可见），找不到不报错，由 service.sh 在 boot 后（模块完整落盘）自动安装 App 并输出安装日志到 /data/local/tmp/hyperflow_install.log。刷入后重启一次，模块与 App 全部到位。
-2. update.json zipUrl 同步修复：此前发版只同步 version/versionCode，zipUrl 停在 v0.6.1，导致"检测到新版但下载到旧包"。自本版起三处（version/versionCode/zipUrl）一并同步。
-
-## v0.6.4
-
-1. 环境检测升级为秒级实时：采用 libxposed service 绑定（参考 HyperModifier 同款机制）——模块在 LSPosed 启用时 App 进程实时连接框架 daemon，直接拿到框架实时返回的模块作用域配置。推荐作用域/模块启用判定不再依赖 root + ps/maps/文件探针慢探测，毫秒更新、无 root 依赖，勾选即绿。
-2. 更新下载修复：update.json 的 zipUrl 此前停在 v0.6.1（历次发版只同步了 version/versionCode），导致 App/KSU 检测到新版、实际下载却拿到 0.6.1 安装包。
-3. KSU 刷入安装 APK 再加固：find 不限深度搜索 + 打印模块目录诊断，若仍找不到可从安装日志直接定位 APK 实际位置。
-
-## v0.6.3
-
-1. KSU 刷入时静默安装 APK 修复：KSU 安装 zip 为白名单式解压，zip 根目录的 APK 不会解压到模块目录（v0.6.0~0.6.2 因此报 "HyperFlowPlus.apk not found"，App 装不上）。customize.sh/service.sh 改为 find 全树搜索 APK，兜底命中 system/priv-app 下的实体 APK，重启一次模块与 App 全部到位。
-
-## v0.6.2
-
-1. 环境检测根治（MLPID 匹配）：检测脚本用进程名精确匹配 milink 失败（Android 进程名 15 字符截断），导致 milink 明明注入了模块却永远判定"推荐作用域未就绪"。改为宽松匹配 milink 关键字，三个推荐域勾选后检测为绿。
-2. 首页/流转/消息/设置四个页面标题整体下移（18→30dp），与内容一起往下对齐，不再贴状态栏。
-3. 消息搜索框文案"搜索短信"改为"搜索消息"。
-4. 会话排序切换修复：切到"最新在前"现在直接定位到最顶部最新消息；切到"最早在前"定位到底部最新消息（导航栏避让区上方可见）。
-5. 设置-调试-"软重启框架"入口暂时移除（防误触）。
-
-## v0.6.1
-
-1. 日志文件名带版本号（hf_log_v0.6.1_时间戳.txt）+ 内容头部显式版本标记，日志列表一眼区分新旧，不再混着旧版日志。
-2. 分身通知"先开 0 再开 999"根治：补 ActivityTaskManagerService(ATMS) hook（Android 12+ 真实启动路径），第一发请求即改到分身空间 999，主空间 0 不再出现；userId=999 自幂等，不会双开。
-3. 刷入时静默安装/更新管理 App：新增 customize.sh，KSU 刷入瞬间 pm install 新版 APK，重启一次模块+App 全部到位（service.sh 保留 boot 后兜底）。
-4. 更新检测修复：update.json 同步至最新版本（此前停在 0.5.15.3 导致 KSU/App 内都检测不到新版本）。
-5. 版本号体系调整：v0.6.0 起 versionCode 递增（100/101），已刷最新版时 KSU 显示"已是最新"属正常。
-
-## v0.6.0 历史
-
-1. 首页内容整体下移 26dp（对齐 LSPosed/KSU 首页间距，状态卡不再贴顶）。
-2. 日志列表新增"一键删除全部"（顶部删除图标 + 确认弹窗）。
-3. 软重启框架加确认弹窗，防止误触。
-4. 推荐作用域修复：scope.list 补 system/android 双标识（LSPosed 2.2.0 只读 META-INF/xposed/scope.list，arrays.xml 无效）。
-5. 电话亮屏流转：改回 milink 原生分流（OS4 走 voip 全屏 / OS3 降级通知），HookForceTransfer 模拟锁屏三件套（isDeviceSupported 放行 + isKeyguardLocked 模拟 + isInteractive 模拟灭屏），来电 hack 全部移除。
+1. **短信双份/回灌根治（闭环）**：亮屏强制流转之前把所有非来电通知无条件放行，导致接收端
+   本地新生成的"流转来源短信通知"被二次流转回互联组 → 双份。现在 HookForceTransfer 增加
+   **回灌排除**：HookSmsPersist 记录最近收到的流转短信指纹（发送人+正文+时间，5条/30秒窗口），
+   强制流转遇到匹配短信通知 → 走系统原判定（milink 对流转来源消息拒绝二次流转）。
+   以后重新开启"亮屏强制流转"也不会再双份，本机真实短信不受影响。
+2. **短信落库诊断打点**：收到流转短信时打印入参 + flow 库最新一条 + 系统短信库最新一条，
+   供"读落库内容写系统短信"方案定版（写入系统短信写不进的问题一并定位）。
+3. **消息页三态显示模式**：右上角设置按钮（排序图标右侧）：实时与本地合并显示 / 仅显示实时 /
+   仅显示本地。仅"仅显示本地"模式可长按删除；删除记指纹 → 小米云端还能搜到的消息
+   也不再回写/显示（本地隐藏）。
+4. **排序图标**：换 Material 标准 Sort 图标（学 LSP 管理器风格，Google 官方开源图标）。
+5. **重新检测修复**：首页"重新检测"直接读取 LSP scope 文件实时刷新状态，等效退出后台重进。
+6. **首页环境卡重做**：去除顶部黄色小字引导；无 Root 红卡点击进详情（Root=红叉，LSPosed/
+   小米互联=灰色叹号"无法检测"）+ "去解决"完整引导（KSU 超级用户授权步骤，分步文案）；
+   黄卡"去解决"引导同步完整化（安装 LSPosed→启用模块→勾选作用域→重启）。
+7. **UI 统一**：全部二级页返回箭头统一为 MIUI 官方 MiuixIcons.Back（42dp，非自绘）；
+   开源许可页标题改 Miuix 大标题对齐首页、保留底部导航、许可弹窗拉长；日志列表页去掉
+   外层"设置"标题、保留底部导航；更新日志弹窗拉长。
+8. **更新检测优化**：打开 App 自动检测改为静默（不弹框），结果常驻版本行——有新版橙色醒目
+   "发现新版本 vX，点击更新"（点击直击更新日志窗）/ 已是最新灰色提示；主动点击版本号
+   仍弹检测窗（保留加载转圈）。

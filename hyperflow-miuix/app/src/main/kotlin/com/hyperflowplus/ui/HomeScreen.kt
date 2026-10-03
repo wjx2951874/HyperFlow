@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
@@ -114,6 +115,8 @@ echo ==P_ADB;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 echo ==P_MILINK;
 cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
+echo ==SCOPE;
+cat /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
@@ -142,7 +145,15 @@ echo ==END""") }.getOrNull()
             val mlLoaded = mapsSeg.contains("==ML_LOADED")
             val mapsHit = mapsSeg.contains("==LOADED") || sysLoaded || mlLoaded
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
-            val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==MAPS")?.trim()?.toLongOrNull()
+            val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==SCOPE")?.trim()?.toLongOrNull()
+            // V0.6.15："重新检测"实时补刷作用域快照（等价退出重进效果）——
+            // service 绑定只在启动时发生，作用域是绑定瞬间快照；勾选后不重启 App 不更新。
+            // 这里用 shell 实时读 scope 文件刷进 ModuleFrameworkState（connected 仍由 service 保证）
+            val scopeLines = out?.substringAfter("==SCOPE")?.substringBefore("==MAPS")
+                ?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+            if (scopeLines.isNotEmpty()) {
+                com.hyperflowplus.ModuleFrameworkState.refreshScopeFromShell(scopeLines)
+            }
             // 系统框架（system_server 注入）：maps 实时证据优先，探针 48h 内命中兜底
             val androidInjected = sysLoaded || fresh(adbProbe)
             // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
@@ -236,14 +247,7 @@ echo ==END""") }.getOrNull()
             else -> "部分环境未就绪"
         }
         val passed = listOf(rootEnvOk, milinkOk, lspModuleOk).count { it }
-        // v0.6.8：引导提示重写 —— 按缺失场景一步步引导（装 Root → 装 LSPosed → 启用模块 → 勾选作用域）
-        val pendingHint = when {
-            !rootEnvOk -> "未检测到 Root 权限：请先通过 KernelSU/Magisk 获取 Root，再回来重新检测"
-            !fwActive && !lspOk -> "未检测到 LSPosed 框架：请安装 LSPosed（KernelSU 环境选 Zygisk 版），然后启用 HyperFlow 并重启"
-            !fwActive -> "HyperFlow 尚未启用：打开 LSPosed → 模块 → 勾选 HyperFlow → 勾选下方推荐作用域 → 重启设备"
-            lspModuleState == 1 -> "推荐作用域未勾选全：打开 LSPosed → HyperFlow → 勾选「系统框架 + 小米互联 + 本应用」→ 重启设备"
-            else -> null
-        }
+        // V0.6.15：引导提示统一移入检测详情"去解决"（黄字不再显示在首页）
 
         if (showLspTrouble) {
             HyperDialog(
@@ -293,30 +297,76 @@ echo ==END""") }.getOrNull()
                 }
             }
         }
-        if (pendingHint != null) {
-            Text(
-                pendingHint,
-                style = MiuixTheme.textStyles.body2,
-                color = CYellow,
-                modifier = Modifier.padding(start = 6.dp, top = 0.dp, end = 6.dp)
-            )
-        }
-
+        // V0.6.15：去除环境卡上方的黄色小字提示（引导统一放检测详情"去解决"里，更完整）
         // ===== 环境检测（三态，v0.5.13：InstallerX MiuixHomePage 同款长方体状态卡） =====
         // ① 无 Root：红色长方体卡（其余项无 root 也查不到）
         // ② 全部就绪：绿色长方体卡（点击弹 6 项详情）
         // ③ 部分未就绪：黄色长方体卡 + "查看更多" → 弹窗红标未成功项 + "去解决" → 步骤弹窗
         val isDark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+        // V0.6.15：solveItem（去解决引导）提升到红卡/黄卡共用作用域
+        var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
         if (!rootOk) {
+            // V0.6.15：无 Root 红卡 → 点击进详情（Root=红叉，其余两项=灰色叹号"无法检测"）+ 去解决完整引导
+            var showRootDetail by remember { mutableStateOf(false) }
             HomeStatusCard(
                 containerColor = if (isDark) Color(0xFF381A1A) else Color(0xFFFAEEEE),
                 iconColor = Color(0xFFD13636),
                 bgIcon = Icons.Rounded.ErrorOutline,
                 title = "环境异常",
-                desc = "未检测到 Root 环境，其余项无法检测",
-                extra = "点击前往 KernelSU 管理器授权",
-                onClick = { launchKernelSu() }
+                desc = "点击查看情况",
+                extra = "$passed/3 项通过",
+                onClick = { showRootDetail = true }
             )
+            if (showRootDetail) {
+                HyperDialog(
+                    title = "环境检测",
+                    show = showRootDetail,
+                    onDismiss = { showRootDetail = false },
+                    titleAction = {
+                        var reTap by remember { mutableIntStateOf(0) }
+                        Text(
+                            if (checking) "检测中…" else "重新检测",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .clickable {
+                                    reTap++
+                                    detect()
+                                    if (reTap >= 3) {
+                                        reTap = 0
+                                        showLspTrouble = true
+                                    }
+                                }
+                        )
+                    }
+                ) {
+                    Column(Modifier.padding(horizontal = 8.dp)) {
+                        EnvBadgeRow(
+                            Icons.Rounded.Cancel, CRed,
+                            "Root 环境", "未授予 Root 权限（无法检测其余项）"
+                        )
+                        EnvBadgeRow(
+                            Icons.Rounded.ErrorOutline, Color(0xFF9A9A9A),
+                            "LSPosed 模块", "无法检测：需要先获取 Root"
+                        )
+                        EnvBadgeRow(
+                            Icons.Rounded.ErrorOutline, Color(0xFF9A9A9A),
+                            "小米互联服务", "无法检测：需要先获取 Root"
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                showRootDetail = false
+                                solveItem = "Root 环境" to GuideType.ROOT
+                            },
+                            colors = ButtonDefaults.buttonColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("去解决") }
+                    }
+                }
+            }
         } else if (allOk) {
             var showEnvDetail by remember { mutableStateOf(false) }
             HomeStatusCard(
@@ -366,7 +416,6 @@ echo ==END""") }.getOrNull()
         } else {
             // 部分未就绪：黄色长方体卡（同款结构，黄底 + 黄色圆环叹号——用户要的"长方体、红色系"变体）
             var showMore by remember { mutableStateOf(false) }
-            var solveItem by remember { mutableStateOf<Pair<String, GuideType>?>(null) }
             HomeStatusCard(
                 containerColor = if (isDark) Color(0xFF3A2E00) else Color(0xFFFFF4DD),
                 iconColor = CYellow,
@@ -419,19 +468,26 @@ echo ==END""") }.getOrNull()
                 val action: () -> Unit
                 when (guide) {
                     GuideType.ROOT -> {
+                        // V0.6.15：引导完整化（KSU 授权界面无法直接打开 → 纯步骤引导，不放打开按钮）
                         steps = listOf(
-                            "1. 打开 KernelSU 管理器",
-                            "2. 在超级用户列表找到 HyperFlow",
-                            "3. 授予 Root 权限后返回首页重新检测"
+                            "1. 打开 KernelSU 管理器（桌面应用列表里找 KernelSU）",
+                            "2. 底部切换到「超级用户」页面",
+                            "3. 找到 HyperFlow（com.hyperflowplus），点击它",
+                            "4. 打开授权开关，授予超级用户权限",
+                            "5. 返回本应用，点右上角「重新检测」",
+                            "如果列表里没有 HyperFlow：先随便进一次本应用（触发权限申请），再回 KernelSU 查看"
                         )
-                        actionLabel = "打开 KernelSU"
-                        action = { launchKernelSu() }
+                        actionLabel = null
+                        action = {}
                     }
                     GuideType.LSPOSED -> {
                         steps = listOf(
-                            "1. 打开 KernelSU 管理器 → 进入「模块」页",
-                            "2. 安装 LSPosed（Zygisk 版，KernelSU 环境装 LSPosed-zygisk 模块）",
-                            "3. 回到首页重新检测，检测到框架后按提示启用 HyperFlow 并重启"
+                            "1. 打开 KernelSU 管理器 → 底部「模块」页",
+                            "2. 确认已安装 LSPosed（Zygisk 版）且已启用，然后重启设备",
+                            "3. 重启后打开 LSPosed 管理器（通知栏入口或桌面图标）",
+                            "4. 进入「模块」页，找到 HyperFlow 并启用它",
+                            "5. 勾选下方推荐作用域：系统框架 + 小米互联服务",
+                            "6. 保存并重启设备，回首页重新检测"
                         )
                         actionLabel = "打开 KernelSU"
                         action = { launchKernelSu() }
@@ -439,8 +495,9 @@ echo ==END""") }.getOrNull()
                     GuideType.MODULE_SCOPE -> {
                         steps = listOf(
                             "1. 打开 LSPosed → 模块 → HyperFlow",
-                            "2. 勾选作用域：系统框架 + 小米互联服务（也可勾选本应用）",
-                            "3. 保存并重启设备，重启后推荐作用域显示绿色即为就绪"
+                            "2. 勾选作用域：系统框架 + 小米互联服务（推荐作用域）",
+                            "3. 保存并重启设备（或点下方按钮写入配置后软重启）",
+                            "4. 重启后回首页重新检测，三项全绿即就绪"
                         )
                         actionLabel = "一键写入配置（重启生效）"
                         action = { fixLsp() }
@@ -681,6 +738,36 @@ private fun StatusBadge(ok: Boolean, size: androidx.compose.ui.unit.Dp = 20.dp) 
         tint = if (ok) CGreen else CRed,
         modifier = Modifier.size(size)
     )
+}
+
+/** V0.6.15：自定义徽标详情行（红叉 / 灰色叹号等，无 Root 时无法检测项使用） */
+@Composable
+private fun EnvBadgeRow(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    text: String
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+            Text(
+                text,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+    }
 }
 
 /** v0.6.8：三态徽标（0 红叉 / 1 黄叹 / 3 绿勾）——LSPosed 模块合一检测项使用 */

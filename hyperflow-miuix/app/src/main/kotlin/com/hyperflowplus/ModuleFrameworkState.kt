@@ -67,4 +67,21 @@ object ModuleFrameworkState {
     fun onServiceDied() {
         mutableSnapshot.value = Snapshot()
     }
+
+    /**
+     * V0.6.15："重新检测"实时补刷作用域（等价退出重进效果）。
+     * service 绑定只发生在 App 启动时，作用域列表是绑定瞬间快照；
+     * 用户在 LSPosed 里勾选后不重启 App，旧快照不更新 → 首页三项不变。
+     * 此处用 shell 实时读作用域文件（路径/格式已在本设备验证：
+     * /data/adb/lspd/config/scope/com.hyperflowplus，每行一个包名），
+     * 仅刷新 scope，connected/apiVersion 仍由 service 事件保证（模块真禁用 → onServiceDied 归零）。
+     */
+    fun refreshScopeFromShell(scopeLines: List<String>) {
+        val cur = mutableSnapshot.value
+        if (!cur.connected) return
+        val scopes = scopeLines.map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toSet()
+        if (scopes.isNotEmpty() && scopes != cur.scope) {
+            mutableSnapshot.value = cur.copy(scope = scopes)
+        }
+    }
 }

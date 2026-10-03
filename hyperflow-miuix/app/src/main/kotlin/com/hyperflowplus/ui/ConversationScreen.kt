@@ -316,12 +316,8 @@ fun ConversationTopBar(
         title = sender,
         subtitle = "",
         navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowLeft,
-                    contentDescription = "返回"
-                )
-            }
+            // V0.6.15：统一 MIUI 返回箭头（MiuixBackButton）
+            MiuixBackButton(onClick = onBack)
         },
         actions = {
             // 排序：Popup 选择框（KSU 风格），不再直接切换（用户反馈：点击后应有选择弹窗）

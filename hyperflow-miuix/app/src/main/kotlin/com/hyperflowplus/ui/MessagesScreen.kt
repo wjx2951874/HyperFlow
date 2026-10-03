@@ -104,13 +104,22 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         )
         return
     }
-    val convos = remember(state.flow, state.archiveSort, state.sortVersion, state.msgLiveOnly) {
-        val parsed = parseFlow(state.flow, state.archiveSort)
-        if (state.msgLiveOnly) {
-            // 仅实时：本地存档隐藏（不删除）——设置页"仅显示实时消息"开启时生效
-            parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) != "local" } }
+    val convos = remember(state.flow, state.archiveSort, state.sortVersion, state.msgMode, state.deletedVersion) {
+        // V0.6.15 删除防回写：已删消息（小米端还能实时搜到的）过滤掉 → 本地隐藏不再出现
+        val raw = state.flow.lines()
+            .filterNot { line -> state.isDeletedFlowLine(line) }
+            .joinToString("\n")
+        val parsed = parseFlow(raw, state.archiveSort)
+        when (state.msgMode) {
+            // 仅显示实时：本地存档隐藏（不删除）
+            "live" -> parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) != "local" } }
                 .filter { it.second.isNotEmpty() }
-        } else parsed
+            // 仅显示本地：小米端实时行隐藏，只留本地存档（可删除）
+            "local" -> parsed.map { (s, rows) -> s to rows.filter { it.getOrNull(3) == "local" } }
+                .filter { it.second.isNotEmpty() }
+            // 默认：实时与本地合并显示
+            else -> parsed
+        }
     }
     if (convos.isEmpty()) {
         Column(
@@ -130,8 +139,6 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     }
     // 搜索框：按发送人或正文实时过滤（小米短信同款 Miuix 搜索栏样式）
     var query by remember { mutableStateOf("") }
-    // v0.6.14：显示模式设置弹窗（从设置页移入消息页）
-    var showMsgMode by remember { mutableStateOf(false) }
     val q = query.trim()
     val filtered = remember(convos, q) {
         if (q.isEmpty()) convos
@@ -256,70 +263,8 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     }
                 )
-                // v0.6.14：显示模式设置入口（从设置页移到消息页，学排序 Popup 样式）
-                Box {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "显示模式",
-                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(20.dp)
-                            .clickable { showMsgMode = true }
-                    )
-                    if (showMsgMode) {
-                        androidx.compose.ui.window.Popup(
-                            alignment = Alignment.TopEnd,
-                            offset = androidx.compose.ui.unit.IntOffset(
-                                0, with(LocalDensity.current) { 40.dp.roundToPx() }
-                            ),
-                            onDismissRequest = { showMsgMode = false }
-                        ) {
-                            Surface(
-                                color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                                shape = RoundedCornerShape(16.dp),
-                                shadowElevation = 10.dp,
-                                modifier = Modifier.width(230.dp)
-                            ) {
-                                Column(Modifier.padding(vertical = 6.dp)) {
-                                    @Composable
-                                    fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
-                                        Row(
-                                            Modifier.fillMaxWidth()
-                                                .clickable(onClick = onClick)
-                                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                label,
-                                                style = MiuixTheme.textStyles.body1,
-                                                color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            if (sel) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = "已选",
-                                                    tint = MiuixTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    ModeItem("一起显示（本地+实时）", !state.msgLiveOnly, {
-                                        if (state.msgLiveOnly) state.set(Config.KEY_MSG_LIVE_ONLY, false)
-                                        showMsgMode = false
-                                    })
-                                    ModeItem("仅显示实时消息", state.msgLiveOnly, {
-                                        if (!state.msgLiveOnly) state.set(Config.KEY_MSG_LIVE_ONLY, true)
-                                        showMsgMode = false
-                                    })
-                                }
-                            }
-                        }
-                    }
-                }
+                // V0.6.15：显示模式设置已移至页面右上角（MainActivity TopAppBar actions，
+                // 排序图标右侧）；搜索框独占一行，保持小米短信搜索栏干净样式
             }
         }
         if (localOnly) {
@@ -365,8 +310,11 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                                 }
                             },
                             onLongClick = {
-                                selMode = true
-                                selConvos = selConvos + sender
+                                // V0.6.15：删除（长按多选）仅"仅显示本地"模式可用
+                                if (state.msgMode == "local") {
+                                    selMode = true
+                                    selConvos = selConvos + sender
+                                }
                             },
                             onDelete = { delTarget = sender to rows }
                         )
@@ -416,8 +364,11 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     },
                     onLongClick = {
-                        selMode = true
-                        selConvos = selConvos + sender
+                        // V0.6.15：删除（长按多选）仅"仅显示本地"模式可用
+                        if (state.msgMode == "local") {
+                            selMode = true
+                            selConvos = selConvos + sender
+                        }
                     },
                     onDelete = { delTarget = sender to rows }
                 )

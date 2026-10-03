@@ -13,6 +13,7 @@ import com.hyperflowplus.XposedEntry;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.Locale;
 
 import io.github.libxposed.api.XposedInterface.Chain;
@@ -43,6 +44,23 @@ public class HookSmsPersist {
     private static volatile String dedupKey = "";
     private static volatile long dedupTime = 0;
 
+    // ===== V0.6.15 回灌排除：最近流转短信指纹（供 HookForceTransfer 识别"流转来源"通知）=====
+    public static final class SmsFp {
+        public final String number; // 归一化号码/服务商名
+        public final String body;   // 正文（可能为空）
+        public final long timeMs;
+
+        SmsFp(String n, String b, long t) {
+            number = n;
+            body = b;
+            timeMs = t;
+        }
+    }
+
+    private static final int FP_MAX = 5;
+    private static final long FP_WINDOW_MS = 30_000L;
+    private static final ArrayDeque<SmsFp> RECENT_SMS = new ArrayDeque<>(FP_MAX);
+
     private static final String PROVIDER_AUTHORITY = "com.android.mms.flow.provider";
     private static final String PATH = "messageflow";
     private static final Uri FLOW_URI = Uri.parse("content://" + PROVIDER_AUTHORITY + "/" + PATH);
@@ -52,6 +70,15 @@ public class HookSmsPersist {
             @Override
             public Object intercept(Chain chain) throws Throwable {
                 Object result = chain.proceed(); // 先执行原逻辑（写 flow）
+                // V0.6.15：无论写入开关，记录"最近流转短信"指纹（强制流转回灌排除用）
+                try {
+                    java.util.List<Object> args = chain.getArgs();
+                    if (args != null && !args.isEmpty() && args.get(0) != null) {
+                        recordRecentSms(args.get(0));
+                        diagnoseSmsDb(Config.getContext());
+                    }
+                } catch (Throwable ignored) {
+                }
                 if (!Config.isSmsPersistEnabled()) {
                     return result;
                 }
@@ -134,6 +161,94 @@ public class HookSmsPersist {
             MiflowLog.i("HookSmsPersist[iphone] installed");
         } catch (Throwable t) {
             MiflowLog.e("HookSmsPersist[iphone] install failed", t);
+        }
+    }
+
+    // ===== V0.6.15 回灌排除：指纹记录与匹配 =====
+
+    private static void recordRecentSms(Object notifData) {
+        try {
+            String title = getFieldStr(notifData, "title");
+            if (title == null || title.isEmpty()) return;
+            String message = getFieldStr(notifData, "message");
+            if (message == null || message.isEmpty()) message = getFieldStr(notifData, "subtitle");
+            synchronized (RECENT_SMS) {
+                long now = System.currentTimeMillis();
+                while (!RECENT_SMS.isEmpty() && now - RECENT_SMS.peekFirst().timeMs > FP_WINDOW_MS) {
+                    RECENT_SMS.removeFirst();
+                }
+                RECENT_SMS.addLast(new SmsFp(norm(title), norm(message), now));
+                while (RECENT_SMS.size() > FP_MAX) RECENT_SMS.removeFirst();
+            }
+            MiflowLog.d("recent flowed sms recorded: " + title);
+        } catch (Throwable t) {
+            MiflowLog.w("recordRecentSms failed: " + t.getMessage());
+        }
+    }
+
+    /** 匹配最近流转短信（号码/服务商名归一化相等；正文互相包含，短正文要求全等） */
+    public static boolean matchRecentSms(String number, String body) {        if (number == null || number.isEmpty()) return false;
+        String n = norm(number);
+        String b = norm(body);
+        synchronized (RECENT_SMS) {
+            long now = System.currentTimeMillis();
+            for (SmsFp fp : RECENT_SMS) {
+                if (now - fp.timeMs > FP_WINDOW_MS) continue;
+                if (!fp.number.equals(n)) continue;
+                if (b.isEmpty() || fp.body.isEmpty()) return true;
+                if (b.length() <= 5 || fp.body.length() <= 5) {
+                    if (b.equals(fp.body)) return true;
+                } else if (b.contains(fp.body) || fp.body.contains(b)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static String norm(String s) {
+        return s == null ? "" : s.trim().replaceAll("\\s+", "");
+    }
+
+    /** V0.6.15 诊断：打印 flow 库与系统短信库最新一条（确认落库位置与真实字段） */
+    private static void diagnoseSmsDb(Context ctx) {
+        if (ctx == null) return;
+        try {
+            Cursor c = ctx.getContentResolver().query(FLOW_URI, null, null, null, "_id DESC LIMIT 1");
+            if (c != null) {
+                try {
+                    if (c.moveToFirst()) {
+                        MiflowLog.d("DIAG flow latest: title=" + getCol(c, "content_title", "")
+                                + " desc=" + getCol(c, "content_description", "")
+                                + " device=" + getCol(c, "content_device_name", "")
+                                + " time=" + getCol(c, "content_time", ""));
+                    } else {
+                        MiflowLog.d("DIAG flow latest: (empty)");
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+        } catch (Throwable t) {
+            MiflowLog.w("DIAG flow query failed: " + t.getMessage());
+        }
+        try {
+            Cursor c = ctx.getContentResolver().query(Uri.parse("content://sms/inbox"),
+                    new String[]{"address", "body", "date"}, null, null, "date DESC LIMIT 1");
+            if (c != null) {
+                try {
+                    if (c.moveToFirst()) {
+                        MiflowLog.d("DIAG sms/inbox latest: address=" + getCol(c, "address", "")
+                                + " body=" + getCol(c, "body", "").replaceAll("[\\r\\n]+", " ") + " date=" + getCol(c, "date", ""));
+                    } else {
+                        MiflowLog.d("DIAG sms/inbox latest: (empty)");
+                    }
+                } finally {
+                    c.close();
+                }
+            }
+        } catch (Throwable t) {
+            MiflowLog.w("DIAG sms/inbox query failed: " + t.getMessage());
         }
     }
 

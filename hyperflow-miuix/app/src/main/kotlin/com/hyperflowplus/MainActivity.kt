@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +78,7 @@ import com.hyperflowplus.ui.GuideType
 import com.hyperflowplus.ui.BarBlurHost
 import com.hyperflowplus.ui.HyperDialog
 import com.hyperflowplus.ui.LiquidNavBar
+import com.hyperflowplus.ui.LogListScreen
 import com.hyperflowplus.ui.RoundedIcons
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -111,8 +113,10 @@ fun HyperFlowApp() {
         val ctx = LocalContext.current
         var tab by remember { mutableIntStateOf(0) }
         var showSort by remember { mutableStateOf(false) }
+        var showMsgMode by remember { mutableStateOf(false) }
         var showUpd by remember { mutableStateOf(false) }
         var showLicenses by remember { mutableStateOf(false) }
+        var showLogs by remember { mutableStateOf(false) }
         var guideType by remember { mutableStateOf<GuideType?>(null) }
         var updVer by remember { mutableStateOf("") }
         var updUrl by remember { mutableStateOf("") }
@@ -127,39 +131,52 @@ fun HyperFlowApp() {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
             MainHolder.onOpenLicenses = { showLicenses = true }
+            MainHolder.onOpenLogs = { showLogs = true }
             MainHolder.onReopenOnboarding = { state.showOnboarding = true }
             MainHolder.onCheckUpdate = {
-                // 检测更新：弹 MIUI 风格小窗，检测中转圈，结果在窗内展示
+                // V0.6.15：主动点击版本号 → 弹检测窗（checking→结果在窗内展示），
+                // 同时版本行状态同步（有新版橙字常驻 / 已是最新灰字）
                 updPhase = "checking"
                 updMsg = ""
                 showUpd = true
+                MainHolder.updState = "checking"
                 checkUpdate(
                     onNew = { ver, url, log ->
                         runCatching {
                             updVer = ver; updUrl = url; updLog = log
                             updPhase = "new"; showUpd = true
+                            MainHolder.hasUpdate = true
+                            MainHolder.latestVer = ver
+                            MainHolder.updState = "new"
                         }
                     },
                     onNone = {
                         runCatching {
                             updMsg = "当前使用的是 V${BuildConfig.VERSION_NAME}。"
                             updPhase = "none"; showUpd = true
+                            MainHolder.hasUpdate = false
+                            MainHolder.updState = "none"
                         }
                     },
                     onError = {
                         runCatching {
                             updMsg = it
                             updPhase = "error"; showUpd = true
+                            MainHolder.hasUpdate = false
+                            MainHolder.updState = "error"
                         }
                     },
                     onBusy = {
                         runCatching {
                             updMsg = "正在检查中，请稍候再试"
                             updPhase = "busy"; showUpd = true
+                            MainHolder.updState = "busy"
                         }
                     }
                 )
             }
+            // V0.6.15：版本行"发现新版本"时点击 → 直接弹更新日志窗（日志+更新按钮）
+            MainHolder.onOpenUpdater = { updPhase = "new"; showUpd = true }
             // v0.5.11：打开 App 自动检测更新（延迟启动，避开引导页/闪退 Toast 同帧渲染）。
             // 有新版 → 弹窗提示一次（prefs 按版本号去重），之后不再主动弹；
             // 仅设置页"版本号"行显示"有新版可更新"提示；点击该行可随时手动再检。
@@ -167,17 +184,21 @@ fun HyperFlowApp() {
                 runCatching {
                     checkUpdate(
                         onNew = { ver, url, log ->
+                            // V0.6.15：自动检测=静默，不弹框；只更新版本行状态，
+                            // 用户点击版本行 → 直击更新日志窗
+                            updVer = ver; updUrl = url; updLog = log
                             MainHolder.hasUpdate = true
                             MainHolder.latestVer = ver
-                            val p = ctx.getSharedPreferences("hf_prefs", android.content.Context.MODE_PRIVATE)
-                            if (p.getString("upd_toasted_ver", "") != ver) {
-                                p.edit().putString("upd_toasted_ver", ver).apply()
-                                updVer = ver; updUrl = url; updLog = log
-                                updPhase = "new"; showUpd = true
-                            }
+                            MainHolder.updState = "new"
                         },
-                        onNone = { MainHolder.hasUpdate = false },
-                        onError = { MainHolder.hasUpdate = false },
+                        onNone = {
+                            MainHolder.hasUpdate = false
+                            MainHolder.updState = "none"
+                        },
+                        onError = {
+                            MainHolder.hasUpdate = false
+                            MainHolder.updState = "error"
+                        },
                         onBusy = {}
                     )
                 }
@@ -216,13 +237,11 @@ fun HyperFlowApp() {
             }
             return@MiuixTheme
         }
-        // 开源许可覆盖页（设置页进入）
-        if (showLicenses) {
-            BackHandler { showLicenses = false }
-            Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-                LicensesScreen(onBack = { showLicenses = false })
-            }
-            return@MiuixTheme
+        // V0.6.15：开源许可 / 日志列表不再全屏覆盖，进 Scaffold content（底部导航保留），
+        // TopAppBar 在这两个页面隐藏（各自自带标题栏+统一 MIUI 返回箭头）
+        BackHandler(enabled = showLogs || showLicenses) {
+            if (showLogs) showLogs = false
+            else if (showLicenses) showLicenses = false
         }
 
         val tabs = listOf(
@@ -272,6 +291,8 @@ fun HyperFlowApp() {
                         onBack = { state.currentConversation = null },
                         onSetSort = { state.setSortValue(Config.KEY_DETAIL_SORT, it) }
                     )
+                } else if (showLogs || showLicenses) {
+                    // V0.6.15：日志列表 / 开源许可自带标题栏+统一返回箭头，隐藏主 TopAppBar
                 } else {
                     TopAppBar(
                         title = title,
@@ -285,7 +306,8 @@ fun HyperFlowApp() {
                         Box {
                             IconButton(onClick = { showSort = true }) {
                                 top.yukonga.miuix.kmp.basic.Icon(
-                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    // V0.6.15：图标换 Material 标准 Sort（学 LSP 管理器排序风格）
+                                    imageVector = Icons.Filled.Sort,
                                     contentDescription = "排序"
                                 )
                             }
@@ -390,6 +412,69 @@ fun HyperFlowApp() {
                                 }
                             }
                         }
+                        // V0.6.15：显示模式设置（排序图标右侧：实时与本地合并/仅实时/仅本地）
+                        Box {
+                            IconButton(onClick = { showMsgMode = true }) {
+                                top.yukonga.miuix.kmp.basic.Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = "显示模式"
+                                )
+                            }
+                            if (showMsgMode) {
+                                androidx.compose.ui.window.Popup(
+                                    alignment = Alignment.TopEnd,
+                                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
+                                    onDismissRequest = { showMsgMode = false }
+                                ) {
+                                    Surface(
+                                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                        shadowElevation = 10.dp,
+                                        modifier = Modifier.width(230.dp)
+                                    ) {
+                                        Column(Modifier.padding(vertical = 6.dp)) {
+                                            @Composable
+                                            fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
+                                                Row(
+                                                    Modifier.fillMaxWidth()
+                                                        .clickable(onClick = onClick)
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        label,
+                                                        style = MiuixTheme.textStyles.body1,
+                                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    if (sel) {
+                                                        top.yukonga.miuix.kmp.basic.Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = "已选",
+                                                            tint = MiuixTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            ModeItem("实时与本地合并显示", state.msgMode == "all", {
+                                                state.setMsgMode("all")
+                                                showMsgMode = false
+                                            })
+                                            ModeItem("仅显示实时", state.msgMode == "live", {
+                                                state.setMsgMode("live")
+                                                showMsgMode = false
+                                            })
+                                            ModeItem("仅显示本地", state.msgMode == "local", {
+                                                state.setMsgMode("local")
+                                                showMsgMode = false
+                                            })
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 )
@@ -445,6 +530,12 @@ fun HyperFlowApp() {
                         if (conversation != null) {
                             // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
                             ConversationScreen(state, conversation.first, conversation.second, contentMod)
+                        } else if (showLogs) {
+                            // V0.6.15：日志列表整页（底部导航保留）
+                            LogListScreen(onBack = { showLogs = false }, contentMod)
+                        } else if (showLicenses) {
+                            // V0.6.15：开源许可整页（底部导航保留）
+                            LicensesScreen(onBack = { showLicenses = false }, contentMod)
                         } else {
                             when (tab) {
                                 0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
@@ -500,7 +591,7 @@ fun HyperFlowApp() {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 230.dp)
+                            .heightIn(max = 480.dp)
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 2.dp),
                         horizontalAlignment = Alignment.Start

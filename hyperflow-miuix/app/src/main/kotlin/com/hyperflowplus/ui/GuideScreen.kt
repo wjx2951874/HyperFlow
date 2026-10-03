@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,7 +25,6 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -51,7 +48,7 @@ fun GuideScreen(type: GuideType, onBack: () -> Unit) {
     val ctx = LocalContext.current
 
     Column(Modifier.fillMaxSize()) {
-        // 页头：Miuix 返回 + 大标题
+        // 页头：统一 MIUI 返回箭头（V0.6.15）+ 大标题
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -59,9 +56,7 @@ fun GuideScreen(type: GuideType, onBack: () -> Unit) {
                 .padding(start = 8.dp, end = 20.dp, top = 18.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
-            }
+            MiuixBackButton(onClick = onBack)
             Text(
                 type.title,
                 fontSize = 28.sp,
