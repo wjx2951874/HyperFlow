@@ -251,7 +251,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         onExpandedChange = {},
                         modifier = Modifier.fillMaxWidth(),
                         label = "",
-                        textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 14.sp),
+                        textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 17.sp),
                         leadingIcon = {},
                         trailingIcon = {
                             if (query.isNotEmpty()) {
@@ -267,24 +267,23 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     )
                     if (query.isEmpty()) {
-                        // 占位层：靠左但不像 label 原版贴框最左（学小米短信：图标距框左缘一段距离）
+                        // V0.6.16.2：占位层整体视觉居中（短信 18.0.0.32 反编译：搜索框 hint 17sp、图标 24dp、整体居中）
                         Row(
                             Modifier
-                                .fillMaxSize()
-                                .padding(start = 20.dp),
-                            horizontalArrangement = Arrangement.Start,
+                                .fillMaxSize(),
+                            horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Search,
                                 contentDescription = "搜索",
                                 tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                             Spacer(Modifier.width(5.dp))
                             Text(
                                 "搜索消息",
-                                style = MiuixTheme.textStyles.body2.copy(fontSize = 14.sp),
+                                style = MiuixTheme.textStyles.body2.copy(fontSize = 17.sp),
                                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                             )
                         }

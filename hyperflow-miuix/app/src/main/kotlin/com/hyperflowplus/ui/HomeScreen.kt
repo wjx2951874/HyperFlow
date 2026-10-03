@@ -115,10 +115,6 @@ echo ==P_ADB;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 echo ==P_MILINK;
 cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
-echo ==SCOPE;
-cat /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
-echo ==SCOPE_EXISTS;
-[ -f /data/adb/lspd/config/scope/com.hyperflowplus ] && echo yes || echo no
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
@@ -148,15 +144,9 @@ echo ==END""") }.getOrNull()
             val mapsHit = mapsSeg.contains("==LOADED") || sysLoaded || mlLoaded
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
             val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==SCOPE")?.trim()?.toLongOrNull()
-            // V0.6.15.1："重新检测"实时补刷作用域快照（等价退出重进效果）——
-            // service 绑定只在启动时发生，作用域是绑定瞬间快照；勾选后不重启 App 不更新。
-            // 这里用 shell 实时读 scope 文件刷进 ModuleFrameworkState（connected 仍由 service 保证）。
-            // 支持"全取消勾选"= 空 scope = 未就绪（文件存在时以 shell 内容为准覆盖 service 旧快照）
-            val scopeSeg = out?.substringAfter("==SCOPE")?.substringBefore("==SCOPE_EXISTS") ?: ""
-            val scopeLines = scopeSeg.lines().map { it.trim() }.filter { it.isNotEmpty() }
-            val scopeFileExists = out?.substringAfter("==SCOPE_EXISTS")?.substringBefore("==MAPS")
-                ?.trim()?.contains("yes") == true
-            com.hyperflowplus.ModuleFrameworkState.refreshScopeFromShell(scopeLines, scopeFileExists)
+            // V0.6.16.3：不再读取 LSP 作用域参数 —— LSP 状态以 libxposed service 绑定快照为准
+            // （启动时注入证据最真实），作用域变化靠"重新检测=强停重启"刷新，shell 读 scope 文件
+            // 存在多路径/格式差异误报，且"取消勾选后进程内旧快照仍绿"只能重启根治。
             // 系统框架（system_server 注入）：maps 实时证据优先，探针 48h 内命中兜底
             val androidInjected = sysLoaded || fresh(adbProbe)
             // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
@@ -187,6 +177,22 @@ echo ==END""") }.getOrNull()
                 state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV > 0, m)
             }
         }.start()
+    }
+
+    /** V0.6.16.3：强停并重启本 App（等价"退出重进"，LSP 作用域/注入状态在重启后重新绑定）
+     *  AlarmManager 兜底拉起：进程被杀后由系统定时触发启动 MainActivity */
+    fun restartApp() {
+        try {
+            val pi = android.app.PendingIntent.getActivity(
+                ctx, 0,
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = ctx.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+            am.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 400, pi)
+        } catch (_: Throwable) {
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     /** 一键启用模块 + 勾选推荐作用域（复用 GuideScreen 脚本），写入后需重启设备生效 */
@@ -333,18 +339,28 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    reTap++
-                                    detect()
-                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
-                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
-                                    android.widget.Toast.makeText(
-                                        ctx.applicationContext,
-                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    if (reTap >= 3) {
-                                        reTap = 0
-                                        showLspTrouble = true
+                                    // V0.6.16.3：黄/绿卡 → 强停重启刷新（LSP 状态靠重启重新绑定）；
+                                    // 红卡 → 原检测（root 读取快，无需重启）
+                                    if (lspModuleState == 0) {
+                                        reTap++
+                                        detect()
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "正在重新检测…",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        if (reTap >= 3) {
+                                            reTap = 0
+                                            showLspTrouble = true
+                                        }
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        android.os.Handler(android.os.Looper.getMainLooper())
+                                            .postDelayed({ restartApp() }, 400)
                                     }
                                 }
                         )
@@ -402,20 +418,27 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    // v0.6.14：每次点击都执行一次真实检测；
-                                    // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
-                                    reTap++
-                                    detect()
-                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
-                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
-                                    android.widget.Toast.makeText(
-                                        ctx.applicationContext,
-                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    if (reTap >= 3) {
-                                        reTap = 0
-                                        showLspTrouble = true
+                                    // V0.6.16.3：黄/绿卡 → 强停重启刷新；红卡 → 原检测
+                                    if (lspModuleState == 0) {
+                                        reTap++
+                                        detect()
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "正在重新检测…",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        if (reTap >= 3) {
+                                            reTap = 0
+                                            showLspTrouble = true
+                                        }
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        android.os.Handler(android.os.Looper.getMainLooper())
+                                            .postDelayed({ restartApp() }, 400)
                                     }
                                 }
                         )
@@ -457,20 +480,27 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    // v0.6.14：每次点击都执行一次真实检测；
-                                    // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
-                                    reTap++
-                                    detect()
-                                    // V0.6.16.1：弹窗内底部提示（Toast 在弹窗上可能不显示）
-                                    // V0.6.16.1：系统 Toast（applicationContext 系统窗口，弹窗上层也能显示）
-                                    android.widget.Toast.makeText(
-                                        ctx.applicationContext,
-                                        "强行停止本 App 再次进入，可获得更准确的检测结果",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    if (reTap >= 3) {
-                                        reTap = 0
-                                        showLspTrouble = true
+                                    // V0.6.16.3：黄/绿卡 → 强停重启刷新；红卡 → 原检测
+                                    if (lspModuleState == 0) {
+                                        reTap++
+                                        detect()
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "正在重新检测…",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        if (reTap >= 3) {
+                                            reTap = 0
+                                            showLspTrouble = true
+                                        }
+                                    } else {
+                                        android.widget.Toast.makeText(
+                                            ctx.applicationContext,
+                                            "LSP 状态需重启后刷新，正在自动重启；若未自动打开请手动打开",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        android.os.Handler(android.os.Looper.getMainLooper())
+                                            .postDelayed({ restartApp() }, 400)
                                     }
                                 }
                         )

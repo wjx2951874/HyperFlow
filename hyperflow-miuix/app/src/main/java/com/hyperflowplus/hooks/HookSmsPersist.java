@@ -233,22 +233,29 @@ public class HookSmsPersist {
             MiflowLog.w("DIAG flow query failed: " + t.getMessage());
         }
         try {
-            Cursor c = ctx.getContentResolver().query(Uri.parse("content://sms/inbox"),
-                    new String[]{"address", "body", "date"}, null, null, "date DESC LIMIT 1");
+            // V0.6.16.2：查完整 sms 表（非 inbox 子集），带 type/read/seen ——
+            // 定位"系统原生写了但短信 App 看不到"：type!=1（不在收件箱）/read/seen 标记
+            Cursor c = ctx.getContentResolver().query(Uri.parse("content://sms"),
+                    new String[]{"_id", "address", "body", "date", "read", "seen", "type"}, null, null, "date DESC LIMIT 1");
             if (c != null) {
                 try {
                     if (c.moveToFirst()) {
-                        MiflowLog.d("DIAG sms/inbox latest: address=" + getCol(c, "address", "")
-                                + " body=" + getCol(c, "body", "").replaceAll("[\\r\\n]+", " ") + " date=" + getCol(c, "date", ""));
+                        MiflowLog.d("DIAG sms latest: id=" + getCol(c, "_id", "")
+                                + " address=" + getCol(c, "address", "")
+                                + " body=" + getCol(c, "body", "").replaceAll("[\\r\\n]+", " ")
+                                + " date=" + getCol(c, "date", "")
+                                + " read=" + getCol(c, "read", "")
+                                + " seen=" + getCol(c, "seen", "")
+                                + " type=" + getCol(c, "type", ""));
                     } else {
-                        MiflowLog.d("DIAG sms/inbox latest: (empty)");
+                        MiflowLog.d("DIAG sms latest: (empty)");
                     }
                 } finally {
                     c.close();
                 }
             }
         } catch (Throwable t) {
-            MiflowLog.w("DIAG sms/inbox query failed: " + t.getMessage());
+            MiflowLog.w("DIAG sms query failed: " + t.getMessage());
         }
     }
 
