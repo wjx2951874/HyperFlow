@@ -14,7 +14,7 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能① 亮屏强制流转（V0.2 libxposed 重写）。
+ * 功能① 亮屏强制流转（V0.2 libxposed 重写；v0.5.15.4 改回原版分流 + 模拟锁屏）。
  *
  * 反编译确认（NotificationHandler）：
  *   private boolean isDeviceSupported(StatusBarNotification sbn, DeviceSubInfo info) {
@@ -24,9 +24,14 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  *       return false;   // ← 亮屏拒绝流转
  *   }
  *
- * 主方案：拦截 isDeviceSupported 直接返回 true —— 等效"模拟锁屏"，
- * 亮屏时 milink 照常放行（副作用：互联侧看到设备为"已锁屏/可流转"，用户已接受）。
- * 兜底：拦截 KeyguardManager#isKeyguardLocked，仅当调用栈含 NotificationHandler 时放行。
+ * 方案（用户确认）：不改 milink 的来电分流决策（OS4 走 voip 全屏 / OS3 降级通知），
+ * 只"模拟锁屏"让 milink 自己按原生锁屏逻辑跑：
+ *   1) isDeviceSupported 直接返回 true —— 等效"模拟锁屏"（亮屏也放行，含来电通知）；
+ *   2) KeyguardManager#isKeyguardLocked：milink 调用栈返回 true；
+ *   3) PowerManager#isInteractive：milink 调用栈返回 false（模拟灭屏，
+ *      覆盖来电广播链路里对屏幕状态的另一处门控）。
+ * 来电通知不再短路（原短路是为防"广播 voip + 通知卡片"双显示，改回原版后
+ * 由 milink 自身同 key 去重处理，不需要我们插手）。
  */
 public class HookForceTransfer {
 
@@ -50,13 +55,10 @@ public class HookForceTransfer {
                                 MiflowLog.d("skip runnable-state card (not a real notification)");
                                 return Boolean.FALSE;
                             }
-                            // 来电通知：通知链路短路，改由广播链路走 voip 全屏（避免"全屏+卡片"双显示）
-                            if (isCallSbn(sbn)) {
-                                MiflowLog.d("call notification: notification path short-circuited (voip broadcast handles it)");
-                                return Boolean.FALSE;
-                            }
+                            // v0.5.15.4：来电不再短路（改回原版分流，去重交给 milink），
+                            // 亮屏/锁屏一律放行，等效"设备已锁屏可流转"
                             Config.bump(Config.CNT_FORCE);
-                            MiflowLog.d("force transfer: gate overridden (screen-on released)");
+                            MiflowLog.d("force transfer: gate overridden (screen-on released, call included)");
                             return Boolean.TRUE;
                         }
                     });
@@ -87,6 +89,30 @@ public class HookForceTransfer {
             MiflowLog.i("HookForceTransfer[keyguard] installed");
         } catch (Throwable t) {
             MiflowLog.e("HookForceTransfer[keyguard] install failed", t);
+        }
+
+        // v0.5.15.4：模拟"灭屏"——来电广播链路在亮屏时可能因 PowerManager.isInteractive()
+        // 判定拒绝流转（与 isKeyguardLocked 并列的门控），milink 调用栈内强制返回 false
+        try {
+            Method m = android.os.PowerManager.class.getDeclaredMethod("isInteractive");
+            m.setAccessible(true);
+            XposedEntry.get().hook(m)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept(new Hooker() {
+                        @Override
+                        public Object intercept(Chain chain) throws Throwable {
+                            if (!Config.isForceTransferEnabled()) {
+                                return chain.proceed();
+                            }
+                            if (calledFromMilink()) {
+                                return Boolean.FALSE;
+                            }
+                            return chain.proceed();
+                        }
+                    });
+            MiflowLog.i("HookForceTransfer[interactive] installed");
+        } catch (Throwable t) {
+            MiflowLog.e("HookForceTransfer[interactive] install failed", t);
         }
     }
 
@@ -132,21 +158,5 @@ public class HookForceTransfer {
             }
         }
         return false;
-    }
-
-    /** sbn 是否为来电通知：类别 call 或包名 incallui/dialer/phone */
-    private static boolean isCallSbn(StatusBarNotification sbn) {
-        try {
-            String pkg = sbn.getPackageName();
-            if (pkg != null && (pkg.contains("incallui") || pkg.contains("dialer")
-                    || "com.android.phone".equals(pkg))) {
-                return true;
-            }
-            android.app.Notification n = sbn.getNotification();
-            return n != null && n.category != null
-                    && n.category.equals(android.app.Notification.CATEGORY_CALL);
-        } catch (Throwable t) {
-            return false;
-        }
     }
 }
