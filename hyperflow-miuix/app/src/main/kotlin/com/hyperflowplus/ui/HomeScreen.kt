@@ -220,9 +220,8 @@ echo ==END""") }.getOrNull()
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(hScroll)
-            // v0.5.15.5：首页内容整体下移（顶部留白 26dp，对齐 LSPosed/KSU 的首页间距，
-            // 状态卡不再紧贴顶部标题）
-            .padding(top = 26.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
+            // v0.6.14：顶部留白 12dp，对齐 KSU HomeMiuix（内容区水平 12dp + 首卡顶 12dp）
+            .padding(top = 12.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然；v0.6.8 起 3 项合一） =====
         val allOk = rootEnvOk && milinkOk && lspModuleOk
@@ -326,7 +325,7 @@ echo ==END""") }.getOrNull()
                 bgIcon = Icons.Rounded.CheckCircleOutline,
                 title = "环境已就绪",
                 desc = "点击查看情况",
-                extra = "$passed/6 项通过",
+                extra = "$passed/3 项通过",
                 onClick = { showEnvDetail = true }
             )
             if (showEnvDetail) {
@@ -337,7 +336,6 @@ echo ==END""") }.getOrNull()
                     // v0.5.15：标题右侧小"重新检测"（连点 3 次弹隐藏入口，原首页汇总行按钮移除）
                     titleAction = {
                         var reTap by remember { mutableIntStateOf(0) }
-                        var lastTap by remember { mutableLongStateOf(0L) }
                         Text(
                             if (checking) "检测中…" else "重新检测",
                             fontSize = 13.sp,
@@ -346,24 +344,19 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    // 先计数再动作（不拦点击）：连点 3 次（800ms 窗口）弹隐藏入口；
-                                    // 未到 3 次才触发重新检测
-                                    val now = System.currentTimeMillis()
-                                    reTap = if (now - lastTap < 800) reTap + 1 else 1
-                                    lastTap = now
+                                    // v0.6.14：每次点击都执行一次真实检测；
+                                    // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
+                                    reTap++
+                                    detect()
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
-                                    } else {
-                                        detect()
                                     }
                                 }
                         )
                     }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
-                        EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
-                        EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
                         EnvDetailRow("Root 环境", rootEnvOk, "已授予（KernelSU/Root）" to "未授予 Root 权限")
                         EnvDetailRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"))
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
@@ -380,7 +373,7 @@ echo ==END""") }.getOrNull()
                 bgIcon = Icons.Rounded.ErrorOutline,
                 title = "部分环境未就绪",
                 desc = "点击查看情况",
-                extra = "$passed/6 项通过",
+                extra = "$passed/3 项通过",
                 onClick = { showMore = true }
             )
             // 查看更多弹窗：逐项红标未成功项，右侧"去解决"
@@ -392,7 +385,6 @@ echo ==END""") }.getOrNull()
                     // v0.5.15：标题右侧小"重新检测"（连点 3 次弹隐藏入口）
                     titleAction = {
                         var reTap by remember { mutableIntStateOf(0) }
-                        var lastTap by remember { mutableLongStateOf(0L) }
                         Text(
                             if (checking) "检测中…" else "重新检测",
                             fontSize = 13.sp,
@@ -401,16 +393,13 @@ echo ==END""") }.getOrNull()
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
                                 .clickable {
-                                    // 先计数再动作（不拦点击）：连点 3 次（800ms 窗口）弹隐藏入口；
-                                    // 未到 3 次才触发重新检测
-                                    val now = System.currentTimeMillis()
-                                    reTap = if (now - lastTap < 800) reTap + 1 else 1
-                                    lastTap = now
+                                    // v0.6.14：每次点击都执行一次真实检测；
+                                    // 累计点击第 3 次时，额外弹出"环境正常为何无法使用"引导提示
+                                    reTap++
+                                    detect()
                                     if (reTap >= 3) {
                                         reTap = 0
                                         showLspTrouble = true
-                                    } else {
-                                        detect()
                                     }
                                 }
                         )

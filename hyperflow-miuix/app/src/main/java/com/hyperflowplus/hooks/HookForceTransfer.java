@@ -13,7 +13,7 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能① 亮屏强制流转（V0.2 libxposed 重写；v0.6.10 来电强制全屏流转）。
+ * 功能① 亮屏强制流转（V0.2 libxposed 重写；v0.6.14 来电精准强制流转）。
  *
  * 反编译确认（NotificationHandler）：
  *   private boolean isDeviceSupported(StatusBarNotification sbn, DeviceSubInfo info) {
@@ -23,16 +23,16 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  *       return false;   // ← 亮屏拒绝流转
  *   }
  *
- * v0.6.10 门控（用户确认：来电强制流转，其他通知维持功能①）：
- *   - 来电通知（CATEGORY_CALL / incallui / dialer / phone）→ 直接拦截（FALSE），
- *     voip 全屏走广播链路：system_server 的 HookCallSimLock 已模拟锁屏放行亮屏来电，
- *     卡片若流转会出现"电话+卡片"双份（锁屏）与接听后"电话"通知残留，一律抑制；
+ * v0.6.14 门控（用户确认）：
+ *   - 来电通知（CATEGORY_CALL / incallui / dialer / phone）→ 强制 TRUE（精准流转）：
+ *     isDeviceSupported 首个参数就是 sbn，可精确区分来电，只对来电放行（等效仅来电的
+ *     亮屏判定变可流转），亮屏来电也能流转；接收端能力判定（OS4→voip 全屏 / OS3·苹果
+ *     →降级卡片）与同 key 去重交给 milink 原生——不碰 system_server、不碰其他通知；
  *   - 其他通知：isDeviceSupported 强制 true（功能①亮屏强制流转，v0.6.8 行为保留）；
  *   - 运行状态卡拦截保留（V0.3.16 起）。
- *   - 注：KeyguardManager/PowerManager 模拟锁屏不再装在 milink 进程（v0.5.15.4 产物，
- *     管不到 system_server 的来电决策，且会把系统原本拒绝的普通通知也放行）；
- *     来电链路的模拟锁屏由 android 作用域（system_server）的 HookCallSimLock 承担，
- *     白名单限定 telecom/phone 调用栈。
+ *   - 历史教训：v0.6.10 的 HookCallSimLock（system_server 全局模拟锁屏）误伤正常通话
+ *     流程（isKeyguardLocked/isInteractive 被正常来电流程大量调用），连锁屏 voip 都断；
+ *     已删除。全过滤来电卡片（v0.6.10）同样错误——卡片是 OS3/苹果接收端的降级通道。
  */
 public class HookForceTransfer {
 
@@ -62,24 +62,41 @@ public class HookForceTransfer {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
                             StatusBarNotification sbn = (StatusBarNotification) chain.getArg(0);
+                            android.app.Notification gateN = sbn.getNotification();
+                            MiflowLog.v("isDeviceSupported: pkg=" + sbn.getPackageName()
+                                    + " category=" + (gateN != null ? gateN.category : "null")
+                                    + " key=" + sbn.getKey());
+                            // v0.6.14：开关接入 hook！关闭时完全走系统原判定（milink 对带流转
+                            // 来源标记的消息在接收端会自行拒绝二次流转 → 不再回灌双份）
+                            if (!Config.isForceTransferEnabled()) {
+                                MiflowLog.d("force transfer DISABLED: stock decision (no gate)");
+                                return chain.proceed();
+                            }
                             if (isCallSbn(sbn)) {
-                                // 来电通知卡片一律抑制：voip 全屏流转走广播链路（system_server 的
-                                // HookCallSimLock 已模拟锁屏放行），卡片若再流转会出现"电话+卡片"双份
-                                //（锁屏）与接听后"电话"通知残留。抑制后接收端只收 voip 全屏，单一来源。
-                                MiflowLog.d("call notification: suppress card (voip via broadcast, simlock gate)");
-                                return Boolean.FALSE;
+                                // v0.6.14 精准强制流转：isDeviceSupported 首个参数就是 sbn，
+                                // 可精确区分来电——只对来电返回 TRUE（等效仅来电的亮屏判定放行），
+                                // 亮屏来电也能流转；接收端能力判定（OS4→voip 全屏 / OS3·苹果→降级
+                                // 卡片）与同 key 去重交给 milink 原生。不再全局模拟锁屏
+                                //（HookCallSimLock 误伤 system_server 正常通话流程，已移除）。
+                                Config.bump(Config.CNT_CALL_RELAY);
+                                android.app.Notification callN = sbn.getNotification();
+                                MiflowLog.d("call notification: MATCH pkg=" + sbn.getPackageName()
+                                        + " category=" + (callN != null ? callN.category : "null")
+                                        + " key=" + sbn.getKey()
+                                        + " -> force gate (precise, stock degrade on receiver)");
+                                return Boolean.TRUE;
                             }
                             if (isRunnableStateCard(sbn)) {
                                 MiflowLog.d("skip runnable-state card (not a real notification)");
                                 return Boolean.FALSE;
                             }
-                            // 其他通知：功能①亮屏强制流转（v0.6.8 行为，本轮不动）
+                            // 其他通知：功能①亮屏强制流转（开关已接入，仅开启时生效）
                             Config.bump(Config.CNT_FORCE);
                             MiflowLog.d("force transfer: gate overridden (non-call notification)");
                             return Boolean.TRUE;
                         }
                     });
-            MiflowLog.i("HookForceTransfer[gate] installed (call=stock, others=forced)");
+            MiflowLog.i("HookForceTransfer[gate] installed (v0.6.14: call=precise force, others=forced)");
         } catch (Throwable t) {
             MiflowLog.e("HookForceTransfer[gate] install failed", t);
         }

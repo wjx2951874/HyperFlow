@@ -2,7 +2,6 @@ package com.hyperflowplus;
 
 import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
-import com.hyperflowplus.hooks.HookCallSimLock;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookRemoteOpen;
@@ -61,16 +60,6 @@ public class XposedEntry extends XposedModule {
                 });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry system init failed", t);
-            }
-            // v0.6.10：来电链路强制模拟锁屏（亮屏来电也走 voip 全屏流转）。
-            // 来电 voip 广播的亮屏放行决策在 system_server 的 telecom/phone，milink 进程
-            // 的 hook 管不到——这里直接注入 system_server，白名单限定来电调用栈。
-            try {
-                installSafely("HookCallSimLock[system]", new Runnable() {
-                    @Override public void run() { HookCallSimLock.install(cl); }
-                });
-            } catch (Throwable t) {
-                MiflowLog.e("XposedEntry system call-simlock init failed", t);
             }
             return;
         }

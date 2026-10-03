@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +45,8 @@ import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.InputField
+import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -125,6 +130,8 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     }
     // 搜索框：按发送人或正文实时过滤（小米短信同款 Miuix 搜索栏样式）
     var query by remember { mutableStateOf("") }
+    // v0.6.14：显示模式设置弹窗（从设置页移入消息页）
+    var showMsgMode by remember { mutableStateOf(false) }
     val q = query.trim()
     val filtered = remember(convos, q) {
         if (q.isEmpty()) convos
@@ -210,7 +217,7 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 }
             }
         }
-        // 搜索框固定在列表顶部（Miuix TextField = 小米短信搜索栏同款组件）
+        // 搜索框固定在列表顶部（Miuix SearchBar.InputField = 小米短信搜索栏同款组件）
         item(key = "search") {
             Row(
                 Modifier
@@ -218,19 +225,16 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    // v0.5.15：再压一档高度（垂直内边距 16→6dp），更贴近小米短信搜索栏紧凑尺寸
-                    cornerRadius = 22.dp,
-                    colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = MiuixTheme.colorScheme.surfaceContainer
-                    ),
-                    insideMargin = DpSize(10.dp, 6.dp),
+                // v0.6.14：placeholder"搜索消息"字号调小（textStyle 覆盖，跟随输入样式）
+                InputField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    onSearch = {},
+                    expanded = false,
+                    onExpandedChange = {},
+                    modifier = Modifier.weight(1f),
                     label = "搜索消息",
-                    useLabelAsPlaceholder = true,
-                    singleLine = true,
+                    textStyle = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Filled.Search,
@@ -252,6 +256,70 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     }
                 )
+                // v0.6.14：显示模式设置入口（从设置页移到消息页，学排序 Popup 样式）
+                Box {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "显示模式",
+                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(20.dp)
+                            .clickable { showMsgMode = true }
+                    )
+                    if (showMsgMode) {
+                        androidx.compose.ui.window.Popup(
+                            alignment = Alignment.TopEnd,
+                            offset = androidx.compose.ui.unit.IntOffset(
+                                0, with(LocalDensity.current) { 40.dp.roundToPx() }
+                            ),
+                            onDismissRequest = { showMsgMode = false }
+                        ) {
+                            Surface(
+                                color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                                shape = RoundedCornerShape(16.dp),
+                                shadowElevation = 10.dp,
+                                modifier = Modifier.width(230.dp)
+                            ) {
+                                Column(Modifier.padding(vertical = 6.dp)) {
+                                    @Composable
+                                    fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
+                                        Row(
+                                            Modifier.fillMaxWidth()
+                                                .clickable(onClick = onClick)
+                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                label,
+                                                style = MiuixTheme.textStyles.body1,
+                                                color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (sel) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = "已选",
+                                                    tint = MiuixTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    ModeItem("一起显示（本地+实时）", !state.msgLiveOnly, {
+                                        if (state.msgLiveOnly) state.set(Config.KEY_MSG_LIVE_ONLY, false)
+                                        showMsgMode = false
+                                    })
+                                    ModeItem("仅显示实时消息", state.msgLiveOnly, {
+                                        if (!state.msgLiveOnly) state.set(Config.KEY_MSG_LIVE_ONLY, true)
+                                        showMsgMode = false
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         if (localOnly) {

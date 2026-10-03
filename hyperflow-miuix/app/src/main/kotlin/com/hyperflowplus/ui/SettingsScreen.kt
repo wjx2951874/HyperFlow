@@ -92,23 +92,6 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         }
 
-        // ===== 消息 =====
-        GroupTitle("消息")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                SwitchPreference(
-                    title = "仅显示实时消息",
-                    summary = if (state.msgLiveOnly)
-                        "本地存档隐藏（不删除），仅显示小米端实时获取的消息"
-                    else
-                        "本地存档与小米端实时消息一起显示",
-                    checked = state.msgLiveOnly,
-                    onCheckedChange = { state.set(Config.KEY_MSG_LIVE_ONLY, it) }
-                )
-            }
-        }
-
         // ===== 调试 =====
         GroupTitle("调试")
 
