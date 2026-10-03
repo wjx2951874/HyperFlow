@@ -1,3 +1,10 @@
+# v0.6.11
+
+1. 刷入提速：App 已安装且版本不低于模块 → customize.sh 直接跳过联网下载 APK（老用户刷入
+   只下载 ~25MB 模块 zip，不再多下 47MB 独立 APK）；仅首次刷入 / App 缺失 / 版本旧时才联网下载。
+2. APK 下载镜像增加 ghfast.top 第三通道（gh-proxy.com → ghfast.top → GitHub 直连）。
+3. 刷写日志增加阶段提示（"下载中 ~47MB" / "App 已是最新，跳过下载"）。
+
 # v0.6.10
 
 1. 来电流转强制全屏接听（与 KSU / HyperModifier 等工具一致）：

@@ -24,16 +24,25 @@ if [ -n "$APK" ] && [ -f "$APK" ]; then
 fi
 
 # 通道2：联网直下 GitHub Release 独立 APK（v0.6.6；镜像 gh-proxy + 直连双通道）
+# v0.6.11：App 已装且版本不低于模块 → 直接跳过联网下载（老用户刷入不再多下 47MB APK）
 VER=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
+MOD_CODE=$(grep '^versionCode=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
+APP_CODE=$(dumpsys package com.hyperflowplus 2>/dev/null | grep 'versionCode=' | head -1 | cut -d= -f2 | cut -d' ' -f1)
+if [ -n "$APP_CODE" ] && [ -n "$MOD_CODE" ] && [ "$APP_CODE" -ge "$MOD_CODE" ] 2>/dev/null; then
+  echo "HyperFlow: App already v$APP_CODE >= module v$MOD_CODE, skip network APK"
+  exit 0
+fi
 if [ -n "$VER" ]; then
   TMP1=/data/local/tmp/hf_net.apk
   DL=""
+  echo "HyperFlow: downloading App $VER (~47MB) ..."
   for U in \
     "https://gh-proxy.com/https://github.com/wjx2951874/HyperFlow/releases/download/v${VER}/HyperFlow-${VER}.apk" \
+    "https://ghfast.top/https://github.com/wjx2951874/HyperFlow/releases/download/v${VER}/HyperFlow-${VER}.apk" \
     "https://github.com/wjx2951874/HyperFlow/releases/download/v${VER}/HyperFlow-${VER}.apk"
   do
     if command -v curl >/dev/null 2>&1; then
-      curl -k -L -s --max-time 120 -o "$TMP1" "$U" && [ -s "$TMP1" ] && { DL=1; break; }
+      curl -k -L -s --max-time 180 -o "$TMP1" "$U" && [ -s "$TMP1" ] && { DL=1; break; }
     elif command -v wget >/dev/null 2>&1; then
       wget -q -O "$TMP1" "$U" && [ -s "$TMP1" ] && { DL=1; break; }
     else
