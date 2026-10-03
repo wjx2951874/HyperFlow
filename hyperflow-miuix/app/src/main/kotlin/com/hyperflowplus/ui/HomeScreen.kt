@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -189,13 +190,25 @@ echo ==END""") }.getOrNull()
 
     // v0.6.4：libxposed service 秒级快照（参考 HyperModifier）——模块在 LSPosed 启用时
     // App 进程实时绑定框架 daemon，直接拿到框架实时作用域配置，替代"ps/maps/文件探针"慢探测。
-    // 已连接 → 模块启用/推荐作用域判定以框架实时配置为准（毫秒更新、无 root 依赖）；
-    // 未连接 → 回退 shell 探测结果。
+    // v0.6.7：LSP 启用与作用域合一，全部以 service 实时连接为准（学 HyperModifier：模块停用
+    // → service 断开 → 直接显示"未连接/未启用"，不再回退 shell 的"daemon 存活"判定——
+    // daemon 活着≠模块启用，之前的回退导致关掉框架仍显示"已启用"）。
+    // shell detect() 仍跑（root/ksu/milink 检测与诊断），LSP 三件套不再回退。
     val fw = com.hyperflowplus.ModuleFrameworkState.snapshot.value
     val fwActive = fw.active
-    val effLspOk = if (fwActive) true else lspOk
-    val effModuleOk = if (fwActive) true else moduleOk
-    val effScopeOk = if (fwActive) fw.scopeReady else scopeOk
+    val effLspOk = fwActive
+    val effModuleOk = fwActive
+    val effScopeOk = fwActive && fw.scopeReady
+
+    // v0.6.8：6 项检测合一为 3 项 —— ①Root 环境（root 或 KSU 任一）②小米互联 ③LSPosed 模块（启用+作用域三态）
+    val rootEnvOk = rootOk || ksuOk
+    // LSPosed 模块三态：0=未连接（模块未启用/框架未装）红；1=已启用但推荐作用域不全 黄；3=启用+作用域全 绿
+    val lspModuleState = when {
+        !fwActive -> 0
+        fw.scopeReady -> 3
+        else -> 1
+    }
+    val lspModuleOk = lspModuleState == 3
 
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录，见 MainActivity 注释）
     val hScroll = rememberScrollState()
@@ -211,24 +224,27 @@ echo ==END""") }.getOrNull()
             // 状态卡不再紧贴顶部标题）
             .padding(top = 26.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
     ) {
-        // ===== 环境状态汇总行（轻量条，状态一目了然） =====
-        val allOk = rootOk && ksuOk && effLspOk && effModuleOk && effScopeOk && milinkOk
-        // v0.5.10：已移除"配置 OK 但未加载"黄条（重启一次即生效，不再二次重启）；
-        // LSP 框架没在跑（daemon 死）= lsp/module/scope 全红 → 环境异常并引导一键启用。
+        // ===== 环境状态汇总行（轻量条，状态一目了然；v0.6.8 起 3 项合一） =====
+        val allOk = rootEnvOk && milinkOk && lspModuleOk
         val level: Color = when {
-            !rootOk -> CRed
+            !rootEnvOk -> CRed
             allOk -> CGreen
             else -> CYellow
         }
         val levelText = when {
-            !rootOk -> "环境异常"
+            !rootEnvOk -> "环境异常"
             allOk -> "环境已就绪"
             else -> "部分环境未就绪"
         }
-        val passed = listOf(rootOk, ksuOk, effLspOk, effModuleOk, effScopeOk, milinkOk).count { it }
-        // 框架未运行时的引导提示（用户诉求：不启用就要马上检测出来并要求启用）
-        val pendingHint = if (!rootOk || (!fwActive && lspState == 0))
-            "LSP 框架未在运行，请启用后重启设备生效" else null
+        val passed = listOf(rootEnvOk, milinkOk, lspModuleOk).count { it }
+        // v0.6.8：引导提示重写 —— 按缺失场景一步步引导（装 Root → 装 LSPosed → 启用模块 → 勾选作用域）
+        val pendingHint = when {
+            !rootEnvOk -> "未检测到 Root 权限：请先通过 KernelSU/Magisk 获取 Root，再回来重新检测"
+            !fwActive && !lspOk -> "未检测到 LSPosed 框架：请安装 LSPosed（KernelSU 环境选 Zygisk 版），然后启用 HyperFlow 并重启"
+            !fwActive -> "HyperFlow 尚未启用：打开 LSPosed → 模块 → 勾选 HyperFlow → 勾选下方推荐作用域 → 重启设备"
+            lspModuleState == 1 -> "推荐作用域未勾选全：打开 LSPosed → HyperFlow → 勾选「系统框架 + 小米互联 + 本应用」→ 重启设备"
+            else -> null
+        }
 
         if (showLspTrouble) {
             HyperDialog(
@@ -238,8 +254,10 @@ echo ==END""") }.getOrNull()
             ) {
                 Column(Modifier.padding(horizontal = 4.dp)) {
                     Text(
-                        "检测基于 LSPosed 配置与运行时加载证据。若模块实际已生效但页面仍提示未启用/未生效，" +
-                                "可先软重启框架（无需整机重启）使注入立即生效；仍无效请复制检测日志反馈。",
+                        "环境检测已就绪但功能仍无法使用？请按顺序排查：\n" +
+                                "1）确认 LSPosed 里 HyperFlow 已启用（首页对应项为绿）；\n" +
+                                "2）确认推荐作用域勾选全（系统框架 + 小米互联）；\n" +
+                                "3）以上都对仍异常 → 一键写入配置并重启框架，注入立即生效。",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                     )
@@ -346,9 +364,8 @@ echo ==END""") }.getOrNull()
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvDetailRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限")
                         EnvDetailRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU")
-                        EnvDetailRow("LSPosed 框架", effLspOk, "框架存在" to "未检测到 LSPosed")
-                        EnvDetailRow("模块已启用", effModuleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用")
-                        EnvDetailRow("推荐作用域", effScopeOk, "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）")
+                        EnvDetailRow("Root 环境", rootEnvOk, "已授予（KernelSU/Root）" to "未授予 Root 权限")
+                        EnvDetailRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"))
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
                 }
@@ -400,15 +417,8 @@ echo ==END""") }.getOrNull()
                     }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
-                        EnvItemRow("Root 权限", rootOk, "已授予（KernelSU）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 权限" to GuideType.ROOT }
-                        EnvItemRow("KSU 内核", ksuOk, "内核已就绪" to "未检测到 KernelSU", GuideType.ROOT) { solveItem = "KSU 内核" to GuideType.ROOT }
-                        EnvItemRow("LSPosed 框架", effLspOk, "框架存在" to "未检测到 LSPosed", GuideType.LSPOSED) { solveItem = "LSPosed 框架" to GuideType.LSPOSED }
-                        EnvItemRow("模块已启用", effModuleOk, "已在 LSPosed 启用" to "未在 LSPosed 启用", GuideType.MODULE_SCOPE) { solveItem = "模块已启用" to GuideType.MODULE_SCOPE }
-                        EnvItemRow(
-                            "推荐作用域", effScopeOk,
-                            "已勾选（小米互联 + Android 框架）" to "未勾选推荐作用域（小米互联 + Android 框架）",
-                            GuideType.MODULE_SCOPE
-                        ) { solveItem = "推荐作用域" to GuideType.MODULE_SCOPE }
+                        EnvItemRow("Root 环境", rootEnvOk, "已授予（KernelSU/Root）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 环境" to GuideType.ROOT }
+                        EnvItemRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"), GuideType.LSPOSED) { solveItem = "LSPosed 模块" to GuideType.LSPOSED }
                         EnvItemRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK) { solveItem = "小米互联服务" to GuideType.MILINK }
                     }
                 }
@@ -430,18 +440,18 @@ echo ==END""") }.getOrNull()
                     }
                     GuideType.LSPOSED -> {
                         steps = listOf(
-                            "1. 打开 KernelSU 管理器",
-                            "2. 进入「模块」页启用 LSPosed 框架",
-                            "3. 启用后重启设备生效"
+                            "1. 打开 KernelSU 管理器 → 进入「模块」页",
+                            "2. 安装 LSPosed（Zygisk 版，KernelSU 环境装 LSPosed-zygisk 模块）",
+                            "3. 回到首页重新检测，检测到框架后按提示启用 HyperFlow 并重启"
                         )
                         actionLabel = "打开 KernelSU"
                         action = { launchKernelSu() }
                     }
                     GuideType.MODULE_SCOPE -> {
                         steps = listOf(
-                            "1. 打开 LSPosed 作用域设置",
-                            "2. 勾选：小米互联服务 + Android 系统框架",
-                            "3. 保存后重启设备生效（也可用下方按钮一键写入配置）"
+                            "1. 打开 LSPosed → 模块 → HyperFlow",
+                            "2. 勾选作用域：系统框架 + 小米互联服务（也可勾选本应用）",
+                            "3. 保存并重启设备，重启后推荐作用域显示绿色即为就绪"
                         )
                         actionLabel = "一键写入配置（重启生效）"
                         action = { fixLsp() }
@@ -563,6 +573,68 @@ private fun EnvDetailRow(title: String, ok: Boolean, texts: Pair<String, String>
     }
 }
 
+/** v0.6.8：三态详情行（0 红 / 1 黄 / 3 绿），LSPosed 模块合一检测项使用 */
+@Composable
+private fun EnvDetailRow3(title: String, level: Int, texts: Triple<String, String, String>) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StatusBadge3(level)
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+            Text(
+                when (level) {
+                    3 -> texts.first
+                    1 -> texts.second
+                    else -> texts.third
+                },
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+    }
+}
+
+/** v0.6.8：三态引导行（0 红 / 1 黄 / 3 绿），level != 3 时显示"去解决" */
+@Composable
+private fun EnvItemRow3(
+    title: String,
+    level: Int,
+    texts: Triple<String, String, String>,
+    guide: GuideType,
+    onSolve: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        StatusBadge3(level)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+            Text(
+                when (level) {
+                    3 -> texts.first
+                    1 -> texts.second
+                    else -> texts.third
+                },
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+        if (level != 3) {
+            Button(
+                onClick = onSolve,
+                colors = ButtonDefaults.buttonColors()
+            ) {
+                Text("去解决", fontSize = 13.sp)
+            }
+        }
+    }
+}
+
 /** 设备信息行（v0.5.15：KernelSU 管理器 InfoCard 同款 —— 图标 24dp + 标题加粗 + 内容灰字，
  *  行间距默认 24dp（最后一行 0），无分割线） */
 @Composable
@@ -618,6 +690,25 @@ private fun StatusBadge(ok: Boolean, size: androidx.compose.ui.unit.Dp = 20.dp) 
         imageVector = if (ok) Icons.Rounded.CheckCircleOutline else Icons.Rounded.ErrorOutline,
         contentDescription = null,
         tint = if (ok) CGreen else CRed,
+        modifier = Modifier.size(size)
+    )
+}
+
+/** v0.6.8：三态徽标（0 红叉 / 1 黄叹 / 3 绿勾）——LSPosed 模块合一检测项使用 */
+@Composable
+private fun StatusBadge3(level: Int, size: androidx.compose.ui.unit.Dp = 20.dp) {
+    Icon(
+        imageVector = when (level) {
+            3 -> Icons.Rounded.CheckCircleOutline
+            1 -> Icons.Rounded.ReportProblem
+            else -> Icons.Rounded.ErrorOutline
+        },
+        contentDescription = null,
+        tint = when (level) {
+            3 -> CGreen
+            1 -> CYellow
+            else -> CRed
+        },
         modifier = Modifier.size(size)
     )
 }

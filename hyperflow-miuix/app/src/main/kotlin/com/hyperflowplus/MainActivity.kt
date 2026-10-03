@@ -54,6 +54,9 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Scaffold
 import android.widget.Toast
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -253,8 +256,12 @@ fun HyperFlowApp() {
 
         // 导航栏/悬浮胶囊的液态折射 backdrop 由 MainActivity 挂载（见上），不再用 BarBlurHost
         // 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
+        // v0.6.8：Miuix 大标题 TopAppBar（学 KSU/HyperModifier）——largeTitle 随内容滚动收起，
+        // 收起后回到顶栏居中；切 tab/进出会话时重置为展开态。
+        val topBarScroll = MiuixScrollBehavior()
         Scaffold(
             containerColor = MiuixTheme.colorScheme.surface,
+            modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
             topBar = {
                 if (conversation != null) {
                     // 会话详情顶栏（返回键 + 发送人 + 排序），放 Scaffold topBar 槽
@@ -266,10 +273,14 @@ fun HyperFlowApp() {
                         onSetSort = { state.setSortValue(Config.KEY_DETAIL_SORT, it) }
                     )
                 } else {
-                    CustomTopBar(
+                    TopAppBar(
                         title = title,
-                        modifier = Modifier.background(MiuixTheme.colorScheme.surface)
-                    ) {
+                        largeTitle = title,
+                        color = MiuixTheme.colorScheme.surface,
+                        titleColor = MiuixTheme.colorScheme.onSurface,
+                        largeTitleColor = MiuixTheme.colorScheme.onSurface,
+                        scrollBehavior = topBarScroll,
+                        actions = {
                         if (tab == 2) {
                         Box {
                             IconButton(onClick = { showSort = true }) {
@@ -381,6 +392,7 @@ fun HyperFlowApp() {
                         }
                     }
                 }
+                )
                 }
             },
             bottomBar = {

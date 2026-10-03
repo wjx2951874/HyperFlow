@@ -1,3 +1,10 @@
+# v0.6.8
+
+1. 首页大标题重做：改为 Miuix 官方 TopAppBar 大标题模式（学 KernelSU 管理器 / HyperModifier）——标题字号更大、位置更靠下，随内容滚动平滑收起居中；四个 tab（首页/流转/消息/设置）统一，切 tab 自动重置展开。
+2. 环境检测 6 项合一为 3 项：① Root 环境（Root 或 KernelSU 任一即绿，砍掉单独的 KSU 内核检测）② 小米互联服务 ③ LSPosed 模块（启用 + 推荐作用域合一，三态：红=未启用/未连接，黄=已启用但作用域不全，绿=就绪）。
+3. LSPosed 检测更智能：以 libxposed service 实时连接为准（模块停用 → 连接断开 → 直接显示未启用，不再误报"已启用"），推荐作用域读取框架实时配置。
+4. 引导提示词全面重写：按缺失场景一步步引导（装 Root → 装 LSPosed → 启用模块 → 勾选作用域），"去解决"步骤与弹窗文案同步更新。
+
 # v0.6.6
 
 1. App 刷入时联网直装：KSU 执行 customize.sh 阶段压缩包尚未解压（已实证），v0.6.6 起 workflow 将 APK 独立上传为 GitHub Release asset，customize.sh 刷入时联网直下 APK（gh-proxy 镜像 + GitHub 直连双通道）并 pm install —— 刷入即装好 App，无需等 boot；下载失败静默，由 service.sh 在重启后兜底（压缩包内 APK 仍保留兜底）。
