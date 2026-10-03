@@ -48,7 +48,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "亮屏流转",
-                    summary = "亮屏时强制模拟锁屏放行通知（含来电在线接听）",
+                    summary = "亮屏时强制模拟锁屏放行通知",
                     checked = state.forceTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "force"
@@ -57,7 +57,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 SwitchPreference(
                     title = "分身流转",
-                    summary = "微信/QQ 分身通知独立流转（标题带【分身】）",
+                    summary = "微信、QQ、钉钉等分身通知独立流转（标题带【分身】）",
                     checked = state.cloneTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "clone"
@@ -82,7 +82,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 SwitchPreference(
                     title = "写入系统短信",
-                    summary = "流转短信写入系统收件箱（默认关闭：可能回环/被拦截，建议用 App 内消息）",
+                    summary = "流转短信写入系统收件箱（若另一台设备未安装本模块会导致部分短信写入后不显示），推荐使用App内消息。",
                     checked = state.smsPersist,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "sms"   // 10 秒倒计时确认
@@ -106,7 +106,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启亮屏流转嘛？",
-            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（来电、短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
+            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
@@ -130,8 +130,8 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启写入系统短信嘛？",
-            content = "开启后，流转短信会写入系统收件箱。可能存在错误显示、重复互联等问题（测试多次复现），遇到异常请及时关闭。",
-            countdownSec = 10,
+            content = "开启后，流转短信会写入系统收件箱。在另一台设备获得Root权限并安装本模块后可尝试打开，否则不建议打开，存在重复互联，写入成功但不显示等问题。（遇到问题请第一时间关闭该功能）",
+            countdownSec = 5,
             onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )

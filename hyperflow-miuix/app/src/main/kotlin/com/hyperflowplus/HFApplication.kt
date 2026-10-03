@@ -90,7 +90,9 @@ class HFApplication : Application(), XposedServiceHelper.OnServiceListener {
                     "device=${android.os.Build.MODEL} / Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\n\n"
             val log = runCatching {
                 RootExec.su(
-                    "logcat -d 2>/dev/null | grep -iE 'hyperflow|hyperflowplus|milink|LSPosed|libxposed|Xposed|AndroidRuntime|FATAL|Exception' | tail -800"
+                    // V0.6.16.4：tail -800 在活跃设备上几十秒就被挤出（流转日志丢失），
+                    // 加宽到 tail -5000，覆盖更长流转窗口
+                    "logcat -d 2>/dev/null | grep -iE 'hyperflow|hyperflowplus|milink|LSPosed|libxposed|Xposed|AndroidRuntime|FATAL|Exception' | tail -5000"
                 )
             }.getOrNull()?.takeIf { it.isNotBlank() }
                 ?: runCatching {

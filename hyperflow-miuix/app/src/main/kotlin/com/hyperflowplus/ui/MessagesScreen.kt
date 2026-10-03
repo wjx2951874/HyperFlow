@@ -267,11 +267,12 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     )
                     if (query.isEmpty()) {
-                        // V0.6.16.2：占位层整体视觉居中（短信 18.0.0.32 反编译：搜索框 hint 17sp、图标 24dp、整体居中）
+                        // V0.6.16.3：占位偏左 40dp（短信 bg_padding_start=39.6dp，靠左但不过分）
                         Row(
                             Modifier
-                                .fillMaxSize(),
-                            horizontalArrangement = Arrangement.Center,
+                                .fillMaxSize()
+                                .padding(start = 40.dp),
+                            horizontalArrangement = Arrangement.Start,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -599,7 +600,8 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
     for (line in raw.lines()) {
         if (line.isBlank()) continue
         val title = field(line, "content_title")
-        val body = field(line, "content_description")
+        // V0.6.16.4：去掉小米验证码聚合标记前缀（"[2条]...xxx"），flow 表原文保留不覆盖
+        val body = HFState.sanitizeFlowBody(field(line, "content_description"))
         val time = field(line, "content_time")
         // 机型：只取 provider 的 content_device_name 原样显示（英文机型名），
         // 截断到第一个逗号并清除不可见/替换字符，避免解析把后续字段拼进来

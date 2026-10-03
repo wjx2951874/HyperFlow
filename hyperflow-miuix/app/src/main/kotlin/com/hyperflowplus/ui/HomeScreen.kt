@@ -141,7 +141,9 @@ echo ==END""") }.getOrNull()
             val mapsSeg = out?.substringAfter("==MAPS") ?: ""
             val sysLoaded = mapsSeg.contains("==SYS_LOADED")
             val mlLoaded = mapsSeg.contains("==ML_LOADED")
-            val mapsHit = mapsSeg.contains("==LOADED") || sysLoaded || mlLoaded
+            // V0.6.16.4：==LOADED <任意pid> 不再作为注入证据 —— grep -i "hyperflow" 大小写不敏感，
+            // 会命中 dalvik-cache / dex2oat 残留等假阳性（实测模块未注入时也出现 SYS_LOADED/LOADED），
+            // 且注入回调探针（markLoaded 文件）全空。只有 milink/system_server 进程 maps 命中才算真注入。
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
             val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==SCOPE")?.trim()?.toLongOrNull()
             // V0.6.16.3：不再读取 LSP 作用域参数 —— LSP 状态以 libxposed service 绑定快照为准
@@ -151,10 +153,10 @@ echo ==END""") }.getOrNull()
             val androidInjected = sysLoaded || fresh(adbProbe)
             // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
             val milinkInjected = mlLoaded || fresh(milinkProbe)
-            // 框架活跃 = daemon 存活，或模块已被注入任意进程（maps 命中必然框架在跑）
-            val lspInstalled = lspdAlive || mapsHit
-            // 模块已启用 = 框架在跑 且 有运行时证据（任一进程注入）
-            val moduleOkV = if (lspInstalled && (androidInjected || milinkInjected || mapsHit)) 3 else 0
+            // 框架活跃 = daemon 存活，或模块已被注入 milink/system_server（maps 命中必然框架在跑）
+            val lspInstalled = lspdAlive || mlLoaded || sysLoaded
+            // 模块已启用 = 框架在跑 且 有运行时注入证据（milink 或 system_server 真实注入）
+            val moduleOkV = if (lspInstalled && (androidInjected || milinkInjected)) 3 else 0
             // 推荐作用域 = android 与 milink 两进程都被注入（各自探针 48h 内）——
             // 不再要求"本 App"（模块自身进程无需被 hook，LSPosed 里勾不了属正常）
             val scopeOkV = if (lspInstalled && androidInjected && milinkInjected) 3 else 0
@@ -172,7 +174,7 @@ echo ==END""") }.getOrNull()
                 rootOk = r; ksuOk = k; lspOk = lspOkV > 0
                 moduleOk = moduleOkV > 0; scopeOk = scopeOkV > 0; milinkOk = m
                 lspState = lspOkV; moduleState = moduleOkV; scopeState = scopeOkV
-                runtimeOk = mapsHit || androidInjected || milinkInjected
+                runtimeOk = mlLoaded || sysLoaded || androidInjected || milinkInjected
                 checking = false
                 state.saveEnvCache(r, k, lspOkV > 0, moduleOkV > 0, scopeOkV > 0, m)
             }
@@ -180,8 +182,16 @@ echo ==END""") }.getOrNull()
     }
 
     /** V0.6.16.3：强停并重启本 App（等价"退出重进"，LSP 作用域/注入状态在重启后重新绑定）
-     *  AlarmManager 兜底拉起：进程被杀后由系统定时触发启动 MainActivity */
+     *  拉起方式：root am start 为主（MIUI 划卡片=force-stop 会清除 AlarmManager 待定闹钟，
+     *  导致 Alarm 拉起失效；root 的 am start 不受 force-stop 阻止），AlarmManager 仅作兜底 */
     fun restartApp() {
+        // root 拉起：force-stop 后仍能启动本 App
+        Thread {
+            runCatching {
+                RootExec.su("am start -n com.hyperflowplus/com.hyperflowplus.MainActivity --activity-clear-task")
+            }
+        }.start()
+        // 兜底：AlarmManager（force-stop 前已注册，非 force-stop 场景可用）
         try {
             val pi = android.app.PendingIntent.getActivity(
                 ctx, 0,
@@ -189,7 +199,7 @@ echo ==END""") }.getOrNull()
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             val am = ctx.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
-            am.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 400, pi)
+            am.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 600, pi)
         } catch (_: Throwable) {
         }
         android.os.Process.killProcess(android.os.Process.myPid())
@@ -642,8 +652,9 @@ echo ==END""") }.getOrNull()
                 DevInfoRow(Icons.Filled.Tag, "系统",
                     if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
                     else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})",
+                    expandable = true,
                     onTap = { onSysTap() })
-                DevInfoRow(Icons.Filled.DeveloperBoard, "内核", kernV.ifEmpty { "未知" })
+                DevInfoRow(Icons.Filled.DeveloperBoard, "内核", kernV.ifEmpty { "未知" }, expandable = true)
                 DevInfoRow(Icons.Filled.Fingerprint, "模块", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
             }
         }
@@ -736,19 +747,27 @@ private fun EnvItemRow3(
 }
 
 /** 设备信息行（v0.5.15：KernelSU 管理器 InfoCard 同款 —— 图标 24dp + 标题加粗 + 内容灰字，
- *  行间距默认 24dp（最后一行 0），无分割线） */
+ *  行间距默认 24dp（最后一行 0），无分割线。v0.6.16.3：expandable=true 时内容单行省略，
+ *  点击行切换为完整换行（系统/内核长文本用） */
 @Composable
 private fun DevInfoRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     content: String,
     bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
-    onTap: (() -> Unit)? = null
+    onTap: (() -> Unit)? = null,
+    expandable: Boolean = false
 ) {
+    var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .then(
+                if (onTap != null || expandable) Modifier.clickable {
+                    if (expandable) expanded = !expanded
+                    onTap?.invoke()
+                } else Modifier
+            )
             .padding(bottom = bottomPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -771,7 +790,7 @@ private fun DevInfoRow(
                 content,
                 fontSize = MiuixTheme.textStyles.body2.fontSize,
                 color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                maxLines = 1,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp)
             )

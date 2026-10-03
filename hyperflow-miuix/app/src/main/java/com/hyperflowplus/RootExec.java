@@ -44,6 +44,10 @@ public final class RootExec {
             sb.append(" --bind address:s:").append(shq(address));
             sb.append(" --bind body:s:").append(shq(body));
             sb.append(" --bind read:i:1");
+            sb.append(" --bind seen:i:1");
+            // V0.6.16.4：显式 type=1（收件箱）——root content insert 若不写 type，
+            // 默认值可能不是收件箱（1），短信 App 收件箱将不显示已写入的流转短信
+            sb.append(" --bind type:i:1");
             sb.append(" --bind date:l:").append(dateMs);
             sb.append("\n");
             FileWriter w = new FileWriter(script);

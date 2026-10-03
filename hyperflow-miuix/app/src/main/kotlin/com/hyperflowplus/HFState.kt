@@ -139,6 +139,12 @@ object HFState {
     var deletedVersion by mutableStateOf(0)
         private set
 
+    /** 清洗流转正文：去掉小米验证码聚合标记前缀（"[2条]...验证码275566" → "验证码275566"）。
+     *  仅匹配开头：半角/全角括号 + 数字 + "条" + 可选省略号（. / …），避免误删正文里的合法内容。 */
+    private val SMS_AGG_PREFIX = Regex("^\\s*[\\[（(]\\s*\\d+\\s*条\\s*[\\]）)]\\s*(?:[.…]{1,4}\\s*)?")
+    fun sanitizeFlowBody(b: String): String =
+        if (b.isEmpty()) b else SMS_AGG_PREFIX.replace(b, "")
+
     /** 指纹：title+body+time（body 截断到第一个逗号，与 flow 行 content_description 解析一致） */
     private fun fingerprint(t: String, b: String, tm: String): String =
         t + "\u0001" + b.substringBefore(",") + "\u0001" + tm
@@ -352,6 +358,10 @@ object HFState {
             // 2) 当前 flow 显示移除（主线程改 state）
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 flow = flow.lines().filterNot { line -> keys.any { matchRow(line, it) } }
+                    .joinToString("\n")
+                // V0.6.16.3：删除同步更新 localFlow——"仅显示本地"模式读的是 localFlow，
+                // 只改 flow 会导致删除后列表不刷新（删除失效）
+                localFlow = localFlow.lines().filterNot { line -> keys.any { matchRow(line, it) } }
                     .joinToString("\n")
             }
         }.start()

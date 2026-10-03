@@ -210,6 +210,13 @@ public class HookSmsPersist {
         return s == null ? "" : s.trim().replaceAll("\\s+", "");
     }
 
+    /** V0.6.16.4：去掉小米验证码聚合标记前缀（"[2条]...验证码275566" → "验证码275566"）。
+     *  仅匹配开头：半角/全角括号 + 数字 + "条" + 可选省略号（. / …），避免误删正文里的合法内容。 */
+    private static String stripSmsAggPrefix(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return s.replaceFirst("^\\s*[\\[（(]\\s*\\d+\\s*条\\s*[\\]）)]\\s*(?:[.…]{1,4}\\s*)?", "");
+    }
+
     /** V0.6.15 诊断：打印 flow 库与系统短信库最新一条（确认落库位置与真实字段） */
     private static void diagnoseSmsDb(Context ctx) {
         if (ctx == null) return;
@@ -289,6 +296,8 @@ public class HookSmsPersist {
             if (desc == null) {
                 desc = "";
             }
+            // V0.6.16.4：去掉小米验证码聚合标记前缀（"[2条]...xxx"），写入短信库的正文保持干净
+            desc = stripSmsAggPrefix(desc);
             String timeStr = getFieldStr(arg, "date");
             long dateMs = parseFlowTime(timeStr);
             // V0.3.15：过滤系统流转回执（milink 自己的"流转成功"提醒，无发信号码）

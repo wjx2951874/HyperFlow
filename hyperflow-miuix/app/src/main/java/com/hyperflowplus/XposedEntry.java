@@ -67,7 +67,8 @@ public class XposedEntry extends XposedModule {
             return;
         }
         try {
-            MiflowLog.i("=== HyperFlow V0.3.11 loaded in " + pkgName
+            // V0.6.16.4：版本号改为运行时读取（不再写死 V0.3.11，日志里一眼区分注入版本）
+            MiflowLog.i("=== HyperFlow v" + BuildConfig.VERSION_NAME + " loaded in " + pkgName
                     + " api=" + getApiVersion() + " framework=" + getFrameworkName() + " ===");
 
             installSafely("HookForceTransfer", new Runnable() {

@@ -99,11 +99,34 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 // v0.6.2：软重启框架条目暂时移除（用户：放调试区仍易误触，先去掉）
                 // v0.5.15：重装引导（原"版本连点 3 次"机关移除，改调试区独立入口，防误触）
+                // V0.6.16.3：点击弹确认框（提示可能清除本地数据，短信除外），10 秒倒计时后确认，
+                // 确认后再等 10 秒进入引导页
+                var showReGuide by remember { mutableStateOf(false) }
                 ArrowPreference(
                     title = "重新引导",
-                    summary = "重新打开首次使用引导页",
-                    onClick = { MainHolder.onReopenOnboarding() }
+                    summary = "重新打开首次使用引导页（确认并倒计时后进入）",
+                    onClick = { showReGuide = true }
                 )
+                if (showReGuide) {
+                    ConfirmDialog(
+                        show = showReGuide,
+                        title = "重新引导",
+                        content = "重新引导可能清除本地数据（短信消息除外）。\n确认后等待 10 秒进入引导页。",
+                        countdownSec = 10,
+                        confirmText = "确认",
+                        onConfirm = {
+                            showReGuide = false
+                            Toast.makeText(
+                                ctx.applicationContext,
+                                "10 秒后打开引导页…",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            android.os.Handler(android.os.Looper.getMainLooper())
+                                .postDelayed({ MainHolder.onReopenOnboarding() }, 10_000)
+                        },
+                        onDismiss = { showReGuide = false }
+                    )
+                }
                 // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"系统"行连点 5 次，
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
                 // v0.5.13：仅当存在已捕获的日志文件时才显示该条目（没有就不显示，
