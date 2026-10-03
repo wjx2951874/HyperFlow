@@ -1,4 +1,11 @@
-# v0.6.2
+# v0.6.3
+ 
+
+ 
+1. KSU 刷入时静默安装 APK 修复：KSU 安装 zip 为白名单式解压，zip 根目录的 APK 不会解压到模块目录（v0.6.0~0.6.2 因此报 "HyperFlowPlus.apk not found"，App 装不上）。customize.sh/service.sh 改为 find 全树搜索 APK，兜底命中 system/priv-app 下的实体 APK，重启一次模块与 App 全部到位。
+ 
+
+## v0.6.2
 
 1. 环境检测根治（MLPID 匹配）：检测脚本用进程名精确匹配 milink 失败（Android 进程名 15 字符截断），导致 milink 明明注入了模块却永远判定"推荐作用域未就绪"。改为宽松匹配 milink 关键字，三个推荐域勾选后检测为绿。
 2. 首页/流转/消息/设置四个页面标题整体下移（18→30dp），与内容一起往下对齐，不再贴状态栏。

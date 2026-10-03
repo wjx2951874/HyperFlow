@@ -1,6 +1,8 @@
 #!/system/bin/sh
 # HyperFlow 辅助模块：KSU 白名单 + 自动安装/更新管理 App
 MODDIR=${0%/*}
+[ -d "$MODDIR" ] || MODDIR=$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")
+[ -d "$MODDIR" ] || MODDIR=$(pwd)
 
 KSUD=$(command -v ksud)
 if [ -n "$KSUD" ]; then
@@ -11,8 +13,11 @@ else
 fi
 
 # 自动安装/更新管理 App（后台等待系统启动完成；未安装则装，版本旧则覆盖更新）
+# v0.6.3：同 customize.sh，APK 用 find 全树搜索（KSU 白名单解压，根 APK 不会在模块目录）
 APK="$MODDIR/HyperFlowPlus.apk"
-if [ -f "$APK" ]; then
+[ -f "$APK" ] || APK=$(find "$MODDIR" -maxdepth 4 -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
+[ -f "$APK" ] || APK=$(find "$MODDIR" -maxdepth 4 -name "*.apk" 2>/dev/null | head -1)
+if [ -n "$APK" ] && [ -f "$APK" ]; then
   (
     n=0
     while [ "$(getprop sys.boot_completed)" != "1" ] && [ $n -lt 180 ]; do
