@@ -1,10 +1,9 @@
 #!/system/bin/sh
-# HyperFlow v0.6.4：KSU/Magisk 刷入时静默安装/更新管理 App（重启前完成，重启一次全到位）
-# 说明：KSU 管理器安装模块时运行本脚本（系统环境，pm 可用）。
-# v0.6.3：KSU 安装 zip 是白名单式解压，zip 根目录的 APK 不会被解压到模块目录
-#         （v0.6.0~0.6.2 因此"HyperFlowPlus.apk not found"）。改为 find 全树搜索，
-#         兜底命中 system/priv-app/ 下的实体 APK（KSU 会解压 system 子树）。
-# v0.6.4：find 不限深度 + 打印 MODDIR 与搜索结果，若仍找不到可直接从安装日志定位 APK 实际位置。
+# HyperFlow v0.6.5：KSU 刷入时尝试安装/更新管理 App（重启后由 service.sh 兜底）
+# 实证（v0.6.4 日志）：KSU 执行 customize.sh 时模块目录里只有 module.prop，
+# 其余文件（含 APK）尚未解压 → 此阶段 find 永远找不到 APK，属执行时机问题。
+# 因此：此处能找到就装（部分 KSU/Magisk 变体可见），找不到不报错，
+# 由 service.sh 在 boot 后（模块完整落盘）自动安装，重启一次即"模块+App 全部到位"。
 MODDIR=${0%/*}
 [ -d "$MODDIR" ] || MODDIR=$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")
 [ -d "$MODDIR" ] || MODDIR=$(pwd)
@@ -17,10 +16,8 @@ if [ -n "$APK" ] && [ -f "$APK" ]; then
   if pm install -r -g "$APK" 2>/dev/null; then
     echo "HyperFlow: App installed/updated at flash time"
   else
-    echo "HyperFlow: pm install failed at flash time (fallback: service.sh retries after boot)"
+    echo "HyperFlow: pm install failed at flash time (service.sh will retry after boot)"
   fi
 else
-  echo "HyperFlow: no APK found. MODDIR=$MODDIR"
-  echo "HyperFlow: module dir listing:"
-  ls -laR "$MODDIR" 2>/dev/null | head -60
+  echo "HyperFlow: APK not present at flash stage (KSU hasn't extracted module files yet); App will be installed by service.sh after reboot"
 fi

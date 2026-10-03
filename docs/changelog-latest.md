@@ -1,9 +1,13 @@
-# v0.6.4
+# v0.6.5
+
+1. App 自动安装机制修正（安装失败的真正根因）：实测 KSU 执行 customize.sh 时模块目录里只有 module.prop，其余文件（含 APK）尚未解压——这是执行时机问题，不是路径问题，find 在此阶段永远找不到 APK。改为：customize.sh 阶段能装则装（部分变体可见），找不到不报错，由 service.sh 在 boot 后（模块完整落盘）自动安装 App 并输出安装日志到 /data/local/tmp/hyperflow_install.log。刷入后重启一次，模块与 App 全部到位。
+2. update.json zipUrl 同步修复：此前发版只同步 version/versionCode，zipUrl 停在 v0.6.1，导致"检测到新版但下载到旧包"。自本版起三处（version/versionCode/zipUrl）一并同步。
+
+## v0.6.4
 
 1. 环境检测升级为秒级实时：采用 libxposed service 绑定（参考 HyperModifier 同款机制）——模块在 LSPosed 启用时 App 进程实时连接框架 daemon，直接拿到框架实时返回的模块作用域配置。推荐作用域/模块启用判定不再依赖 root + ps/maps/文件探针慢探测，毫秒更新、无 root 依赖，勾选即绿。
 2. 更新下载修复：update.json 的 zipUrl 此前停在 v0.6.1（历次发版只同步了 version/versionCode），导致 App/KSU 检测到新版、实际下载却拿到 0.6.1 安装包。
 3. KSU 刷入安装 APK 再加固：find 不限深度搜索 + 打印模块目录诊断，若仍找不到可从安装日志直接定位 APK 实际位置。
-4. KSU 刷入时静默安装 APK（v0.6.3）：KSU 安装 zip 为白名单式解压，zip 根目录 APK 不会解压到模块目录，改为 find 全树搜索兜底命中 system/priv-app 实体 APK。
 
 ## v0.6.3
 
