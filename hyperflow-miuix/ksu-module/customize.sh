@@ -12,7 +12,36 @@ install_apk() { # $1=apk路径
   pm install -r -g "$1" 2>/dev/null
 }
 
-# 通道1：模块目录本地 APK（部分 KSU/Magisk 变体解压可见）
+# 通道1：从 KSU 下载的模块 zip 源文件提取 APK（v0.6.12）——不走网络，省 47MB 二次下载。
+# KSU 刷写时 zip 常见存放路径：/data/adb/modules_update/、/data/adb/、/data/local/tmp/、/data/cache/
+ZIP_SRC=""
+for D in /data/adb/modules_update /data/adb /data/local/tmp /data/cache; do
+  [ -d "$D" ] || continue
+  F=$(ls "$D"/*.zip 2>/dev/null | grep -iE "hyperflow" | head -1)
+  [ -n "$F" ] || F=$(ls "$D"/*.zip 2>/dev/null | head -1)
+  if [ -n "$F" ] && [ -f "$F" ]; then ZIP_SRC="$F"; break; fi
+done
+if [ -n "$ZIP_SRC" ] && command -v unzip >/dev/null 2>&1; then
+  APK_IN_ZIP=$(unzip -l "$ZIP_SRC" 2>/dev/null | grep -oE "[^ ]+\.apk" | head -1)
+  if [ -n "$APK_IN_ZIP" ]; then
+    unzip -p "$ZIP_SRC" "$APK_IN_ZIP" > /data/local/tmp/hf_zip.apk 2>/dev/null
+    if [ -s /data/local/tmp/hf_zip.apk ]; then
+      if install_apk /data/local/tmp/hf_zip.apk; then
+        echo "HyperFlow: App installed from module zip ($ZIP_SRC -> $APK_IN_ZIP)"
+        rm -f /data/local/tmp/hf_zip.apk
+        exit 0
+      fi
+    fi
+    rm -f /data/local/tmp/hf_zip.apk
+    echo "HyperFlow: zip found ($ZIP_SRC) but APK extract/install failed, fallback"
+  else
+    echo "HyperFlow: zip found ($ZIP_SRC) but no apk inside, fallback"
+  fi
+else
+  echo "HyperFlow: no module zip source found (looked: modules_update /adb /local/tmp /cache), fallback"
+fi
+
+# 通道2：模块目录本地 APK（部分 KSU/Magisk 变体解压可见）
 APK="$MODDIR/HyperFlowPlus.apk"
 [ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
 [ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)

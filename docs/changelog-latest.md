@@ -1,3 +1,11 @@
+# v0.6.12
+
+1. 刷入不再二次下载 APK：customize.sh 新增通道①——从 KSU 下载的模块 zip 源文件（
+   /data/adb/modules_update/、/data/adb/、/data/local/tmp/、/data/cache/）直接 unzip 提取
+   APK 安装，刷一次只下载 25MB zip（此前是 25MB zip + 47MB APK 两次下载）；
+   提取失败依次回退：模块目录已解压 APK → 联网下载（gh-proxy/ghfast/直连三通道）。
+2. 刷写日志输出 zip 源文件路径与提取结果，便于定位不同 KSU 变体的 zip 存放位置。
+
 # v0.6.11
 
 1. 刷入提速：App 已安装且版本不低于模块 → customize.sh 直接跳过联网下载 APK（老用户刷入
