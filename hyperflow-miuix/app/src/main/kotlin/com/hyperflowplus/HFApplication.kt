@@ -54,7 +54,12 @@ class HFApplication : Application() {
         @JvmStatic
         fun captureLogcat(ctx: Context): File? = runCatching {
             val dir = File(ctx.filesDir, "hf_logs").apply { mkdirs() }
-            val f = File(dir, "hf_log_${System.currentTimeMillis()}.txt")
+            // v0.6.0：文件名带版本号（hf_log_v0.6.0_<时间戳>.txt），列表里一眼区分新旧，
+            // 不再出现"文件名只有时间戳、打开才知道是哪个版本"的困惑
+            val stamp = System.currentTimeMillis()
+            val f = File(dir, "hf_log_v${BuildConfig.VERSION_NAME}_$stamp.txt")
+            val header = "HyperFlow log @ $stamp v${BuildConfig.VERSION_NAME}\n" +
+                    "device=${android.os.Build.MODEL} / Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\n\n"
             val log = runCatching {
                 RootExec.su(
                     "logcat -d 2>/dev/null | grep -iE 'hyperflow|hyperflowplus|milink|LSPosed|libxposed|Xposed|AndroidRuntime|FATAL|Exception' | tail -800"
@@ -99,9 +104,7 @@ class HFApplication : Application() {
                 )
             }.getOrNull() ?: ""
             f.writeText(
-                "HyperFlow log @ " + System.currentTimeMillis() + " v" + BuildConfig.VERSION_NAME + "\n" +
-                        "device=" + android.os.Build.MODEL + " / Android " + android.os.Build.VERSION.RELEASE +
-                        " (API " + android.os.Build.VERSION.SDK_INT + ")\n\n" + log +
+                header + log +
                         "\n\n================== 诊断段（环境与注入证据） ==================\n" + diag
             )
             f
