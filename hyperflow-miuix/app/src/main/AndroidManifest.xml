@@ -19,7 +19,7 @@
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="澎湃OS互联通知流转增强：亮屏强制流转/分身通知流转/流转短信持久化" />
+            android:value="澎湃OS互联通知流转增强模块：亮屏/分身通知跨设备流转，短信持久化保存并可写入系统短信，支持一键更新" />
         <meta-data
             android:name="xposedminversion"
             android:value="82" />

@@ -2,5 +2,5 @@ minApiVersion=101
 targetApiVersion=102
 exceptionMode=protective
 name=HyperFlow
-description=小米澎湃互联Plus：亮屏流转/分身流转/短信持久化/一键更新
+description=澎湃OS互联通知流转增强模块：亮屏/分身通知跨设备流转，短信持久化保存并可写入系统短信，支持一键更新
 author=酷安@翰德姆
