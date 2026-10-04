@@ -1,7 +1,7 @@
 id=hyperflow
 name=HyperFlow
-version=1.0.0
-versionCode=126
+version=1.0.1
+versionCode=127
 author=酷安@翰德姆
 description=澎湃OS互联通知流转增强模块：亮屏/分身通知跨设备流转，短信持久化保存并可写入系统短信，支持一键更新
 detail=澎湃OS互联通知流转增强模块：亮屏/分身通知跨设备流转，短信持久化保存并可写入系统短信，支持一键更新
