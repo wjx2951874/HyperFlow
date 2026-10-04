@@ -106,12 +106,12 @@ data class SearchStatus(
     enum class ResultStatus { DEFAULT, EMPTY, LOAD, SHOW }
 }
 
-/** 折叠态假搜索栏（点击进入全屏搜索） */
+/** 折叠态假搜索栏（点击进入全屏搜索；点击由调用方外层 detectTapGestures 处理，
+ *  本组件不加 clickable —— Miuix InputField disabled 态会消费点击，内层空 clickable 会拦截外层） */
 @Composable
 fun SearchBarFake(
     label: String,
     searchBarTopPadding: Dp = 12.dp,
-    onClick: () -> Unit
 ) {
     InputField(
         query = "",
@@ -130,8 +130,7 @@ fun SearchBarFake(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .padding(top = searchBarTopPadding, bottom = 6.dp)
-            .clickable { onClick() },
+            .padding(top = searchBarTopPadding, bottom = 6.dp),
         onSearch = { },
         enabled = false,
         expanded = false,

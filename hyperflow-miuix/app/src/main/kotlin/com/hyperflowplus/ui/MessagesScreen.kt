@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -189,18 +191,21 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
         )
     ) {
-        // V0.6.16.6：常驻搜索栏（KSU SearchBarFake）——点击进入全屏搜索页
+        // V0.6.16.6：常驻搜索栏（KSU SearchBarFake）——detectTapGestures 点击进入全屏搜索页
+        //（KSU 原版做法：不用 clickable，Miuix InputField disabled 态会消费点击事件）
         item(key = "searchFake") {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        MainHolder.searchStatus = MainHolder.searchStatus.copy(
-                            current = SearchStatus.Status.EXPANDING
-                        )
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
+                                current = SearchStatus.Status.EXPANDING
+                            )
+                        }
                     }
             ) {
-                SearchBarFake("搜索消息", onClick = {})
+                SearchBarFake("搜索消息")
             }
         }
         // v0.5.15：多选操作栏（长按会话进入，小米短信 ActionMode 同款：已选 N 个会话 + 删除 + 取消）
