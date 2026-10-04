@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
@@ -85,7 +84,9 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
+import com.hyperflowplus.ui.MessageSearchResults
 import com.hyperflowplus.ui.MessagesScreen
+import com.hyperflowplus.ui.SearchPager
 import com.hyperflowplus.ui.OnboardingScreen
 import com.hyperflowplus.ui.SettingsScreen
 
@@ -294,6 +295,8 @@ fun HyperFlowApp() {
                     )
                 } else if (showLogs || showLicenses) {
                     // V0.6.15：日志列表 / 开源许可自带标题栏+统一返回箭头，隐藏主 TopAppBar
+                } else if (MainHolder.searchStatus.shouldExpand()) {
+                    // V0.6.16.6：KSU 同款全屏搜索展开时隐藏主 TopAppBar（真正的"搜索页"）
                 } else {
                     TopAppBar(
                         title = title,
@@ -304,13 +307,7 @@ fun HyperFlowApp() {
                         scrollBehavior = topBarScroll,
                         actions = {
                         if (tab == 2) {
-                        // V0.6.16.4：搜索图标（排序左侧）——点击打开消息页搜索框
-                        IconButton(onClick = { MainHolder.msgSearchOpen = true }) {
-                            top.yukonga.miuix.kmp.basic.Icon(
-                                imageVector = Icons.Filled.Search,
-                                contentDescription = "搜索消息"
-                            )
-                        }
+                        // V0.6.16.6：搜索功能整体移除（用户决策），右上角仅保留排序
                         Box {
                             IconButton(onClick = { showSort = true }) {
                                 top.yukonga.miuix.kmp.basic.Icon(
@@ -586,6 +583,14 @@ fun HyperFlowApp() {
                     }
                 }
             }
+
+        // V0.6.16.6：KSU 同款全屏搜索覆盖层 —— 盖住顶栏+底栏+内容（真正的"搜索页"），
+        // 顶部搜索栏+取消按钮，下方结果区（会话/信息分组、命中高亮），系统返回收起
+        MainHolder.searchStatus.SearchPager(
+            onSearchStatusChange = { MainHolder.searchStatus = it },
+            defaultResult = { MessageSearchResults(state) },
+            result = { MessageSearchResults(state) }
+        )
 
         // 排序菜单已内联在 topBar 的 Sort 图标下方（KSU 风格下拉，Popup 锚定，见 topBar 块）
         // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示

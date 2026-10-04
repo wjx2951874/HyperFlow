@@ -235,6 +235,8 @@ object MainHolder {
     // v0.5.12：悬浮胶囊避让 —— MainActivity 按 navFloat 设置，页面滚动容器尾部
     // 加同高间距，保证内容最后一行可滚到胶囊上沿（不遮挡、不留白）
     var bottomPad by androidx.compose.runtime.mutableStateOf(androidx.compose.ui.unit.Dp.Unspecified)
-    // V0.6.16.4：消息页搜索态 —— 右上角搜索图标（排序左侧）打开，搜索框退出时关闭
-    var msgSearchOpen by androidx.compose.runtime.mutableStateOf(false)
+    // V0.6.16.6：KSU 同款全屏搜索 —— 状态机（折叠/展开/收起）+ 搜索结果（跨组件共享）
+    var searchStatus by androidx.compose.runtime.mutableStateOf(SearchStatus("搜索消息"))
+    var searchConvs by androidx.compose.runtime.mutableStateOf<List<Pair<String, List<Array<String>>>>>(emptyList())
+    var searchMsgs by androidx.compose.runtime.mutableStateOf<List<Pair<String, Array<String>>>>(emptyList())
 }
