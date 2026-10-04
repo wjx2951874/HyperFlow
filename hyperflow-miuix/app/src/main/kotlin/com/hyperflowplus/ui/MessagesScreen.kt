@@ -199,6 +199,9 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .pointerInput(Unit) {
                         detectTapGestures {
+                            // 展开即预填全量会话（LaunchedEffect 只在输入变化时触发过滤，
+                            // 展开瞬间不触发 → 先放全量，DEFAULT 分支直接渲染完整列表）
+                            MainHolder.searchConvs = convos
                             MainHolder.searchStatus = MainHolder.searchStatus.copy(
                                 current = SearchStatus.Status.EXPANDING
                             )

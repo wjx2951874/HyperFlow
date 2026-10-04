@@ -237,7 +237,12 @@ fun SearchStatus.SearchPager(
     val surfaceAlpha by animateFloatAsState(
         if (searchStatus.shouldExpand()) 1f else 0f,
         animationSpec = tween(200, easing = FastOutSlowInEasing),
-        label = "SearchPagerSurfaceAlpha"
+        label = "SearchPagerSurfaceAlpha",
+        // KSU 原版关键回调：动画完成时驱动状态机 EXPANDING→EXPANDED / COLLAPSING→COLLAPSED，
+        // 否则卡在 EXPANDING，结果区（isExpand）永不显示
+        finishedListener = {
+            onSearchStatusChange(searchStatus.onAnimationComplete())
+        }
     )
     val surfaceColor = colorScheme.surface
 
