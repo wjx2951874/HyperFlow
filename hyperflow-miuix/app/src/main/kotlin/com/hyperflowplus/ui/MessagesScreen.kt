@@ -754,7 +754,14 @@ fun MessageSearchResults(state: HFState, modifier: Modifier = Modifier) {
                         sender = sender,
                         rows = rows,
                         matched = matched,
-                        onClick = { state.currentConversation = sender to rows }
+                        onClick = {
+                            // V0.6.16.9：先收起搜索页再进会话 —— 否则会话详情被覆盖层盖住看不见
+                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
+                                searchText = "",
+                                current = SearchStatus.Status.COLLAPSING
+                            )
+                            state.currentConversation = sender to rows
+                        }
                     )
                 }
             }
@@ -768,6 +775,11 @@ fun MessageSearchResults(state: HFState, modifier: Modifier = Modifier) {
                         q = q,
                         onClick = {
                             val rows = convHits.firstOrNull { it.first == sender }?.second ?: listOf(row)
+                            // V0.6.16.9：先收起搜索页再进会话（同会话行点击）
+                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
+                                searchText = "",
+                                current = SearchStatus.Status.COLLAPSING
+                            )
                             state.currentConversation = sender to rows
                         }
                     )
