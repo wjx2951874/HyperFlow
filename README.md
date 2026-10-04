@@ -28,6 +28,32 @@
 
 > 短信写入系统收件箱：另一台设备需已获得 Root 权限并安装本模块才能完整显示，否则可能出现写入成功但不显示等问题。
 
+## 构建
+
+**环境**：JDK 17 · Android SDK（compileSdk 37 / build-tools 36）· Gradle 9.x
+
+```bash
+# 编译 Release APK（hyperflow-miuix 目录下）
+gradle :app:assembleRelease --no-daemon
+
+# 产物
+#   hyperflow-miuix/app/build/outputs/apk/release/app-release.apk
+```
+
+- **签名**：存在 `keystore.jks` 时使用 release 签名（别名/口令走环境变量 `HF_KEY_ALIAS` / `HF_KEY_PASS`），否则回退 debug 签名；
+- **flashable zip**：由 GitHub Actions（`.github/workflows/build.yml`）在构建后自动组装（priv-app 预置 APK + service.sh + customize.sh + module.prop），`push main` 或打 `v*` tag 即触发，产物自动发布到 Release；
+- 版本号以 `ksu-module/module.prop` 为单一事实来源（`version` / `versionCode`），构建时同步写入 APK 与 update.json。
+
+## 引用的库
+
+| 库 | 用途 |
+|---|---|
+| [Miuix KMP](https://github.com/yukonga/miuix-kmp) 0.9.4（ui / preference / icons / blur） | HyperOS 风格界面（顶部栏、设置项、图标、柔光玻璃） |
+| Jetpack Compose BOM 2025.06.01（ui / foundation / material-icons） | Compose UI 基础 |
+| androidx.activity-compose 1.9.3 / core-ktx 1.13.1 | Activity 集成 / 基础组件 |
+| [libxposed](https://github.com/LSPosed/libxposed) 102.0.0（api compileOnly + service） | LSPosed 框架 Hook 与运行时检测 |
+| org.json 20240303 | 配置与数据解析 |
+
 ## 免责声明
 
 - 本模块仅供个人设备学习与调试使用，禁止用于商业用途或再次分发；
