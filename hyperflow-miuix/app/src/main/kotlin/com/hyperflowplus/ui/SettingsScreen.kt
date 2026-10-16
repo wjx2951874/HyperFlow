@@ -18,6 +18,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -148,8 +152,10 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         GroupTitle("关于")
 
         // v1.1.0-beta1：Beta 机关 —— 连点版本行 7 次解锁 Beta 通道显示
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         var betaTapCount by remember { mutableStateOf(0) }
         var betaUnlocked by remember { mutableStateOf(false) }
+        var checkUpdateJob by remember { mutableStateOf<Job?>(null) }
 
         Card(Modifier.fillMaxWidth()) {
             Column {
@@ -178,12 +184,16 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                             if (MainHolder.updState == "new") {
                                 MainHolder.onOpenUpdater()
                             } else {
-                                // v1.1.0-beta1：连点 7 次解锁 Beta 标记
+                                // v1.1.0-beta2：连点静默计数，600ms 内无新点击才触发更新检查
                                 betaTapCount++
+                                checkUpdateJob?.cancel()
                                 if (betaTapCount >= 7) {
                                     betaUnlocked = true
                                 } else {
-                                    MainHolder.onCheckUpdate()
+                                    checkUpdateJob = scope.launch {
+                                        delay(600)
+                                        MainHolder.onCheckUpdate()
+                                    }
                                 }
                             }
                         }
