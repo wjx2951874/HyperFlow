@@ -1,9 +1,6 @@
 package com.hyperflowplus.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,318 +8,124 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Colorize
-import com.hyperflowplus.ui.HyperDialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TabRow
-import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 1.1.0 主题设置页（严格按 00 规范 §8.2 / KernelSU ColorPaletteScreenMiuix.kt 结构）：
- *
- * 分组结构：
- *   外观 → 深色模式 TabRow(跟随系统/浅色/深色) + AMOLED 纯黑
- *   颜色 → 动态取色(Monet) + 主题色16选1(带调色图标) + Monet时显示调色板风格
- *   底栏 → 底栏形态(标准/悬浮/液态玻璃) + 导航角标
- *   系统 → 液态玻璃模糊 + 预测性返回 + 恢复默认
+ * 主题与显示设置（回退到 1.0.1 简洁样式）
+ * - 深色模式：跟随系统 / 浅色 / 深色
+ * - 悬浮导航栏
+ * - 液态玻璃（仅悬浮开启时显示）
  */
 @Composable
-fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
-    val scrollBehavior = MiuixScrollBehavior()
-    val appInfo = LocalContext.current.applicationInfo
+fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val sScroll = rememberScrollState()
+    LaunchedEffect(sScroll) {
+        androidx.compose.runtime.snapshotFlow { sScroll.value }.collect { MainHolder.scrollTick++ }
+    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = "主题设置",
-                largeTitle = "主题设置",
-                navigationIcon = {
-                    MiuixBackButton(onClick = onBack)
-                },
-                scrollBehavior = scrollBehavior
+    // 深色模式：system/light/dark
+    var themeMode by remember { mutableStateOf(state.themeMode) }
+
+    Column(
+        modifier = modifier.fillMaxSize()
+    ) {
+        // 顶部返回栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "←",
+                fontSize = 24.sp,
+                color = MiuixTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .clickable { onBack() }
+                    .padding(12.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "主题与显示",
+                fontSize = 20.sp,
+                color = MiuixTheme.colorScheme.onBackground
             )
         }
-    ) { padding ->
-        LazyColumn(
-            state = rememberLazyListState(),
+
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .verticalScroll(sScroll)
                 .padding(horizontal = 12.dp)
         ) {
-            // ===== 外观 / 深色模式 =====
-            item { Spacer(Modifier.height(4.dp)) }
-            item { SmallTitle("外观") }
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column {
-                        val modeIdx = when (state.themeMode) {
-                            "light" -> 1
-                            "dark" -> 2
-                            else -> 0
+            Spacer(Modifier.height(8.dp))
+
+            // ===== 外观 =====
+            SmallTitle("外观")
+
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    // 深色模式选择
+                    ArrowPreference(
+                        title = "深色模式",
+                        summary = when (themeMode) {
+                            "light" -> "浅色"
+                            "dark" -> "深色"
+                            else -> "跟随系统"
+                        },
+                        onClick = {
+                            // 循环切换：system → light → dark → system
+                            themeMode = when (themeMode) {
+                                "system" -> "light"
+                                "light" -> "dark"
+                                else -> "system"
+                            }
+                            state.setString("theme_mode", themeMode)
                         }
-                        TabRow(
-                            tabs = listOf("跟随系统", "浅色", "深色"),
-                            selectedTabIndex = modeIdx,
-                            onTabSelected = { i ->
-                                state.setString(
-                                    "theme_mode",
-                                    when (i) { 1 -> "light"; 2 -> "dark"; else -> "system" }
-                                )
-                            },
-                            modifier = Modifier
-                                .padding(12.dp)
-                        )
+                    )
+
+                    // 悬浮导航栏
+                    SwitchPreference(
+                        title = "悬浮导航栏",
+                        summary = if (state.navFloat) "已开启悬浮导航栏" else "关闭后使用系统导航栏",
+                        checked = state.navFloat,
+                        onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
+                    )
+
+                    // 液态玻璃（仅悬浮开启时显示）
+                    if (state.navFloat) {
                         SwitchPreference(
-                            title = "纯黑背景",
-                            summary = "深色模式下使用纯黑背景（AMOLED 省电）",
-                            checked = state.amoled,
-                            onCheckedChange = { state.set("amoled", it) }
+                            title = "液态玻璃",
+                            summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
+                            checked = state.glassEffect,
+                            onCheckedChange = { state.set(Config.KEY_GLASS, it) }
                         )
                     }
                 }
             }
 
-            // ===== 颜色 =====
-            item { SmallTitle("颜色") }
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column {
-                        SwitchPreference(
-                            title = "动态取色",
-                            summary = "跟随系统壁纸配色",
-                            checked = state.monet,
-                            onCheckedChange = { state.set("miuix_monet", it) }
-                        )
-                        val keyColors = listOf(
-                            0xFF3482FF.toInt() to "HyperOS 蓝",
-                            0xFF2196F3.toInt() to "天蓝",
-                            0xFF00BCD4.toInt() to "青",
-                            0xFF009688.toInt() to "青绿",
-                            0xFF4CAF50.toInt() to "绿",
-                            0xFF8BC34A.toInt() to "浅绿",
-                            0xFFCDDC39.toInt() to "黄绿",
-                            0xFFFFC107.toInt() to "琥珀",
-                            0xFFFF9800.toInt() to "橙",
-                            0xFFFF5722.toInt() to "深橙",
-                            0xFFF44336.toInt() to "红",
-                            0xFFE91E63.toInt() to "粉红",
-                            0xFF9C27B0.toInt() to "紫",
-                            0xFF673AB7.toInt() to "深紫",
-                            0xFF3F51B5.toInt() to "靛蓝",
-                            0xFF795548.toInt() to "棕"
-                        )
-                        val curIdx = keyColors.indexOfFirst { it.first == state.keyColor }.let { if (it < 0) 0 else it }
-                        var showColorDialog by remember { mutableStateOf(false) }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showColorDialog = true }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("主题色", style = MiuixTheme.textStyles.body1)
-                                Spacer(Modifier.height(2.dp))
-                                Text(keyColors[curIdx].second, style = MiuixTheme.textStyles.body2,
-                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
-                            }
-                            Text("›", style = MiuixTheme.textStyles.title3,
-                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
-                        }
-                        if (showColorDialog) {
-                            HyperDialog(
-                                show = true,
-                                title = "选择主题色",
-                                onDismiss = { showColorDialog = false }
-                            ) {
-                                keyColors.forEachIndexed { i, (_, name) ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                state.setInt("key_color", keyColors[i].first)
-                                                showColorDialog = false
-                                            }
-                                            .padding(vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .background(Color(keyColors[i].first))
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(name, style = MiuixTheme.textStyles.body1)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ===== 底栏 =====
-            item { SmallTitle("底栏") }
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column {
-                        val barStyles = listOf("标准", "悬浮", "液态玻璃")
-                        val barIdx = when (state.bottomBarStyle) {
-                            "floating" -> 1
-                            "liquid" -> 2
-                            else -> 0
-                        }
-                        var showBarDialog by remember { mutableStateOf(false) }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showBarDialog = true }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("底栏形态", style = MiuixTheme.textStyles.body1)
-                                Spacer(Modifier.height(2.dp))
-                                Text(barStyles[barIdx], style = MiuixTheme.textStyles.body2,
-                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
-                            }
-                            Text("›", style = MiuixTheme.textStyles.title3,
-                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
-                        }
-                        if (showBarDialog) {
-                            HyperDialog(
-                                show = true,
-                                title = "选择底栏形态",
-                                onDismiss = { showBarDialog = false }
-                            ) {
-                                barStyles.forEachIndexed { i, name ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                state.setString(
-                                                    "bottom_bar_style",
-                                                    when (i) { 1 -> "floating"; 2 -> "liquid"; else -> "standard" }
-                                                )
-                                                showBarDialog = false
-                                            }
-                                            .padding(vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(name, style = MiuixTheme.textStyles.body1)
-                                    }
-                                }
-                            }
-                        }
-                        SwitchPreference(
-                            title = "显示导航角标",
-                            summary = "底栏消息 Tab 有新消息时显示红点",
-                            checked = state.enableBadge,
-                            onCheckedChange = { state.set("enable_navigation_badge", it) }
-                        )
-                    }
-                }
-            }
-
-            // ===== 系统 =====
-            item { SmallTitle("系统") }
-            item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column {
-                        SwitchPreference(
-                            title = "液态玻璃模糊",
-                            summary = "玻璃底栏的模糊与折射效果开关",
-                            checked = state.enableBlur,
-                            onCheckedChange = { state.set("enable_blur", it) }
-                        )
-                        SwitchPreference(
-                            title = "预测性返回动画",
-                            summary = "返回时预览上一页缩略图（需系统支持）",
-                            checked = state.enablePredictiveBack,
-                            onCheckedChange = {
-                                state.set("enable_predictive_back", it)
-                                PredictiveBack.apply(it, appInfo)
-                            }
-                        )
-                        var showReset by remember { mutableStateOf(false) }
-                        ArrowPreference(
-                            title = "恢复默认设置",
-                            summary = "重置全部主题与显示设置",
-                            onClick = { showReset = true }
-                        )
-                        if (showReset) {
-                            ConfirmDialog(
-                                show = showReset,
-                                title = "恢复默认设置",
-                                content = "确定要恢复默认设置吗？",
-                                confirmText = "确定",
-                                onConfirm = {
-                                    showReset = false
-                                    state.setString("theme_mode", "system")
-                                    state.set("amoled", false)
-                                    state.set("miuix_monet", false)
-                                    state.setInt("key_color", 0xFF3482FF.toInt())
-                                    state.setString("bottom_bar_style", "standard")
-                                    state.set("enable_blur", true)
-                                    state.set("enable_navigation_badge", true)
-                                    state.set("enable_predictive_back", false)
-                                    PredictiveBack.apply(false, appInfo)
-                                },
-                                onDismiss = { showReset = false }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 预测性返回反射开关（00 §10：不写 Manifest 属性，运行时反射 setEnableOnBackInvokedCallback） */
-object PredictiveBack {
-    fun apply(enabled: Boolean, appInfo: android.content.pm.ApplicationInfo?) {
-        if (appInfo == null) return
-        runCatching {
-            runCatching {
-                val method = android.content.pm.ApplicationInfo::class.java
-                    .getDeclaredMethod("setEnableOnBackInvokedCallback", Boolean::class.javaPrimitiveType)
-                method.isAccessible = true
-                method.invoke(appInfo, enabled)
-            }.onFailure {
-                org.lsposed.hiddenapibypass.HiddenApiBypass.invoke(
-                    android.content.pm.ApplicationInfo::class.java, appInfo,
-                    "setEnableOnBackInvokedCallback", enabled
-                )
-            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

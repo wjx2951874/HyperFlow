@@ -247,19 +247,17 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 ArrowPreference(
                     title = "隐私说明",
-                    summary = "小米原生通道，App不联网不上传",
+                    summary = "APP不联网不上传，请放心使用",
                     onClick = { showPrivacy = true }
                 )
             }
         }
-        // 1.1.0 #69：隐私说明弹窗
+        // 隐私说明弹窗：只显示"知道了"，无取消按钮
         ConfirmDialog(
             show = showPrivacy,
             title = "隐私说明",
-            content = "本应用的所有流转数据均通过小米互联系统原生通道在本机处理，" +
-                "App 本身不联网、不上传任何数据。短信/通知仅在您开启相应功能时" +
-                "于本机读取与保存，可随时关闭或删除。",
-            confirmText = "知道了",
+            content = "APP不联网不上传，请放心使用",
+            singleConfirmText = "知道了",
             onConfirm = { showPrivacy = false },
             onDismiss = { showPrivacy = false }
         )
