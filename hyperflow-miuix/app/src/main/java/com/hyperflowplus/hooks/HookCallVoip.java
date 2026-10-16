@@ -125,7 +125,29 @@ public class HookCallVoip {
             MiflowLog.e("HookCallVoip: filterCall hook failed", t);
         }
 
-        // 2. hook VoipTransHelper.isRemoteVoipSupported()：iOS 设备强制返回 true
+        // 2. hook VoipTransHelper.isLocalVoipSupported()：强制返回 true
+        try {
+            Class<?> voipCls = Class.forName("com.xiaomi.dist.notification.listener.voip.VoipTransHelper", false, cl);
+            Method isLocalVoipSupported = voipCls.getDeclaredMethod("isLocalVoipSupported");
+            isLocalVoipSupported.setAccessible(true);
+            XposedEntry.get().hook(isLocalVoipSupported)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept(new Hooker() {
+                        @Override
+                        public Object intercept(Chain chain) throws Throwable {
+                            if (!Config.isForceTransferEnabled()) {
+                                return chain.proceed();
+                            }
+                            MiflowLog.d("isLocalVoipSupported: force return true");
+                            return Boolean.TRUE;
+                        }
+                    });
+            MiflowLog.i("HookCallVoip: VoipTransHelper.isLocalVoipSupported() hooked");
+        } catch (Throwable t) {
+            MiflowLog.e("HookCallVoip: isLocalVoipSupported hook failed", t);
+        }
+
+        // 3. hook VoipTransHelper.isRemoteVoipSupported()：iOS 设备强制返回 true
         try {
             Class<?> voipCls = Class.forName("com.xiaomi.dist.notification.listener.voip.VoipTransHelper", false, cl);
             Method isRemoteVoipSupported = voipCls.getDeclaredMethod("isRemoteVoipSupported", String.class, int.class);
