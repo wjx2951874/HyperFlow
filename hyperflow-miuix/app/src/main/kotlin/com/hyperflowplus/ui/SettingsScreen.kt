@@ -227,7 +227,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                                     betaUnlocked = true
                                     sp.edit().putBoolean("beta_channel", true).apply()
                                     betaTapCount = 0
-                                    Toast.makeText(context, "Beta 通道已激活", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Beta 通道已激活，将自动检测 beta 更新", Toast.LENGTH_LONG).show()
                                 } else {
                                     checkUpdateJob = scope.launch {
                                         delay(600)

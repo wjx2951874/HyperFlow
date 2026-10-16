@@ -686,9 +686,15 @@ fun HyperFlowApp() {
             }
             // ===== 更新方式选择（点「更新」后弹出） =====
             if (updMethod) {
+                val isBeta = BuildConfig.VERSION_NAME.contains("beta")
                 HyperDialog(
                     title = "选择更新方式",
-                    summary = "① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
+                    summary = buildString {
+                        append("① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。")
+                        if (isBeta) {
+                            append("\n\n⚠️ 当前是 Beta 测试版，可能存在不稳定或 Bug，请谨慎升级。")
+                        }
+                    },
                 
                     show = updMethod,
                     onDismiss = { updMethod = false }

@@ -2,6 +2,7 @@ package com.hyperflowplus.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -108,7 +109,11 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     var selected by remember { mutableStateOf<Lib?>(null) }
 
-    Column(modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+    ) {
         // V0.6.15.1：KSU 同款单行标题顶栏（无 largeTitle）——顶栏矮、箭头贴左上、
         // 标题紧随箭头同一行（字号即 Miuix 普通标题字号，与二级页一致）
         TopAppBar(

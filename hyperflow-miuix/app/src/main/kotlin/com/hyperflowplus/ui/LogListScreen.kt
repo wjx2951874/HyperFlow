@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,7 +126,11 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }.start()
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface)
+    ) {
         // V0.6.15.1：顶部栏改用 Miuix TopAppBar（KSU 单行样式，与开源许可页完全一致：
         // 箭头贴左上 32dp、标题同行、右侧 actions 放数量+一键删除）
         TopAppBar(
