@@ -40,6 +40,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -197,23 +198,21 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                             )
                         }
-                        // 行内快捷操作：分享 / 删除
-                        Icon(
-                            Icons.Filled.Share,
-                            contentDescription = "分享",
-                            tint = MiuixTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .clickable { shareFile(f) }
-                        )
-                        Icon(
-                            Icons.Filled.Delete,
-                            contentDescription = "删除",
-                            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .clickable { confirmDel = f }
-                        )
+                        // 行内快捷操作：分享 / 删除（miuix IconButton）
+                        IconButton(onClick = { shareFile(f) }) {
+                            Icon(
+                                Icons.Filled.Share,
+                                contentDescription = "分享",
+                                tint = MiuixTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(onClick = { confirmDel = f }) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "删除",
+                                tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             }

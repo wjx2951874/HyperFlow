@@ -8,3 +8,5 @@ hyperflow-miuix/local.properties
 docs-internal/
 hf-v0434/*.new
 releases_backup_*.json
+*.apk
+*.zip

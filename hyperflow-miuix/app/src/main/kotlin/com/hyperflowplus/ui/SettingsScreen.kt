@@ -3,7 +3,9 @@ package com.hyperflowplus.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +15,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.ui.window.Popup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -37,14 +42,15 @@ import com.hyperflowplus.BuildConfig
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
-import com.hyperflowplus.ui.fixLspScript
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.hyperflowplus.ui.fixLspScript
 
 /** 设置页：主题（悬浮导航栏/液态玻璃）→ 调试（调试模式/分享日志）→ 关于（作者/源码/许可/获取更新） */
 @Composable
@@ -81,21 +87,43 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 1.1.0：主题入口收敛为二级页（深色模式/主题色/底栏形态/模糊/角标/预测返回全在这）
-                val themeState = when (state.themeMode) {
+                // 外观：跟随系统 / 浅色 / 深色
+                val appearanceText = when (state.themeMode) {
                     "light" -> "浅色"
                     "dark" -> "深色"
                     else -> "跟随系统"
-                } + if (state.monet) " · 壁纸取色" else "" + " · " + when (state.bottomBarStyle) {
-                    "standard" -> "标准"
-                    "floating" -> "悬浮"
-                    else -> "液态玻璃"
                 }
                 ArrowPreference(
-                    title = "主题与显示",
-                    summary = themeState,
-                    onClick = { MainHolder.onOpenTheme() }
+                    title = "外观",
+                    summary = appearanceText,
+                    onClick = {
+                        // 循环切换：跟随系统 → 浅色 → 深色
+                        val next = when (state.themeMode) {
+                            "system" -> "light"
+                            "light" -> "dark"
+                            else -> "system"
+                        }
+                        state.setString("theme_mode", next)
+                    }
                 )
+
+                // 悬浮导航栏
+                SwitchPreference(
+                    title = "悬浮导航栏",
+                    summary = if (state.navFloat) "已开启悬浮导航栏" else "关闭后使用系统导航栏",
+                    checked = state.navFloat,
+                    onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
+                )
+
+                // 液态玻璃（仅悬浮开启时显示）
+                if (state.navFloat) {
+                    SwitchPreference(
+                        title = "液态玻璃",
+                        summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
+                        checked = state.glassEffect,
+                        onCheckedChange = { state.set(Config.KEY_GLASS, it) }
+                    )
+                }
             }
         }
 
@@ -252,15 +280,29 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
-        // 隐私说明弹窗：只显示"知道了"，无取消按钮
-        ConfirmDialog(
-            show = showPrivacy,
-            title = "隐私说明",
-            content = "APP不联网不上传，请放心使用",
-            singleConfirmText = "知道了",
-            onConfirm = { showPrivacy = false },
-            onDismiss = { showPrivacy = false }
-        )
+        // 隐私说明弹窗：详细文字 + 中间大按钮"知道了"
+        if (showPrivacy) {
+            HyperDialog(
+                show = showPrivacy,
+                title = "隐私说明",
+                onDismiss = { showPrivacy = false }
+            ) {
+                Text(
+                    "本应用的所有流转数据均通过小米互联系统原生通道在本机处理，" +
+                    "App 本身不联网、不上传任何数据。短信/通知仅在您开启相应功能时" +
+                    "于本机读取与保存，可随时关闭或删除。",
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 20.dp)
+                )
+                // 大按钮居中
+                Button(
+                    onClick = { showPrivacy = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("知道了")
+                }
+            }
+        }
 
         // v0.5.12：悬浮胶囊避让 —— 滚动到底最后一行停在胶囊上沿（不遮挡）
         Spacer(
