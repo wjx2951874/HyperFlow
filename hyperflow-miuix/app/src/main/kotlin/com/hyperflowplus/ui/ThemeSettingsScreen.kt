@@ -1,21 +1,30 @@
 package com.hyperflowplus.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Colorize
+import com.hyperflowplus.ui.HyperDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -25,7 +34,9 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.MiuixTheme
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -129,21 +140,51 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                             0xFF795548.toInt() to "棕"
                         )
                         val curIdx = keyColors.indexOfFirst { it.first == state.keyColor }.let { if (it < 0) 0 else it }
-                        OverlayDropdownPreference(
-                            title = "主题色",
-                            items = keyColors.map { it.second },
-                            selectedIndex = curIdx,
-                            onSelectedIndexChange = { i ->
-                                state.setInt("key_color", keyColors[i].first)
-                            },
-                            startAction = {
-                                Icon(
-                                    imageVector = Icons.Filled.Colorize,
-                                    contentDescription = "主题色",
-                                    modifier = Modifier.padding(end = 6.dp)
-                                )
+                        var showColorDialog by remember { mutableStateOf(false) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showColorDialog = true }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("主题色", style = MiuixTheme.textStyles.body1)
+                                Spacer(Modifier.height(2.dp))
+                                Text(keyColors[curIdx].second, style = MiuixTheme.textStyles.body2,
+                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
                             }
-                        )
+                            Text("›", style = MiuixTheme.textStyles.title3,
+                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
+                        }
+                        if (showColorDialog) {
+                            HyperDialog(
+                                show = true,
+                                title = "选择主题色",
+                                onDismiss = { showColorDialog = false }
+                            ) {
+                                keyColors.forEachIndexed { i, (_, name) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                state.setInt("key_color", keyColors[i].first)
+                                                showColorDialog = false
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .background(Color(keyColors[i].first))
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(name, style = MiuixTheme.textStyles.body1)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -159,17 +200,48 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                             "liquid" -> 2
                             else -> 0
                         }
-                        OverlayDropdownPreference(
-                            title = "底栏形态",
-                            items = barStyles,
-                            selectedIndex = barIdx,
-                            onSelectedIndexChange = { i ->
-                                state.setString(
-                                    "bottom_bar_style",
-                                    when (i) { 1 -> "floating"; 2 -> "liquid"; else -> "standard" }
-                                )
+                        var showBarDialog by remember { mutableStateOf(false) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showBarDialog = true }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("底栏形态", style = MiuixTheme.textStyles.body1)
+                                Spacer(Modifier.height(2.dp))
+                                Text(barStyles[barIdx], style = MiuixTheme.textStyles.body2,
+                                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
                             }
-                        )
+                            Text("›", style = MiuixTheme.textStyles.title3,
+                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f))
+                        }
+                        if (showBarDialog) {
+                            HyperDialog(
+                                show = true,
+                                title = "选择底栏形态",
+                                onDismiss = { showBarDialog = false }
+                            ) {
+                                barStyles.forEachIndexed { i, name ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                state.setString(
+                                                    "bottom_bar_style",
+                                                    when (i) { 1 -> "floating"; 2 -> "liquid"; else -> "standard" }
+                                                )
+                                                showBarDialog = false
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(name, style = MiuixTheme.textStyles.body1)
+                                    }
+                                }
+                            }
+                        }
                         SwitchPreference(
                             title = "显示导航角标",
                             summary = "底栏消息 Tab 有新消息时显示红点",
