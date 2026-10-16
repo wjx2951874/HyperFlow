@@ -856,8 +856,8 @@ private fun checkUpdate(
     }
     Thread {
         try {
-            // v1.1.0-beta9：Beta 通道检测 beta 分支，正式通道检测 main 分支
-            val urls = if (beta) Config.updateJsonUrlsBeta() else Config.updateJsonUrls()
+            // v1.1.0-beta10：激活Beta通道后同时检测 main + beta 两个分支，取versionCode最大者
+            val urls = if (beta) Config.updateJsonUrls() + Config.updateJsonUrlsBeta() else Config.updateJsonUrls()
             val results = java.util.concurrent.ConcurrentHashMap<String, String>()  // url -> body
             val threads = urls.map { u ->
                 Thread {
