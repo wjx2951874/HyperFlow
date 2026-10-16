@@ -176,7 +176,8 @@ fun HyperFlowApp() {
                             updPhase = "busy"; showUpd = true
                             MainHolder.updState = "busy"
                         }
-                    }
+                    },
+                    beta = HFState.ctx!!.getSharedPreferences("hyperflow", android.content.Context.MODE_PRIVATE).getBoolean("beta_channel", false)
                 )
             }
             // V0.6.15：版本行"发现新版本"时点击 → 直接弹更新日志窗（日志+更新按钮）
@@ -204,6 +205,7 @@ fun HyperFlowApp() {
                             MainHolder.updState = "error"
                         },
                         onBusy = {}
+                        , beta = HFState.ctx!!.getSharedPreferences("hyperflow", android.content.Context.MODE_PRIVATE).getBoolean("beta_channel", false)
                     )
                 }
             }, 1500)
@@ -845,7 +847,8 @@ private fun checkUpdate(
     onNew: (String, String, String) -> Unit,
     onNone: () -> Unit,
     onError: (String) -> Unit,
-    onBusy: () -> Unit = {}
+    onBusy: () -> Unit = {},
+    beta: Boolean = false
 ) {
     if (!updateChecking.compareAndSet(false, true)) {
         onBusy()
@@ -853,8 +856,8 @@ private fun checkUpdate(
     }
     Thread {
         try {
-            // 多通道并行检测：收集所有通道结果，取 versionCode 最大者（防镜像缓存旧版导致误判"已是最新"）
-            val urls = Config.updateJsonUrls()
+            // v1.1.0-beta9：Beta 通道检测 beta 分支，正式通道检测 main 分支
+            val urls = if (beta) Config.updateJsonUrlsBeta() else Config.updateJsonUrls()
             val results = java.util.concurrent.ConcurrentHashMap<String, String>()  // url -> body
             val threads = urls.map { u ->
                 Thread {

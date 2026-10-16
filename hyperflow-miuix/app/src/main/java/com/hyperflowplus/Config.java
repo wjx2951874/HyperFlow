@@ -25,15 +25,22 @@ public final class Config {
     // - raw.githubusercontent：永远最新，但国内常超时
     // - jsDelivr：国内可达性好，但默认有 12h CDN 缓存 → 必须带时间戳参数穿透（v0.4.32 修复误报"已是最新"）
     public static String[] updateJsonUrls() {
-        // 注：jsDelivr 对 update.json 有 12h+ 陈旧缓存且 ?v= 参数无效（实测返回 0.4.25/0.4.15），
-        // 已从通道移除，改用 GitHub 国内加速镜像（实测返回最新版）。
         String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
         return new String[]{
-                // GitHub 国内加速镜像（主通道，v0.4.34 起）
                 "https://ghproxy.net/" + raw,
                 "https://ghfast.top/" + raw,
                 "https://gh-proxy.com/" + raw,
-                // raw 直连（海外/代理环境兜底）
+                raw
+        };
+    }
+
+    // v1.1.0-beta9：Beta 通道 URL
+    public static String[] updateJsonUrlsBeta() {
+        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/beta/update.json";
+        return new String[]{
+                "https://ghproxy.net/" + raw,
+                "https://ghfast.top/" + raw,
+                "https://gh-proxy.com/" + raw,
                 raw
         };
     }
