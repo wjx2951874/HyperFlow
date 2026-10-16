@@ -23,9 +23,10 @@ public final class Config {
     public static final String GLOBAL_CFG = "/data/adb/hyperflowplus/config.json";
     // 更新通道（App 内并行尝试，哪个通用哪个）：
     // - raw.githubusercontent：永远最新，但国内常超时
-    // - jsDelivr：国内可达性好，但默认有 12h CDN 缓存 → 必须带时间戳参数穿透（v0.4.32 修复误报"已是最新"）
+    // - 镜像站有 CDN 缓存，必须带时间戳参数穿透
     public static String[] updateJsonUrls() {
-        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json";
+        String t = "?t=" + System.currentTimeMillis();
+        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/main/update.json" + t;
         return new String[]{
                 "https://ghproxy.net/" + raw,
                 "https://ghfast.top/" + raw,
@@ -36,7 +37,8 @@ public final class Config {
 
     // v1.1.0-beta9：Beta 通道 URL
     public static String[] updateJsonUrlsBeta() {
-        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/beta/update.json";
+        String t = "?t=" + System.currentTimeMillis();
+        String raw = "https://raw.githubusercontent.com/wjx2951874/HyperFlow/beta/update.json" + t;
         return new String[]{
                 "https://ghproxy.net/" + raw,
                 "https://ghfast.top/" + raw,
