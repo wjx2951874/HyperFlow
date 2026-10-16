@@ -127,21 +127,6 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         }
 
-        // ===== 设备协同 =====
-        GroupTitle("设备协同")
-
-        Card(Modifier.fillMaxWidth()) {
-            Column {
-                SwitchPreference(
-                    title = "静默验证",
-                    summary = if (state.cfg.optBoolean("silent_auth", false)) "远控连接时自动完成密码验证，无需手动输入"
-                              else "关闭后远控连接需手动输入锁屏密码",
-                    checked = state.cfg.optBoolean("silent_auth", false),
-                    onCheckedChange = { state.set("silent_auth", it) }
-                )
-            }
-        }
-
         // ===== 调试 =====
         GroupTitle("调试")
 

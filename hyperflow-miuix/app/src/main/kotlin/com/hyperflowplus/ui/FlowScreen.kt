@@ -67,6 +67,22 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         }
 
+        GroupTitle("设备协同")
+
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                SwitchPreference(
+                    title = "妙享直通",
+                    summary = if (state.cfg.optBoolean("silent_auth", false))
+                        "跳过妙享桌面屏幕连接密码输入\n重启该设备后，其他小米设备通过小米妙享桌面连接时自动完成所需的密码验证，无需手动输入锁屏密码。仅在小米妙享服务弹出密码输入时时生效。开启后可能会增加安全风险，请谨慎使用！"
+                    else
+                        "跳过妙享桌面屏幕连接密码输入\n关闭后，该设备在被其他设备通过妙享桌面连接时可能需要输入锁屏密码才能继续。",
+                    checked = state.cfg.optBoolean("silent_auth", false),
+                    onCheckedChange = { state.set("silent_auth", it) }
+                )
+            }
+        }
+
         GroupTitle("短信持久化")
 
         Card(Modifier.fillMaxWidth()) {
