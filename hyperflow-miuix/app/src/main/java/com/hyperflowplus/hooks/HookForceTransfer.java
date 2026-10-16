@@ -66,41 +66,16 @@ public class HookForceTransfer {
                             MiflowLog.v("isDeviceSupported: pkg=" + sbn.getPackageName()
                                     + " category=" + (gateN != null ? gateN.category : "null")
                                     + " key=" + sbn.getKey());
-                            // v0.6.14：开关接入 hook！关闭时完全走系统原判定（milink 对带流转
-                            // 来源标记的消息在接收端会自行拒绝二次流转 → 不再回灌双份）
-                            if (!Config.isForceTransferEnabled()) {
-                                MiflowLog.d("force transfer DISABLED: stock decision (no gate)");
-                                return chain.proceed();
-                            }
-                            // v1.0.1：移除 v0.6.15 短信回灌排除与 v0.6.16.1 的 30s 内容去重
-                            // （二者误伤 milink 对同一通知的连续评估，导致亮屏流转失效）。
-                            // 开关开启时非来电通知无条件强制放行。
-                            if (isCallSbn(sbn)) {
-                                // V0.6.16.1 实测结论（用户）：来电 voip 走 milink 广播链路，
-                                // 不经 isDeviceSupported —— 亮屏时原生不广播 → 亮屏来电不可流转
-                                // （已知限制，标注后期修复）；锁屏时原生广播 voip → 来电可流转。
-                                // 本分支只影响"来电通知卡片"：强制不放行 → 锁屏流转时不再多出一张
-                                // 冗余卡片（接收端 OS4 走 voip 全屏接听，卡片不需要）。
-                                // 注意：OS3/苹果等不支持 voip 的接收端原本靠这张降级卡片接听，
-                                // 屏蔽后此类接收端将收不到来电（与用户当前实测环境一致：接收端可 voip）。
-                                android.app.Notification callN = sbn.getNotification();
-                                MiflowLog.d("call notification: block extra card pkg=" + sbn.getPackageName()
-                                        + " category=" + (callN != null ? callN.category : "null")
-                                        + " key=" + sbn.getKey()
-                                        + " (voip broadcast handles relay; screen-on call relay = known limitation)");
-                                return Boolean.FALSE;
-                            }
+                            // v1.1.0-beta24：只拦截运行状态卡片，其他通知完全交给小米原生。
+                            // 通过 HookCallRelay 模拟锁屏，让原生自己判断要不要流转。
                             if (isRunnableStateCard(sbn)) {
                                 MiflowLog.d("skip runnable-state card (not a real notification)");
                                 return Boolean.FALSE;
                             }
-                            // 其他通知：功能①亮屏强制流转（开关已接入，仅开启时生效）
-                            Config.bump(Config.CNT_FORCE);
-                            MiflowLog.d("force transfer: gate overridden (non-call notification)");
-                            return Boolean.TRUE;
+                            return chain.proceed();
                         }
                     });
-            MiflowLog.i("HookForceTransfer[gate] installed (v1.0.1: call=block card, others=gated force, no dedup)");
+            MiflowLog.i("HookForceTransfer[gate] installed (v1.1.0-beta24: only block runnable-state card, others native)");
         } catch (Throwable t) {
             MiflowLog.e("HookForceTransfer[gate] install failed", t);
         }

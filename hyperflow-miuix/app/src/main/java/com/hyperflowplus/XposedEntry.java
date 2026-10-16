@@ -2,6 +2,7 @@ package com.hyperflowplus;
 
 import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
+import com.hyperflowplus.hooks.HookCallVoip;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookRemoteOpen;
@@ -63,7 +64,7 @@ public class XposedEntry extends XposedModule {
             }
             return;
         }
-        if (!"com.milink.service".equals(pkgName)) {
+        if (pkgName == null || !pkgName.startsWith("com.milink")) {
             return;
         }
         try {
@@ -88,6 +89,9 @@ public class XposedEntry extends XposedModule {
             });
             installSafely("HookAutoUnlock", new Runnable() {
                 @Override public void run() { HookAutoUnlock.install(cl); }
+            });
+            installSafely("HookCallVoip", new Runnable() {
+                @Override public void run() { HookCallVoip.install(cl); }
             });
         } catch (Throwable t) {
             MiflowLog.e("XposedEntry init failed", t);

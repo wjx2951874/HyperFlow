@@ -47,8 +47,8 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 SwitchPreference(
-                    title = "亮屏流转",
-                    summary = "亮屏时强制模拟锁屏放行通知",
+                    title = "解锁时流转",
+                    summary = "解锁时模拟锁屏状态，让通知和来电也能流转",
                     checked = state.forceTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "force"
@@ -56,8 +56,8 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                     }
                 )
                 SwitchPreference(
-                    title = "分身流转",
-                    summary = "微信、QQ、钉钉等分身通知独立流转（标题带【分身】）",
+                    title = "应用双开流转",
+                    summary = "微信、QQ、钉钉等双开分身通知独立流转（标题带【分身】）",
                     checked = state.cloneTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "clone"
@@ -73,12 +73,12 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "妙享直通",
-                    summary = if (state.cfg.optBoolean("silent_auth", false))
-                        "跳过妙享桌面屏幕连接密码输入\n重启该设备后，其他小米设备通过小米妙享桌面连接时自动完成所需的密码验证，无需手动输入锁屏密码。仅在小米妙享服务弹出密码输入时时生效。开启后可能会增加安全风险，请谨慎使用！"
-                    else
-                        "跳过妙享桌面屏幕连接密码输入\n关闭后，该设备在被其他设备通过妙享桌面连接时可能需要输入锁屏密码才能继续。",
+                    summary = "跳过妙享桌面屏幕连接密码输入",
                     checked = state.cfg.optBoolean("silent_auth", false),
-                    onCheckedChange = { state.set("silent_auth", it) }
+                    onCheckedChange = { want ->
+                        if (want) pendingToggle = "silent_auth"
+                        else state.set("silent_auth", false)
+                    }
                 )
             }
         }
@@ -121,16 +121,16 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         "force" -> ConfirmDialog(
             show = true,
             
-            title = "你确定要开启亮屏流转嘛？",
-            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（短信、微信、QQ 等）的通知在亮屏时也能流转到其他设备。\n\nOS4亮屏电话流转接听可能不可用",
+            title = "你确定要开启解锁时流转嘛？",
+            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转到其他设备，OS4下的电话跨设备接听也可流转。",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
         "clone" -> ConfirmDialog(
             show = true,
             
-            title = "你确定要开启分身流转嘛？",
-            content = "开启后，在小米互联中已开启通知流转的分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
+            title = "你确定要开启应用双开流转嘛？",
+            content = "开启后，在小米互联中已开启通知流转的双开分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
             onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
@@ -149,6 +149,15 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             content = "开启后，流转短信会写入系统收件箱。在另一台设备获得Root权限并安装本模块后可尝试打开，否则不建议打开，存在重复互联，写入成功但不显示等问题。（遇到问题请第一时间关闭该功能）",
             countdownSec = 5,
             onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
+            onDismiss = { pendingToggle = null }
+        )
+        "silent_auth" -> ConfirmDialog(
+            show = true,
+            
+            title = "你确定要开启妙享直通嘛？",
+            content = "开启后，重启该设备后，其他小米设备通过小米妙享桌面连接时会自动完成所需的密码验证，无需手动输入锁屏密码。仅在小米妙享服务弹出密码输入时生效。\n\n开启后可能会增加安全风险，请谨慎使用！",
+            countdownSec = 5,
+            onConfirm = { state.set("silent_auth", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
         // 关闭 App 内消息：第一层=勾选框（勾选才清空本地数据）+ 蓝色"继续"；

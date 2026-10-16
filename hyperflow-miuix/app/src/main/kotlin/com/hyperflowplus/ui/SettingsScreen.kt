@@ -45,6 +45,9 @@ import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.window.WindowListPopup
+import top.yukonga.miuix.kmp.basic.ListPopupColumn
+import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
@@ -89,23 +92,39 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 外观：跟随系统 / 浅色 / 深色（miuix OverlayDropdownPreference）
-                OverlayDropdownPreference(
-                    title = "外观",
-                    items = listOf("跟随系统", "浅色", "深色"),
-                    selectedIndex = when (state.themeMode) {
-                        "light" -> 1
-                        "dark" -> 2
-                        else -> 0
-                    },
-                    onSelectedIndexChange = { index ->
-                        state.setString("theme_mode", when (index) {
-                            1 -> "light"
-                            2 -> "dark"
-                            else -> "system"
-                        })
+                // 外观：跟随系统 / 浅色 / 深色（KSU 风格小下拉菜单）
+                var showPopup by remember { mutableStateOf(false) }
+                val themeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
+                Box {
+                    ArrowPreference(
+                        title = "外观",
+                        summary = when (state.themeMode) {
+                            "light" -> "浅色"
+                            "dark" -> "深色"
+                            else -> "跟随系统"
+                        },
+                        onClick = { showPopup = true }
+                    )
+                    WindowListPopup(
+                        show = showPopup,
+                        onDismissRequest = { showPopup = false }
+                    ) {
+                        ListPopupColumn {
+                            themeOptions.forEachIndexed { index, (value, label) ->
+                                DropdownImpl(
+                                    text = label,
+                                    optionSize = themeOptions.size,
+                                    isSelected = state.themeMode == value,
+                                    index = index,
+                                    onSelectedIndexChange = {
+                                        state.setString("theme_mode", value)
+                                        showPopup = false
+                                    }
+                                )
+                            }
+                        }
                     }
-                )
+                }
 
                 // 悬浮导航栏
                 SwitchPreference(

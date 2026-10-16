@@ -19,9 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Share
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -139,17 +140,11 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             titleColor = MiuixTheme.colorScheme.onSurface,
             navigationIcon = { MiuixBackButton(onClick = onBack) },
             actions = {
-                Text(
-                    "${logs.size} 份",
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(end = 8.dp)
-                )
                 // v0.5.15.5：一键删除全部（数量 > 0 时显示，删除前弹确认）
                 if (logs.isNotEmpty()) {
                     IconButton(onClick = { confirmDelAll = true }) {
                         Icon(
-                            Icons.Filled.Delete,
+                            MiuixIcons.Delete,
                             contentDescription = "删除全部",
                             tint = MiuixTheme.colorScheme.primary
                         )
@@ -205,14 +200,14 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         // 行内快捷操作：分享 / 删除（miuix IconButton）
                         IconButton(onClick = { shareFile(f) }) {
                             Icon(
-                                Icons.Filled.Share,
+                                MiuixIcons.Share,
                                 contentDescription = "分享",
                                 tint = MiuixTheme.colorScheme.primary
                             )
                         }
                         IconButton(onClick = { confirmDel = f }) {
                             Icon(
-                                Icons.Filled.Delete,
+                                MiuixIcons.Delete,
                                 contentDescription = "删除",
                                 tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -271,7 +266,7 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         colors = ButtonDefaults.buttonColorsPrimary(),
                         modifier = Modifier.weight(1f)
                     ) { Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Share, null, tint = MiuixTheme.colorScheme.onPrimary, modifier = Modifier.height(16.dp))
+                        Icon(MiuixIcons.Share, null, tint = MiuixTheme.colorScheme.onPrimary, modifier = Modifier.height(16.dp))
                         Spacer(Modifier.width(6.dp)); Text("分享") } }
                     Spacer(Modifier.width(10.dp))
                     Button(
@@ -279,7 +274,7 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         colors = ButtonDefaults.buttonColors(),
                         modifier = Modifier.weight(1f)
                     ) { Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Download, null, tint = MiuixTheme.colorScheme.primary, modifier = Modifier.height(16.dp))
+                        Icon(MiuixIcons.Download, null, tint = MiuixTheme.colorScheme.primary, modifier = Modifier.height(16.dp))
                         Spacer(Modifier.width(6.dp)); Text("下载") } }
                     Spacer(Modifier.width(10.dp))
                     Button(
@@ -287,7 +282,7 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         colors = ButtonDefaults.buttonColors(),
                         modifier = Modifier.weight(1f)
                     ) { Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Delete, null, tint = MiuixTheme.colorScheme.primary, modifier = Modifier.height(16.dp))
+                        Icon(MiuixIcons.Delete, null, tint = MiuixTheme.colorScheme.primary, modifier = Modifier.height(16.dp))
                         Spacer(Modifier.width(6.dp)); Text("删除") } }
                 }
             }

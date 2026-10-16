@@ -79,10 +79,9 @@ public class HookCloneBypass {
                                 MiflowLog.d("clone notification released: " + sbn.getPackageName());
                                 return Boolean.TRUE;
                             }
-                            // 普通用户全量放行 —— 电话/短信/所有应用的通知
-                            // 都跳过 mAppNotificationFilter 过滤
-                            MiflowLog.d("all-app notification released: " + sbn.getPackageName());
-                            return Boolean.TRUE;
+                            // 普通用户交给原生处理，不要全量放行！
+                            // 之前全量放行导致运行状态卡片（短信正在运行）也流转了。
+                            return chain.proceed();
                         }
                     });
             MiflowLog.i("HookCloneBypass installed");
