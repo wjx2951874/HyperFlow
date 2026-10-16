@@ -104,7 +104,7 @@ fun HomeScreen(state: HFState, modifier: Modifier = Modifier, onOpenGuide: (Guid
             val out = runCatching { RootExec.su("""echo ==ID;
 id -u 2>/dev/null
 echo ==KSU;
-ksud -V 2>/dev/null || echo none
+ksud -V 2>/dev/null || magisk -V 2>/dev/null || apd -V 2>/dev/null || echo none
 echo ==MILINK;
 pm path com.milink.service 2>/dev/null
 echo ==LSPD;

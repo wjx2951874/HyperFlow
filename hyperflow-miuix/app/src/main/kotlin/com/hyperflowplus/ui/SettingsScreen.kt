@@ -152,9 +152,12 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         GroupTitle("关于")
 
         // v1.1.0-beta1：Beta 机关 —— 连点版本行 7 次解锁 Beta 通道显示
+        // v1.1.0-beta3：状态持久化到 SharedPreferences，关 App 重开不丢；激活后再点正常检查更新，再连点 10 次关闭
         val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val sp = context.getSharedPreferences("hyperflow", android.content.Context.MODE_PRIVATE)
         var betaTapCount by remember { mutableStateOf(0) }
-        var betaUnlocked by remember { mutableStateOf(false) }
+        var betaUnlocked by remember { mutableStateOf(sp.getBoolean("beta_channel", false)) }
         var checkUpdateJob by remember { mutableStateOf<Job?>(null) }
 
         Card(Modifier.fillMaxWidth()) {
@@ -184,11 +187,19 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                             if (MainHolder.updState == "new") {
                                 MainHolder.onOpenUpdater()
                             } else {
-                                // v1.1.0-beta2：连点静默计数，600ms 内无新点击才触发更新检查
+                                // v1.1.0-beta3：连点计数——已激活时再点正常检查更新，连点 10 次关闭
                                 betaTapCount++
                                 checkUpdateJob?.cancel()
-                                if (betaTapCount >= 7) {
+                                if (betaUnlocked && betaTapCount >= 10) {
+                                    betaUnlocked = false
+                                    sp.edit().putBoolean("beta_channel", false).apply()
+                                    betaTapCount = 0
+                                    Toast.makeText(context, "Beta 通道已关闭", Toast.LENGTH_SHORT).show()
+                                } else if (!betaUnlocked && betaTapCount >= 7) {
                                     betaUnlocked = true
+                                    sp.edit().putBoolean("beta_channel", true).apply()
+                                    betaTapCount = 0
+                                    Toast.makeText(context, "Beta 通道已激活", Toast.LENGTH_SHORT).show()
                                 } else {
                                     checkUpdateJob = scope.launch {
                                         delay(600)

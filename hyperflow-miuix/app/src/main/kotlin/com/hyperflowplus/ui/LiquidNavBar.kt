@@ -74,9 +74,7 @@ private fun PlainBar(
                 onClick = { onTabSelected(i) },
                 icon = icon,
                 label = label,
-                badge = if (badgeIndex == i) {
-                    { top.yukonga.miuix.kmp.basic.Badge() }
-                } else null
+                badge = null
             )
         }
     }
@@ -120,26 +118,12 @@ fun LiquidNavBar(
                 backdrop = bd,
                 mode = mode,
                 iconContent = { item, _ ->
-                    if (badgeIndex == null) {
-                        Icon(
-                            imageVector = item.first,
-                            contentDescription = null,
-                            tint = LocalFloatingBottomBarContentColor.current,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
-                        top.yukonga.miuix.kmp.basic.BadgedBox(
-                            badge = { top.yukonga.miuix.kmp.basic.Badge() },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = item.first,
-                                contentDescription = null,
-                                tint = LocalFloatingBottomBarContentColor.current,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = item.first,
+                        contentDescription = null,
+                        tint = LocalFloatingBottomBarContentColor.current,
+                        modifier = Modifier.size(24.dp)
+                    )
                 },
                 labelContent = { item, _ ->
                     Text(

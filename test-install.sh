@@ -2,8 +2,8 @@
 # ============================================================
 # HyperFlow 测试包一键构建（不发版）
 # 用法：./test-install.sh
-# 产物：hyperflow/HyperFlow-test.apk（覆盖安装用，正式签名）
-#       hyperflow/HyperFlow-test-flashable.zip（仅改 hook 时才需要刷模块）
+# 产物：hyperflow/HyperFlow-Beta.apk（覆盖安装用，正式签名）
+#       hyperflow/HyperFlow-Beta-flashable.zip（仅改 hook 时才需要刷模块）
 # 注意：构建后需把 APK 传给手机，手机直接覆盖安装即可测 UI；
 #       更新检测因 versionCode=128 > 线上 127 自动静默，不会弹更新。
 # ============================================================
@@ -15,8 +15,8 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 /home/user/.doubao_tools/gradle-9.6.0/bin/gradle :app:assembleRelease --no-daemon
 
 APK=app/build/outputs/apk/release/app-release.apk
-OUT_APK=../HyperFlow-test.apk
-OUT_ZIP=../HyperFlow-test-flashable.zip
+OUT_APK=../HyperFlow-Beta.apk
+OUT_ZIP=../HyperFlow-Beta-flashable.zip
 cp "$APK" "$OUT_APK"
 
 # 组装 flashable zip（改 hook 时才需要刷；纯 UI 改动用不到）

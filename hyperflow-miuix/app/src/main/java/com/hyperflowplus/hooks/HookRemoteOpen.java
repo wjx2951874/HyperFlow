@@ -161,6 +161,8 @@ public class HookRemoteOpen {
             // 3) 当前请求是主空间（userId==0 或签名无 userId 参数=默认主空间）
             //    且该应用已开双开（999 空间存在）
             int userId = findUserId(args);
+            MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
+                + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
             if (userId != 0 && userId != -1) {
                 return chain.proceed();
             }
@@ -191,14 +193,43 @@ public class HookRemoteOpen {
 
     /** 找 callingPackage 参数：只认白/黑名单中的 String 值（V1.1.0 起按集合匹配，
      *  兼容 com.xiaomi.mirror 等新调用方；resolvedType 等无关 String 不命中） */
+    /**
+     * v1.1.0-beta5：callingPackage 不是 startActivity 的参数，而是 system_server 内部通过
+     * Binder.getCallingPackage() 解析的。之前从 args 里找 String 参数，永远找不到。
+     * 修复：用 Binder.getCallingUid() 获取调用者 uid，再通过 IPackageManager 反查包名。
+     * system_server 里没有 Application，所以用 ServiceManager.getService("package") 获取。
+     */
     private static String findCallingPackage(List<Object> args) {
-        for (Object a : args) {
-            if (a instanceof String) {
-                String s = (String) a;
-                if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
-                    return s;
+        try {
+            // 先尝试从 args 里找（兼容某些机型把 callingPackage 当参数传的情况）
+            for (Object a : args) {
+                if (a instanceof String) {
+                    String s = (String) a;
+                    if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
+                        return s;
+                    }
                 }
             }
+            // v1.1.0-beta5：用 Binder.getCallingUid() 获取调用者 uid，反查包名
+            int callingUid = android.os.Binder.getCallingUid();
+            MiflowLog.d("clone open: callingUid=" + callingUid);
+            // system_server 里用 ServiceManager 获取 IPackageManager
+            Object pm = Class.forName("android.os.ServiceManager")
+                .getMethod("getService", String.class).invoke(null, "package");
+            if (pm != null) {
+                Object ipm = Class.forName("android.content.pm.IPackageManager$Stub")
+                    .getMethod("asInterface", android.os.IBinder.class).invoke(null, pm);
+                Method getPackagesForUid = ipm.getClass().getMethod("getPackagesForUid", int.class);
+                String[] pkgs = (String[]) getPackagesForUid.invoke(ipm, callingUid);
+                if (pkgs != null) {
+                    for (String pkg : pkgs) {
+                        MiflowLog.d("clone open: uid=" + callingUid + " pkg=" + pkg);
+                        if (ALLOWED_CALLERS.contains(pkg)) return pkg;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            MiflowLog.w("clone open: findCallingPackage failed: " + t.getMessage());
         }
         return null;
     }
