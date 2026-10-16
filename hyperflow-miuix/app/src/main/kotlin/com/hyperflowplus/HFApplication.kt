@@ -44,6 +44,8 @@ class HFApplication : Application(), XposedServiceHelper.OnServiceListener {
                 File(filesDir, "hf_crash.log").writeText(
                     "time=" + System.currentTimeMillis() + "\n" + sw.toString()
                 )
+                // v1.1.0-beta2：闪退瞬间立即抓 logcat 快照，不等连续 3 次
+                Thread { runCatching { captureLogcat(this@HFApplication) } }.start()
             }
             prev?.uncaughtException(thread, throwable)
         }
