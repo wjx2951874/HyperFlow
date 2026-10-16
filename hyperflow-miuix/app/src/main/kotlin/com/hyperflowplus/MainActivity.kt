@@ -48,9 +48,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -69,6 +71,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.theme.darkColorScheme
 import com.hyperflowplus.ui.ConversationScreen
 import com.hyperflowplus.ui.ConversationTopBar
 import com.hyperflowplus.ui.FlowScreen
@@ -84,11 +87,13 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.MainHolder
-import com.hyperflowplus.ui.MessageSearchResults
 import com.hyperflowplus.ui.MessagesScreen
-import com.hyperflowplus.ui.SearchPager
+import com.hyperflowplus.navigation.AppNavigation
+import com.hyperflowplus.navigation.LocalNavigator
+import com.hyperflowplus.navigation.Route
 import com.hyperflowplus.ui.OnboardingScreen
 import com.hyperflowplus.ui.SettingsScreen
+import com.hyperflowplus.ui.ThemeSettingsScreen
 
 /** HyperFlow —— Miuix(Compose) 全量重写入口（AndroidLiquidGlass 玻璃） */
 class MainActivity : ComponentActivity() {
@@ -96,7 +101,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         HFState.ctx = applicationContext
-        setContent { HyperFlowApp() }
+        setContent { AppNavigation() }
     }
 }
 
@@ -105,20 +110,16 @@ private data class Tab(val title: String, val icon: ImageVector)
 @Composable
 fun HyperFlowApp() {
     val ctx = LocalContext.current
+    val navigator = LocalNavigator.current   // 1.1.0：导航栈（二级页走 NavDisplay 返回栈）
+    val state = HFState   // 全局状态单例（主题/消息/流转配置）
     // 上次闪退日志：启动自动读取展示（无需终端抓日志）
     var crashLog by remember { mutableStateOf(readCrashLog(ctx)) }
-    // 主题：纯 Miuix 默认主题（跟随系统深浅色），不做壁纸取色、不做 App 内玻璃
-    // 液态玻璃是系统级效果（HyperLight 等模块实现），App 内保持 HyperOS 原生观感
-    val controller = remember { ThemeController(ColorSchemeMode.System) }
-    MiuixTheme(controller = controller) {
-        val state = HFState
-        val ctx = LocalContext.current
+        // 液态玻璃是系统级效果（HyperLight 等模块实现），App 内保持 HyperOS 原生观感
+        // val state = HFState
         var tab by remember { mutableIntStateOf(0) }
         var showSort by remember { mutableStateOf(false) }
         var showMsgMode by remember { mutableStateOf(false) }
         var showUpd by remember { mutableStateOf(false) }
-        var showLicenses by remember { mutableStateOf(false) }
-        var showLogs by remember { mutableStateOf(false) }
         var guideType by remember { mutableStateOf<GuideType?>(null) }
         var updVer by remember { mutableStateOf("") }
         var updUrl by remember { mutableStateOf("") }
@@ -132,8 +133,9 @@ fun HyperFlowApp() {
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
-            MainHolder.onOpenLicenses = { showLicenses = true }
-            MainHolder.onOpenLogs = { showLogs = true }
+            MainHolder.onOpenLicenses = { navigator.push(Route.Licenses) }
+            MainHolder.onOpenLogs = { navigator.push(Route.Logs) }
+            MainHolder.onOpenTheme = { navigator.push(Route.Theme) }
             MainHolder.onReopenOnboarding = { state.showOnboarding = true }
             MainHolder.onCheckUpdate = {
                 // V0.6.15：主动点击版本号 → 弹检测窗（checking→结果在窗内展示），
@@ -211,6 +213,21 @@ fun HyperFlowApp() {
             state.showOnboarding = !state.firstRunDone
         }
 
+        // 1.1.0 M8：底栏角标 —— 新消息到达（flow 内容变长）且不在消息页时点亮红点
+        var lastFlowLen by remember { mutableLongStateOf(0L) }
+        LaunchedEffect(Unit) {
+            androidx.compose.runtime.snapshotFlow { state.flow.length.toLong() }
+                .collect { len ->
+                    if (lastFlowLen != 0L && len != lastFlowLen && tab != 2) MainHolder.newMsgBadge = true
+                    lastFlowLen = len
+                }
+        }
+        LaunchedEffect(tab) {
+            if (tab == 2) MainHolder.newMsgBadge = false
+        }
+        // 底栏角标显示条件：开启开关 && 有新消息未看
+        val navBadgeIndex = if (state.enableBadge && MainHolder.newMsgBadge) 2 else null
+
         // 上次闪退提示：仅 Toast 展示摘要（不弹窗，避免启动弹窗渲染导致循环闪退）
         LaunchedEffect(crashLog) {
             if (crashLog != null) {
@@ -237,371 +254,478 @@ fun HyperFlowApp() {
             Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
                 GuideScreen(gt, onBack = { guideType = null })
             }
-            return@MiuixTheme
-        }
-        // V0.6.15：开源许可 / 日志列表不再全屏覆盖，进 Scaffold content（底部导航保留），
-        // TopAppBar 在这两个页面隐藏（各自自带标题栏+统一 MIUI 返回箭头）
-        BackHandler(enabled = showLogs || showLicenses) {
-            if (showLogs) showLogs = false
-            else if (showLicenses) showLicenses = false
-        }
+        } else {
+            // V0.6.15：开源许可 / 日志列表不再全屏覆盖，进 Scaffold content（底部导航保留），
+            // TopAppBar 在这两个页面隐藏（各自自带标题栏+统一 MIUI 返回箭头）
+            // 1.1.0：主题设置页同款处理（自带折叠 TopAppBar + 返回箭头）
 
-        val tabs = listOf(
-            Tab("首页", Icons.Filled.Home),
-            Tab("流转", Icons.Filled.Send),
-            Tab("消息", Icons.Filled.Notifications),
-            Tab("设置", Icons.Filled.Settings)
-        )
-        // 四个页面各显示页面名（软件名移到设置页关于区）
-        val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
+            val tabs = listOf(
+                Tab("首页", Icons.Filled.Home),
+                Tab("流转", Icons.Filled.Send),
+                Tab("消息", Icons.Filled.Notifications),
+                Tab("设置", Icons.Filled.Settings)
+            )
+            // 四个页面各显示页面名（软件名移到设置页关于区）
+            val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
-        // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
-        com.hyperflowplus.ui.smartInset = if (state.navFloat || state.glassEffect) 88.dp else 40.dp
-        // v0.5.12：悬浮胶囊底部避让 —— 页面滚动容器尾部加同高间距，
-        // 内容最后一行可滚到胶囊上沿（不遮挡、不留白）
-        MainHolder.bottomPad = if (state.navFloat) 96.dp else 0.dp
+            // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
+            com.hyperflowplus.ui.smartInset = if (state.bottomBarStyle != "standard") 88.dp else 40.dp
+            // v0.5.12：悬浮胶囊底部避让 —— 页面滚动容器尾部加同高间距，
+            // 内容最后一行可滚到胶囊上沿（不遮挡、不留白）
+            MainHolder.bottomPad = if (state.bottomBarStyle != "standard") 96.dp else 0.dp
 
-        // 液态玻璃 backdrop：在 Scaffold 内容区挂 layerBackdrop 捕获页面内容，供悬浮胶囊折射。
-        // InstallerX 同款结构：胶囊在 bottomBar 槽（内容区之外、绘制顺序在内容之后）采样，
-        // 不会把胶囊自身卷进捕获子树（v0.5.3 之前的 BarBlurHost 包整页会自采递归崩溃，弃用）。
-        // 修复"玻璃后背景变黑"（v0.5.13 根治）：此前 backdrop 用无 block 的 rememberLayerBackdrop()
-        // —— 只录制页面 UI、不铺底色，页面内容下方空白区域在采样时是透明 → 玻璃折射区变黑；
-        // 设置页内容一直铺到底所以侥幸正常，首页/流转/消息内容短则黑。这里显式先铺 surface
-        // 底色再录内容（与 BarBlurHost 一致），任何采样区域都有白底，玻璃不再黑。
-        // onDraw 是 DrawScope（非 @Composable）回调，色值先在 Composable 作用域取好再捕获。
-        val glassSurface = MiuixTheme.colorScheme.surface
-        val glassBackdrop = rememberLayerBackdrop {
-            drawRect(glassSurface)
-            drawContent()
-        }
+            // 液态玻璃 backdrop：在 Scaffold 内容区挂 layerBackdrop 捕获页面内容，供悬浮胶囊折射。
+            // InstallerX 同款结构：胶囊在 bottomBar 槽（内容区之外、绘制顺序在内容之后）采样，
+            // 不会把胶囊自身卷进捕获子树（v0.5.3 之前的 BarBlurHost 包整页会自采递归崩溃，弃用）。
+            // 修复"玻璃后背景变黑"（v0.5.13 根治）：此前 backdrop 用无 block 的 rememberLayerBackdrop()
+            // —— 只录制页面 UI、不铺底色，页面内容下方空白区域在采样时是透明 → 玻璃折射区变黑；
+            // 设置页内容一直铺到底所以侥幸正常，首页/流转/消息内容短则黑。这里显式先铺 surface
+            // 底色再录内容（与 BarBlurHost 一致），任何采样区域都有白底，玻璃不再黑。
+            // onDraw 是 DrawScope（非 @Composable）回调，色值先在 Composable 作用域取好再捕获。
+            val glassSurface = MiuixTheme.colorScheme.surface
+            val glassBackdrop = rememberLayerBackdrop {
+                drawRect(glassSurface)
+                drawContent()
+            }
 
-        // 导航栏/悬浮胶囊的液态折射 backdrop 由 MainActivity 挂载（见上），不再用 BarBlurHost
-        // 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
-        // v0.6.8：Miuix 大标题 TopAppBar（学 KSU/HyperModifier）——largeTitle 随内容滚动收起，
-        // 收起后回到顶栏居中；切 tab/进出会话时重置为展开态。
-        val topBarScroll = MiuixScrollBehavior()
-        Scaffold(
-            containerColor = MiuixTheme.colorScheme.surface,
-            modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
-            topBar = {
-                if (conversation != null) {
-                    // 会话详情顶栏（返回键 + 发送人 + 排序），放 Scaffold topBar 槽
-                    // 保证底部导航栏在详情页保留不消失
-                    ConversationTopBar(
-                        sender = conversation.first,
-                        desc = state.detailSort != "asc",
-                        onBack = { state.currentConversation = null },
-                        onSetSort = { state.setSortValue(Config.KEY_DETAIL_SORT, it) }
-                    )
-                } else if (showLogs || showLicenses) {
-                    // V0.6.15：日志列表 / 开源许可自带标题栏+统一返回箭头，隐藏主 TopAppBar
-                } else if (MainHolder.searchStatus.shouldExpand()) {
-                    // V0.6.16.6：KSU 同款全屏搜索展开时隐藏主 TopAppBar（真正的"搜索页"）
-                } else {
-                    TopAppBar(
-                        title = title,
-                        largeTitle = title,
-                        color = MiuixTheme.colorScheme.surface,
-                        titleColor = MiuixTheme.colorScheme.onSurface,
-                        largeTitleColor = MiuixTheme.colorScheme.onSurface,
-                        scrollBehavior = topBarScroll,
-                        actions = {
-                        if (tab == 2) {
-                        // V0.6.16.6：搜索功能整体移除（用户决策），右上角仅保留排序
-                        Box {
-                            IconButton(onClick = { showSort = true }) {
-                                top.yukonga.miuix.kmp.basic.Icon(
-                                    // V0.6.15：图标换 Material 标准 Sort（学 LSP 管理器排序风格）
-                                    imageVector = Icons.Filled.Sort,
-                                    contentDescription = "排序"
-                                )
-                            }
-                            // KSU 风格排序下拉菜单：点 Sort 图标在右上角展开（Popup 锚定，非系统 Dialog，防闪退）
-                            if (showSort) {
-                                androidx.compose.ui.window.Popup(
-                                    alignment = Alignment.TopEnd,
-                                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
-                                    onDismissRequest = { showSort = false }
-                                ) {
-                                    val cur = state.archiveSort
-                                    val dim = if (cur.startsWith("name")) "name" else "time"
-                                    val desc = cur.endsWith("desc")
-                                    Surface(
-                                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                        shadowElevation = 10.dp,
-                                        modifier = Modifier.width(230.dp)
+            // 导航栏/悬浮胶囊的液态折射 backdrop 由 MainActivity 挂载（见上），不再用 BarBlurHost
+            // 包内容页 —— 内容页盒子会卷入 backdrop 子树导致递归重绘崩溃。
+            // v0.6.8：Miuix 大标题 TopAppBar（学 KSU/HyperModifier）——largeTitle 随内容滚动收起，
+            // 收起后回到顶栏居中；切 tab/进出会话时重置为展开态。
+            val topBarScroll = MiuixScrollBehavior()
+            Scaffold(
+                containerColor = MiuixTheme.colorScheme.surface,
+                modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
+                topBar = {
+                    if (conversation != null) {
+                        // 会话详情顶栏（返回键 + 发送人 + 排序），放 Scaffold topBar 槽
+                        // 保证底部导航栏在详情页保留不消失
+                        ConversationTopBar(
+                            sender = conversation.first,
+                            desc = state.detailSort != "asc",
+                            onBack = { state.currentConversation = null },
+                            onSetSort = { state.setSortValue(Config.KEY_DETAIL_SORT, it) }
+                        )
+                        // V0.6.16.6：KSU 同款全屏搜索展开时隐藏主 TopAppBar（真正的"搜索页"）
+                    } else {
+                        TopAppBar(
+                            title = title,
+                            largeTitle = title,
+                            color = MiuixTheme.colorScheme.surface,
+                            titleColor = MiuixTheme.colorScheme.onSurface,
+                            largeTitleColor = MiuixTheme.colorScheme.onSurface,
+                            scrollBehavior = topBarScroll,
+                            actions = {
+                            if (tab == 2) {
+                            // V0.6.16.6：搜索功能整体移除（用户决策），右上角仅保留排序
+                            Box {
+                                IconButton(onClick = { showSort = true }) {
+                                    top.yukonga.miuix.kmp.basic.Icon(
+                                        // V0.6.15：图标换 Material 标准 Sort（学 LSP 管理器排序风格）
+                                        imageVector = Icons.Filled.Sort,
+                                        contentDescription = "排序"
+                                    )
+                                }
+                                // KSU 风格排序下拉菜单：点 Sort 图标在右上角展开（Popup 锚定，非系统 Dialog，防闪退）
+                                if (showSort) {
+                                    androidx.compose.ui.window.Popup(
+                                        alignment = Alignment.TopEnd,
+                                        offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
+                                        onDismissRequest = { showSort = false }
                                     ) {
-                                        Column(Modifier.padding(vertical = 6.dp)) {
-                                            @Composable
-                                            fun Item(label: String, summary: String, sel: Boolean, onClick: () -> Unit) {
+                                        val cur = state.archiveSort
+                                        val dim = if (cur.startsWith("name")) "name" else "time"
+                                        val desc = cur.endsWith("desc")
+                                        Surface(
+                                            color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                            shadowElevation = 10.dp,
+                                            modifier = Modifier.width(230.dp)
+                                        ) {
+                                            Column(Modifier.padding(vertical = 6.dp)) {
+                                                @Composable
+                                                fun Item(label: String, summary: String, sel: Boolean, onClick: () -> Unit) {
+                                                    Row(
+                                                        Modifier.fillMaxWidth()
+                                                            .clickable(onClick = onClick)
+                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            label,
+                                                            style = MiuixTheme.textStyles.body1,
+                                                            color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                        Text(
+                                                            summary,
+                                                            style = MiuixTheme.textStyles.body2,
+                                                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                                                            modifier = Modifier.padding(end = 6.dp)
+                                                        )
+                                                        if (sel) {
+                                                            top.yukonga.miuix.kmp.basic.Icon(
+                                                                imageVector = Icons.Filled.Check,
+                                                                contentDescription = "已选",
+                                                                tint = MiuixTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Item(
+                                                    "发送人",
+                                                    if (dim == "name") (if (desc) "Z→A" else "A→Z") else "",
+                                                    dim == "name",
+                                                    {
+                                                        if (state.archiveSort != "name_" + (if (desc) "desc" else "asc")) {
+                                                            state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_" + (if (desc) "desc" else "asc"))
+                                                        }
+                                                        showSort = false
+                                                    }
+                                                )
+                                                Item(
+                                                    "时间",
+                                                    if (dim == "time") (if (desc) "新→旧" else "旧→新") else "",
+                                                    dim == "time",
+                                                    {
+                                                        if (state.archiveSort != "time_" + (if (desc) "desc" else "asc")) {
+                                                            state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_" + (if (desc) "desc" else "asc"))
+                                                        }
+                                                        showSort = false
+                                                    }
+                                                )
+                                                Box(
+                                                    Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp)
+                                                        .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
+                                                )
+                                                // 底部倒序开关（KSU 风格）
                                                 Row(
                                                     Modifier.fillMaxWidth()
-                                                        .clickable(onClick = onClick)
-                                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                        .clickable { showSort = false }
+                                                        .padding(horizontal = 16.dp, vertical = 8.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(
-                                                        label,
+                                                        "倒序",
                                                         style = MiuixTheme.textStyles.body1,
-                                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                                                         modifier = Modifier.weight(1f)
                                                     )
-                                                    Text(
-                                                        summary,
-                                                        style = MiuixTheme.textStyles.body2,
-                                                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                                                        modifier = Modifier.padding(end = 6.dp)
+                                                    top.yukonga.miuix.kmp.basic.Switch(
+                                                        checked = desc,
+                                                        onCheckedChange = {
+                                                            state.setSortValue(
+                                                                Config.KEY_ARCHIVE_SORT,
+                                                                dim + "_" + (if (desc) "asc" else "desc")
+                                                            )
+                                                        }
                                                     )
-                                                    if (sel) {
-                                                        top.yukonga.miuix.kmp.basic.Icon(
-                                                            imageVector = Icons.Filled.Check,
-                                                            contentDescription = "已选",
-                                                            tint = MiuixTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
-                                                    }
                                                 }
-                                            }
-                                            Item(
-                                                "发送人",
-                                                if (dim == "name") (if (desc) "Z→A" else "A→Z") else "",
-                                                dim == "name",
-                                                {
-                                                    if (state.archiveSort != "name_" + (if (desc) "desc" else "asc")) {
-                                                        state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_" + (if (desc) "desc" else "asc"))
-                                                    }
-                                                    showSort = false
-                                                }
-                                            )
-                                            Item(
-                                                "时间",
-                                                if (dim == "time") (if (desc) "新→旧" else "旧→新") else "",
-                                                dim == "time",
-                                                {
-                                                    if (state.archiveSort != "time_" + (if (desc) "desc" else "asc")) {
-                                                        state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_" + (if (desc) "desc" else "asc"))
-                                                    }
-                                                    showSort = false
-                                                }
-                                            )
-                                            Box(
-                                                Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp)
-                                                    .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
-                                            )
-                                            // 底部倒序开关（KSU 风格）
-                                            Row(
-                                                Modifier.fillMaxWidth()
-                                                    .clickable { showSort = false }
-                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    "倒序",
-                                                    style = MiuixTheme.textStyles.body1,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                top.yukonga.miuix.kmp.basic.Switch(
-                                                    checked = desc,
-                                                    onCheckedChange = {
-                                                        state.setSortValue(
-                                                            Config.KEY_ARCHIVE_SORT,
-                                                            dim + "_" + (if (desc) "asc" else "desc")
-                                                        )
-                                                    }
-                                                )
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        // V0.6.15：显示模式设置（排序图标右侧：实时与本地合并/仅实时/仅本地）
-                        Box {
-                            IconButton(onClick = { showMsgMode = true }) {
-                                top.yukonga.miuix.kmp.basic.Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = "显示模式"
-                                )
-                            }
-                            if (showMsgMode) {
-                                androidx.compose.ui.window.Popup(
-                                    alignment = Alignment.TopEnd,
-                                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
-                                    onDismissRequest = { showMsgMode = false }
-                                ) {
-                                    Surface(
-                                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                        shadowElevation = 10.dp,
-                                        modifier = Modifier.width(230.dp)
+                            // V0.6.15：显示模式设置（排序图标右侧：实时与本地合并/仅实时/仅本地）
+                            Box {
+                                IconButton(onClick = { showMsgMode = true }) {
+                                    top.yukonga.miuix.kmp.basic.Icon(
+                                        imageVector = Icons.Filled.Settings,
+                                        contentDescription = "显示模式"
+                                    )
+                                }
+                                if (showMsgMode) {
+                                    androidx.compose.ui.window.Popup(
+                                        alignment = Alignment.TopEnd,
+                                        offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
+                                        onDismissRequest = { showMsgMode = false }
                                     ) {
-                                        Column(Modifier.padding(vertical = 6.dp)) {
-                                            @Composable
-                                            fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
-                                                Row(
-                                                    Modifier.fillMaxWidth()
-                                                        .clickable(onClick = onClick)
-                                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        label,
-                                                        style = MiuixTheme.textStyles.body1,
-                                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                    if (sel) {
-                                                        top.yukonga.miuix.kmp.basic.Icon(
-                                                            imageVector = Icons.Filled.Check,
-                                                            contentDescription = "已选",
-                                                            tint = MiuixTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(18.dp)
+                                        Surface(
+                                            color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                            shadowElevation = 10.dp,
+                                            modifier = Modifier.width(230.dp)
+                                        ) {
+                                            Column(Modifier.padding(vertical = 6.dp)) {
+                                                @Composable
+                                                fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
+                                                    Row(
+                                                        Modifier.fillMaxWidth()
+                                                            .clickable(onClick = onClick)
+                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            label,
+                                                            style = MiuixTheme.textStyles.body1,
+                                                            color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
+                                                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                                            modifier = Modifier.weight(1f)
                                                         )
+                                                        if (sel) {
+                                                            top.yukonga.miuix.kmp.basic.Icon(
+                                                                imageVector = Icons.Filled.Check,
+                                                                contentDescription = "已选",
+                                                                tint = MiuixTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
+                                                ModeItem("实时与本地合并显示", state.msgMode == "all", {
+                                                    state.setMsgMode("all")
+                                                    showMsgMode = false
+                                                })
+                                                ModeItem("仅显示实时", state.msgMode == "live", {
+                                                    state.setMsgMode("live")
+                                                    showMsgMode = false
+                                                })
+                                                ModeItem("仅显示本地", state.msgMode == "local", {
+                                                    state.setMsgMode("local")
+                                                    showMsgMode = false
+                                                })
                                             }
-                                            ModeItem("实时与本地合并显示", state.msgMode == "all", {
-                                                state.setMsgMode("all")
-                                                showMsgMode = false
-                                            })
-                                            ModeItem("仅显示实时", state.msgMode == "live", {
-                                                state.setMsgMode("live")
-                                                showMsgMode = false
-                                            })
-                                            ModeItem("仅显示本地", state.msgMode == "local", {
-                                                state.setMsgMode("local")
-                                                showMsgMode = false
-                                            })
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                )
-                }
-            },
-            bottomBar = {
-                // v0.5.9 结构修正：悬浮模式 bottomBar 槽不再放胶囊。
-                // 根因：胶囊在槽内（内容区下方），backdrop 采样坐标超出内容纹理 → 采样透明黑 → 浅色模式黑底。
-                // 悬浮胶囊改由内容区叠加（浮于内容之上），坐标落在 backdrop 纹理内，玻璃折射真实页面内容。
-                if (!state.navFloat) {
-                    LiquidNavBar(
-                        selectedTabIndex = tab,
-                        onTabSelected = {
-                            // V0.6.15：日志列表/开源许可整页模式下，点底部导航先退出二级页再切 tab
-                            showLogs = false
-                            showLicenses = false
-                            tab = it
-                        },
-                        items = tabs.map { it.icon to it.title },
-                        floatEnabled = false,
-                        glassEnabled = false,
-                        backdrop = null
                     )
+                    }
+                },
+                bottomBar = {
+                    // v0.5.9 结构修正：悬浮模式 bottomBar 槽不再放胶囊。
+                    // 根因：胶囊在槽内（内容区下方），backdrop 采样坐标超出内容纹理 → 采样透明黑 → 浅色模式黑底。
+                    // 悬浮胶囊改由内容区叠加（浮于内容之上），坐标落在 backdrop 纹理内，玻璃折射真实页面内容。
+                    if (state.bottomBarStyle == "standard") {
+                        LiquidNavBar(
+                            selectedTabIndex = tab,
+                            onTabSelected = { tab = it },
+                            items = tabs.map { it.icon to it.title },
+                            floatEnabled = false,
+                            glassEnabled = false,
+                            backdrop = null,
+                            badgeIndex = navBadgeIndex
+                        )
+                    }
                 }
-            }
-            ) { padding ->
-                val contentMod = Modifier
-                    .fillMaxSize()
-                    // V0.6.16.1：二级页（日志列表/开源许可）自带 TopAppBar 且主顶栏已隐藏，
-                    // Scaffold 仍会给 topBar 槽保留高度把自带顶栏推下去 → 顶部 padding 归零，
-                    // 自带 TopAppBar（自带状态栏 inset）顶到最上，与主界面标题同位置
-                    .padding(
-                        top = if (showLogs || showLicenses) 0.dp else padding.calculateTopPadding(),
-                        bottom = padding.calculateBottomPadding()
-                    )
-                    // v0.5.10：学 KSU/安装工具 —— 内容区铺满到底（无底部留白），
-                    // 悬浮胶囊 overlay 覆盖其上；被胶囊盖住的部分可看不到，周围内容正常显示
-                Box(
-                    Modifier
+                ) { padding ->
+                    val contentMod = Modifier
                         .fillMaxSize()
-                        .background(MiuixTheme.colorScheme.surface)
-                ) {
-                    // 录制容器（v0.5.10.1 结构）：
-                    // 液态玻璃开启时，只把【页面内容】录进 glassBackdrop。
-                    // 胶囊必须放在本容器【之外】——否则 LayerBackdropNode.draw() 里
-                    // recordLayer 重放 drawContent() 时会把胶囊自身的 LiquidGlass 绘制卷进
-                    // 录制层，而胶囊又 drawLayer 采样同一 layer → 递归记录 → 闪退。
-                    // 本容器是胶囊的祖先/兄弟同根节点，坐标可正常换算（不黑）。
-                    // v0.5.12 玻璃黑底根治：滚动页（首页/流转/消息）滚动时，滚动容器只
-                    // invalidate 自身（graphicsLayer 平移），父节点不重绘 → recordLayer 不重录
-                    // → 胶囊采样的还是滚动前的旧帧 → 折射错位/黑块（设置页不滚动所以正常）。
-                    // 解法：本容器 graphicsLayer 读全局滚动 tick（页面滚动时 +1，见各页
-                    // LaunchedEffect），滚动即重绘 → draw() 重跑 → backdrop 每帧重录。
+                        // 1.1.0：二级页（日志/许可/主题）改走 NavDisplay 返回栈，主顶栏正常保留
+                        .padding(
+                            top = padding.calculateTopPadding(),
+                            bottom = padding.calculateBottomPadding()
+                        )
+                        // v0.5.10：学 KSU/安装工具 —— 内容区铺满到底（无底部留白），
+                        // 悬浮胶囊 overlay 覆盖其上；被胶囊盖住的部分可看不到，周围内容正常显示
                     Box(
                         Modifier
                             .fillMaxSize()
                             .background(MiuixTheme.colorScheme.surface)
-                            .graphicsLayer {
-                                // 读滚动 tick 建立依赖：滚动变化 → 本 block 重算 → 节点重绘 → backdrop 重录
-                                MainHolder.scrollTick
-                            }
-                            .then(if (state.glassEffect) Modifier.layerBackdrop(glassBackdrop) else Modifier)
                     ) {
-                        if (conversation != null) {
-                            // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
-                            ConversationScreen(state, conversation.first, conversation.second, contentMod)
-                        } else if (showLogs) {
-                            // V0.6.15：日志列表整页（底部导航保留）
-                            LogListScreen(onBack = { showLogs = false }, contentMod)
-                        } else if (showLicenses) {
-                            // V0.6.15：开源许可整页（底部导航保留）
-                            LicensesScreen(onBack = { showLicenses = false }, contentMod)
-                        } else {
-                            when (tab) {
-                                0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                                1 -> FlowScreen(state, contentMod)
-                                2 -> MessagesScreen(state, contentMod)
-                                3 -> SettingsScreen(state, contentMod)
+                        // 录制容器（v0.5.10.1 结构）：
+                        // 液态玻璃开启时，只把【页面内容】录进 glassBackdrop。
+                        // 胶囊必须放在本容器【之外】——否则 LayerBackdropNode.draw() 里
+                        // recordLayer 重放 drawContent() 时会把胶囊自身的 LiquidGlass 绘制卷进
+                        // 录制层，而胶囊又 drawLayer 采样同一 layer → 递归记录 → 闪退。
+                        // 本容器是胶囊的祖先/兄弟同根节点，坐标可正常换算（不黑）。
+                        // v0.5.12 玻璃黑底根治：滚动页（首页/流转/消息）滚动时，滚动容器只
+                        // invalidate 自身（graphicsLayer 平移），父节点不重绘 → recordLayer 不重录
+                        // → 胶囊采样的还是滚动前的旧帧 → 折射错位/黑块（设置页不滚动所以正常）。
+                        // 解法：本容器 graphicsLayer 读全局滚动 tick（页面滚动时 +1，见各页
+                        // LaunchedEffect），滚动即重绘 → draw() 重跑 → backdrop 每帧重录。
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(MiuixTheme.colorScheme.surface)
+                                .graphicsLayer {
+                                    // 读滚动 tick 建立依赖：滚动变化 → 本 block 重算 → 节点重绘 → backdrop 重录
+                                    MainHolder.scrollTick
+                                }
+                                .then(if (state.bottomBarStyle == "liquid") Modifier.layerBackdrop(glassBackdrop) else Modifier)
+                        ) {
+                            if (conversation != null) {
+                                // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
+                                ConversationScreen(state, conversation.first, conversation.second, contentMod)
+                            } else {
+                                when (tab) {
+                                    0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                                    1 -> FlowScreen(state, contentMod)
+                                    2 -> MessagesScreen(state, contentMod)
+                                    3 -> SettingsScreen(state, contentMod)
+                                }
+                            }
+                        }
+                        // 悬浮胶囊 overlay：在录制容器之外（不污染录制层）、内容 Box 之内
+                        // （采样坐标与录制容器同根，换算合法 → 玻璃真实折射、不黑、不闪退）
+                        if (state.bottomBarStyle != "standard") {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                                LiquidNavBar(
+                                    selectedTabIndex = tab,
+                                    onTabSelected = { i ->
+                                        if (conversation != null) state.currentConversation = null
+                                        tab = i
+                                    },
+                                    items = tabs.map { it.icon to it.title },
+                                    floatEnabled = true,
+                                    glassEnabled = state.bottomBarStyle == "liquid",
+                                    backdrop = if (state.bottomBarStyle == "liquid") glassBackdrop else null,
+                                    badgeIndex = navBadgeIndex
+                                )
                             }
                         }
                     }
-                    // 悬浮胶囊 overlay：在录制容器之外（不污染录制层）、内容 Box 之内
-                    // （采样坐标与录制容器同根，换算合法 → 玻璃真实折射、不黑、不闪退）
-                    if (state.navFloat) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                            LiquidNavBar(
-                                selectedTabIndex = tab,
-                                onTabSelected = { i ->
-                                    // V0.6.15.1：悬浮胶囊点击同样先退出日志/许可二级页再切 tab
-                                    showLogs = false
-                                    showLicenses = false
-                                    if (conversation != null) state.currentConversation = null
-                                    tab = i
-                                },
-                                items = tabs.map { it.icon to it.title },
-                                floatEnabled = true,
-                                glassEnabled = state.glassEffect,
-                                backdrop = if (state.glassEffect) glassBackdrop else null
+                }
+
+            // 排序菜单已内联在 topBar 的 Sort 图标下方（KSU 风格下拉，Popup 锚定，见 topBar 块）
+            // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
+            if (showUpd) {
+                when (updPhase) {
+                    "checking" -> HyperDialog(
+
+                                            title = "检查更新",
+                        summary = "正在检查更新…",
+                        show = showUpd,
+                        onDismiss = { showUpd = false }
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(progress = null)
+                        }
+                    }
+                    "new" -> HyperDialog(
+
+                                            // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
+                        title = "更新日志",
+                        summary = updVer,
+                        show = showUpd,
+                        onDismiss = { showUpd = false }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 480.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(vertical = 2.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                updLog.ifEmpty { "检测到新版本，请点击「更新」前往 KernelSU 安装。" },
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Start
                             )
+                        }
+                        Spacer(Modifier.height(18.dp))
+                        Row(Modifier.fillMaxWidth()) {
+                            TextButton(
+                                text = "取消",
+                                onClick = { showUpd = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Button(
+                                onClick = {
+                                    showUpd = false
+                                    updMethod = true   // 先让用户选：下载更新包 / 去 KSU 检测
+                                },
+                                colors = ButtonDefaults.buttonColorsPrimary(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("更新")
+                            }
+                        }
+                    }
+                    "busy" -> HyperDialog(
+
+                                            title = "正在检查更新",
+                        summary = updMsg,
+                        show = showUpd,
+                        onDismiss = { showUpd = false }
+                    ) {
+                        TextButton(
+                            text = "关闭",
+                            onClick = { showUpd = false },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    "none" -> HyperDialog(
+
+                                            title = "已是最新版本",
+                        summary = updMsg,
+                        show = showUpd,
+                        onDismiss = { showUpd = false }
+                    ) {
+                        TextButton(
+                            text = "关闭",
+                            onClick = { showUpd = false },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    else -> HyperDialog(
+
+                                            title = "检查更新失败",
+                        summary = updMsg,
+                        show = showUpd,
+                        onDismiss = { showUpd = false }
+                    ) {
+                        TextButton(
+                            text = "关闭",
+                            onClick = { showUpd = false },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+            // ===== 更新方式选择（点「更新」后弹出） =====
+            if (updMethod) {
+                HyperDialog(
+                    title = "选择更新方式",
+                    summary = "① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
+                
+                    show = updMethod,
+                    onDismiss = { updMethod = false }
+                ) {
+                    Row(Modifier.fillMaxWidth()) {
+                        TextButton(
+                            text = "去 KSU 检测",
+                            onClick = {
+                                updMethod = false
+                                launchKernelSu()
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Button(
+                            onClick = {
+                                // 调用系统浏览器下载：通知栏可见进度、支持断点；下载完到 KSU 从本地安装
+                                updMethod = false
+                                if (!openBrowserDownload(ctx, updUrl)) {
+                                    updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("下载更新包")
                         }
                     }
                 }
             }
 
-        // V0.6.16.6：KSU 同款全屏搜索覆盖层 —— 盖住顶栏+底栏+内容（真正的"搜索页"），
-        // 顶部搜索栏+取消按钮，下方结果区（会话/信息分组、命中高亮），系统返回收起
-        MainHolder.searchStatus.SearchPager(
-            onSearchStatusChange = { MainHolder.searchStatus = it },
-            defaultResult = { MessageSearchResults(state) },
-            result = { MessageSearchResults(state) }
-        )
-
-        // 排序菜单已内联在 topBar 的 Sort 图标下方（KSU 风格下拉，Popup 锚定，见 topBar 块）
-        // 更新检测弹窗（HyperOS 风格）：检测中转圈，结果（有更新/已最新/失败）在窗内展示
-        if (showUpd) {
-            when (updPhase) {
-                "checking" -> HyperDialog(
-
-                                        title = "检查更新",
-                    summary = "正在检查更新…",
-                    show = showUpd,
-                    onDismiss = { showUpd = false }
+            // ===== 下载中 =====
+            if (updDownloading) {
+                HyperDialog(
+                    title = "正在下载更新包",
+                    summary = "正在从镜像通道下载，请稍候…",
+                
+                    show = updDownloading,
+                    onDismiss = { updDownloading = false }
                 ) {
                     Box(
                         Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -610,215 +734,79 @@ fun HyperFlowApp() {
                         CircularProgressIndicator(progress = null)
                     }
                 }
-                "new" -> HyperDialog(
+            }
 
-                                        // KSU 模块页「更新日志」样式：版本号 + 可滚动更新说明 + 取消/更新
-                    title = "更新日志",
-                    summary = updVer,
-                    show = showUpd,
-                    onDismiss = { showUpd = false }
+            // ===== 下载完成 =====
+            updDownloaded?.let { path ->
+                HyperDialog(
+                    title = "更新包已下载",
+                    summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
+                
+                    show = true,
+                    onDismiss = { updDownloaded = null }
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 480.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 2.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            updLog.ifEmpty { "检测到新版本，请点击「更新」前往 KernelSU 安装。" },
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.85f),
-                            textAlign = TextAlign.Start
-                        )
-                    }
-                    Spacer(Modifier.height(18.dp))
                     Row(Modifier.fillMaxWidth()) {
                         TextButton(
-                            text = "取消",
-                            onClick = { showUpd = false },
+                            text = "稍后安装",
+                            onClick = { updDownloaded = null },
                             modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(16.dp))
                         Button(
                             onClick = {
-                                showUpd = false
-                                updMethod = true   // 先让用户选：下载更新包 / 去 KSU 检测
+                                updDownloaded = null
+                                launchKernelSu()
                             },
                             colors = ButtonDefaults.buttonColorsPrimary(),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("更新")
+                            Text("打开 KSU 安装")
                         }
                     }
                 }
-                "busy" -> HyperDialog(
-
-                                        title = "正在检查更新",
-                    summary = updMsg,
-                    show = showUpd,
-                    onDismiss = { showUpd = false }
-                ) {
-                    TextButton(
-                        text = "关闭",
-                        onClick = { showUpd = false },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                "none" -> HyperDialog(
-
-                                        title = "已是最新版本",
-                    summary = updMsg,
-                    show = showUpd,
-                    onDismiss = { showUpd = false }
-                ) {
-                    TextButton(
-                        text = "关闭",
-                        onClick = { showUpd = false },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                else -> HyperDialog(
-
-                                        title = "检查更新失败",
-                    summary = updMsg,
-                    show = showUpd,
-                    onDismiss = { showUpd = false }
-                ) {
-                    TextButton(
-                        text = "关闭",
-                        onClick = { showUpd = false },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             }
-        }
-        // ===== 更新方式选择（点「更新」后弹出） =====
-        if (updMethod) {
-            HyperDialog(
-                title = "选择更新方式",
-                summary = "① 直接下载更新包：将调用系统浏览器/下载器下载（进度见通知栏，支持断点续传），完成后到 KernelSU 模块页「从本地安装模块」，KSU 安装模块时会同步更新 App。\n若 KSU 无法获取到更新，就用这个下载方案。\n\n② 打开 KernelSU 管理器，让它在模块页检测在线更新。",
+
+            // ===== 下载失败 =====
+            updDlError?.let { err ->
+                HyperDialog(
+                    title = "下载失败",
+                    summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
                 
-                show = updMethod,
-                onDismiss = { updMethod = false }
-            ) {
-                Row(Modifier.fillMaxWidth()) {
-                    TextButton(
-                        text = "去 KSU 检测",
-                        onClick = {
-                            updMethod = false
-                            launchKernelSu()
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Button(
-                        onClick = {
-                            // 调用系统浏览器下载：通知栏可见进度、支持断点；下载完到 KSU 从本地安装
-                            updMethod = false
-                            if (!openBrowserDownload(ctx, updUrl)) {
-                                updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("下载更新包")
+                    show = true,
+                    onDismiss = { updDlError = null }
+                ) {
+                    Row(Modifier.fillMaxWidth()) {
+                        TextButton(
+                            text = "重试下载",
+                            onClick = {
+                                updDlError = null
+                                if (!openBrowserDownload(ctx, updUrl)) {
+                                    updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Button(
+                            onClick = {
+                                updDlError = null
+                                launchKernelSu()
+                            },
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("去 KSU 检测")
+                        }
                     }
                 }
             }
-        }
 
-        // ===== 下载中 =====
-        if (updDownloading) {
-            HyperDialog(
-                title = "正在下载更新包",
-                summary = "正在从镜像通道下载，请稍候…",
-                
-                show = updDownloading,
-                onDismiss = { updDownloading = false }
-            ) {
-                Box(
-                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(progress = null)
-                }
+            // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
+            // 首次引导覆盖层
+            if (state.showOnboarding) {
+                OnboardingScreen(state)
             }
-        }
-
-        // ===== 下载完成 =====
-        updDownloaded?.let { path ->
-            HyperDialog(
-                title = "更新包已下载",
-                summary = "已保存到：\n$path\n\n请到 KernelSU 模块页 → 「从本地安装模块」选择该文件。KSU 安装模块时会同步更新 App；若 KSU 检测不到更新，用此方案即可。",
-                
-                show = true,
-                onDismiss = { updDownloaded = null }
-            ) {
-                Row(Modifier.fillMaxWidth()) {
-                    TextButton(
-                        text = "稍后安装",
-                        onClick = { updDownloaded = null },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Button(
-                        onClick = {
-                            updDownloaded = null
-                            launchKernelSu()
-                        },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("打开 KSU 安装")
-                    }
-                }
-            }
-        }
-
-        // ===== 下载失败 =====
-        updDlError?.let { err ->
-            HyperDialog(
-                title = "下载失败",
-                summary = "原因：$err\n\n可稍后重试，或直接打开 KernelSU 管理器在模块页检测更新。",
-                
-                show = true,
-                onDismiss = { updDlError = null }
-            ) {
-                Row(Modifier.fillMaxWidth()) {
-                    TextButton(
-                        text = "重试下载",
-                        onClick = {
-                            updDlError = null
-                            if (!openBrowserDownload(ctx, updUrl)) {
-                                updDlError = "无法调用浏览器下载，请复制链接到浏览器打开：\n$updUrl"
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Button(
-                        onClick = {
-                            updDlError = null
-                            launchKernelSu()
-                        },
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("去 KSU 检测")
-                    }
-                }
-            }
-        }
-
-        // 排序弹窗（消息页右上角，KSU 风格：分组 + 单选行、选中高亮；系统 Dialog 防闪退）
-        // 首次引导覆盖层
-        if (state.showOnboarding) {
-            OnboardingScreen(state)
-        }
-    }
+            } // else 块结束（guideType 覆盖页分支）
 }
 
 @Composable

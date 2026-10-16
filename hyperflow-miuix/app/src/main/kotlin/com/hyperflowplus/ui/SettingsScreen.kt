@@ -57,6 +57,9 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         }
     }
 
+    // 1.1.0 #69：隐私说明弹窗（口径：小米原生通道，App不联网不上传）
+    var showPrivacy by remember { mutableStateOf(false) }
+
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
     val sScroll = rememberScrollState()
     LaunchedEffect(sScroll) {
@@ -74,21 +77,21 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
-                    title = "悬浮导航栏",
-                    summary = if (state.navFloat) "已开启悬浮导航栏" else "关闭后使用系统导航栏",
-                    checked = state.navFloat,
-                    onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
-                )
-                // 液态玻璃仅悬浮模式可用：悬浮开启时才显示该项（与悬浮开关联动，不并列常驻）
-                if (state.navFloat) {
-                    SwitchPreference(
-                        title = "液态玻璃",
-                        summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
-                        checked = state.glassEffect,
-                        onCheckedChange = { state.set(Config.KEY_GLASS, it) }
-                    )
+                // 1.1.0：主题入口收敛为二级页（深色模式/主题色/底栏形态/模糊/角标/预测返回全在这）
+                val themeState = when (state.themeMode) {
+                    "light" -> "浅色"
+                    "dark" -> "深色"
+                    else -> "跟随系统"
+                } + if (state.monet) " · 壁纸取色" else "" + " · " + when (state.bottomBarStyle) {
+                    "standard" -> "标准"
+                    "floating" -> "悬浮"
+                    else -> "液态玻璃"
                 }
+                ArrowPreference(
+                    title = "主题与显示",
+                    summary = themeState,
+                    onClick = { MainHolder.onOpenTheme() }
+                )
             }
         }
 
@@ -205,8 +208,24 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     summary = "Miuix / KernelSU / LSPosed / AndroidX 等开源库许可详情",
                     onClick = { MainHolder.onOpenLicenses() }
                 )
+                ArrowPreference(
+                    title = "隐私说明",
+                    summary = "小米原生通道，App不联网不上传",
+                    onClick = { showPrivacy = true }
+                )
             }
         }
+        // 1.1.0 #69：隐私说明弹窗
+        ConfirmDialog(
+            show = showPrivacy,
+            title = "隐私说明",
+            content = "本应用的所有流转数据均通过小米互联系统原生通道在本机处理，" +
+                "App 本身不联网、不上传任何数据。短信/通知仅在您开启相应功能时" +
+                "于本机读取与保存，可随时关闭或删除。",
+            confirmText = "知道了",
+            onConfirm = { showPrivacy = false },
+            onDismiss = { showPrivacy = false }
+        )
 
         // v0.5.12：悬浮胶囊避让 —— 滚动到底最后一行停在胶囊上沿（不遮挡）
         Spacer(
@@ -223,6 +242,7 @@ object MainHolder {
     var onOpenUpdater: () -> Unit = {}
     var onOpenLicenses: () -> Unit = {}
     var onOpenLogs: () -> Unit = {}
+    var onOpenTheme: () -> Unit = {}
     var onReopenOnboarding: () -> Unit = {}
     // v0.5.11：自动检测到的更新状态（设置页版本号行显示"有新版"提示）
     var hasUpdate by androidx.compose.runtime.mutableStateOf(false)
@@ -236,7 +256,6 @@ object MainHolder {
     // 加同高间距，保证内容最后一行可滚到胶囊上沿（不遮挡、不留白）
     var bottomPad by androidx.compose.runtime.mutableStateOf(androidx.compose.ui.unit.Dp.Unspecified)
     // V0.6.16.6：KSU 同款全屏搜索 —— 状态机（折叠/展开/收起）+ 搜索结果（跨组件共享）
-    var searchStatus by androidx.compose.runtime.mutableStateOf(SearchStatus("搜索消息"))
-    var searchConvs by androidx.compose.runtime.mutableStateOf<List<Pair<String, List<Array<String>>>>>(emptyList())
-    var searchMsgs by androidx.compose.runtime.mutableStateOf<List<Pair<String, Array<String>>>>(emptyList())
+    // 1.1.0 M8：底栏角标 —— 新消息到达且不在消息页时点亮（开启"显示导航角标"时生效）
+    var newMsgBadge by androidx.compose.runtime.mutableStateOf(false)
 }

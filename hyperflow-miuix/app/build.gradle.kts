@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -11,8 +12,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 128
-        versionName = "1.0.2-test"
+        versionCode = 129
+        versionName = "1.1.0"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -35,9 +36,10 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
+
 
     buildFeatures {
         compose = true
@@ -72,6 +74,16 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
 
+    // 1.1.0：导航栈（NavDisplay 页面转场）+ 超椭圆圆角（squircle）—— miuix 0.9.4 专属模块
+    implementation("top.yukonga.miuix.kmp:miuix-nav-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-squircle-android:0.9.4")
+
+    // 1.1.0：预测性返回（反射调用 hidden API setEnableOnBackInvokedCallback，00 规范 §10）
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+
+    // 1.1.0：导航返回栈持久化（miuix-nav 硬要求 @Serializable Route，JSON 存取）
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+
     // Miuix 模糊（柔光玻璃，minSdk 33）
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
 
@@ -82,4 +94,10 @@ dependencies {
     compileOnly("io.github.libxposed:api:102.0.0")
 
     implementation("org.json:json:20240303")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
 }

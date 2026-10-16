@@ -10,7 +10,7 @@
 set -e
 cd "$(dirname "$0")/hyperflow-miuix"
 
-JAVA_HOME=/home/user/.doubao_tools/jdk-17.0.11+9 \
+JAVA_HOME=/home/user/.doubao_tools/jdk-21.0.12.1+1 \
 ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 /home/user/.doubao_tools/gradle-9.6.0/bin/gradle :app:assembleRelease --no-daemon
 

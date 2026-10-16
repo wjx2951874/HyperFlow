@@ -46,6 +46,8 @@ import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.RadioButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
@@ -150,6 +152,14 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
     var selMode by remember { mutableStateOf(false) }
     var selConvos by remember { mutableStateOf(setOf<String>()) }
     var batchDel by remember { mutableStateOf(false) }
+    // 1.1.0 M9：页内搜索（小米原版）—— 常驻输入条，输入实时过滤；取消=清空
+    var searchStatus by remember { mutableStateOf(SearchStatus("搜索消息", current = SearchStatus.Status.EXPANDED)) }
+    val q = searchStatus.searchText.trim()
+    val shownConvos = if (q.isEmpty()) convos
+    else convos.filter { (s, rows) ->
+        s.contains(q, ignoreCase = true) ||
+            rows.any { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }
+    }
     // 小米端读不到数据：当前显示的是本地保存的历史记录（避免误以为小米互联还有数据）
     val localOnly = convos.isNotEmpty() && !state.liveAvailable
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
@@ -158,31 +168,6 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
         androidx.compose.runtime.snapshotFlow { mList.firstVisibleItemIndex to mList.firstVisibleItemScrollOffset }
             .collect { MainHolder.scrollTick++ }
     }
-    // V0.6.16.6：KSU 同款全屏搜索 —— 输入变化时过滤，结果跨组件共享（MainHolder）供 MainActivity 覆盖层渲染
-    LaunchedEffect(MainHolder.searchStatus.searchText, convos) {
-        val q = MainHolder.searchStatus.searchText.trim()
-        val st = MainHolder.searchStatus
-        if (q.isEmpty()) {
-            // 展开即显示完整会话列表（KSU：默认全量，输入即过滤）
-            MainHolder.searchConvs = convos
-            MainHolder.searchMsgs = emptyList()
-            if (st.resultStatus != SearchStatus.ResultStatus.DEFAULT) {
-                MainHolder.searchStatus = st.copy(resultStatus = SearchStatus.ResultStatus.DEFAULT)
-            }
-        } else {
-            val convHits = convos.filter { (s, rows) ->
-                s.contains(q, ignoreCase = true) ||
-                    rows.any { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }
-            }
-            val msgHits = convos.flatMap { (s, rows) ->
-                rows.filter { it.getOrElse(2) { "" }.contains(q, ignoreCase = true) }.map { s to it }
-            }
-            MainHolder.searchConvs = convHits
-            MainHolder.searchMsgs = msgHits
-            MainHolder.searchStatus = st.copy(resultStatus = SearchStatus.ResultStatus.SHOW)
-        }
-    }
-
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         state = mList,
@@ -191,25 +176,9 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp else MainHolder.bottomPad
         )
     ) {
-        // V0.6.16.6：常驻搜索栏（KSU SearchBarFake）——detectTapGestures 点击进入全屏搜索页
-        //（KSU 原版做法：不用 clickable，Miuix InputField disabled 态会消费点击事件）
-        item(key = "searchFake") {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        detectTapGestures {
-                            // 展开即预填全量会话（LaunchedEffect 只在输入变化时触发过滤，
-                            // 展开瞬间不触发 → 先放全量，DEFAULT 分支直接渲染完整列表）
-                            MainHolder.searchConvs = convos
-                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
-                                current = SearchStatus.Status.EXPANDING
-                            )
-                        }
-                    }
-            ) {
-                SearchBarFake("搜索消息")
-            }
+        // 1.1.0 M9：搜索改小米原版页内效果 —— 常驻输入条（自动聚焦弹键盘），输入实时过滤下方列表
+        item(key = "searchBar") {
+            SearchBar(searchStatus, { searchStatus = it })
         }
         // v0.5.15：多选操作栏（长按会话进入，小米短信 ActionMode 同款：已选 N 个会话 + 删除 + 取消）
         if (selMode) {
@@ -272,10 +241,23 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
             }
         }
-        // V0.6.16.6：搜索功能整体移除 —— 直接渲染完整会话列表（convo 早退已处理空态）
-        items(convos, key = { it.first }) { (sender, rows) ->
+        // 1.1.0 M9：页内搜索过滤结果（q 为空 = 完整会话列表）；M15：行间细分隔线（小米短信列表样式）
+        if (shownConvos.isEmpty() && q.isNotEmpty()) {
+            item(key = "noMatch") {
+                Text(
+                    "没找到短信",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        items(shownConvos, key = { it.first }) { (sender, rows) ->
             ConversationRow(
-                state, sender, rows,
+                state, sender, rows, q,
                 isSel = selMode && selConvos.contains(sender),
                 selectionMode = selMode,
                 onOpen = {
@@ -295,6 +277,14 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
                 },
                 onDelete = { delTarget = sender to rows }
             )
+            // 行间细分隔线（1.1.0 M15：除最后一行外，消息页会话行之间留 16dp 左缩进）
+            if (rows.isNotEmpty()) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 16.dp),
+                    thickness = 0.5.dp,
+                    color = MiuixTheme.colorScheme.dividerLine.copy(alpha = 0.7f)
+                )
+            }
         }
     }
     // 会话删除确认（长按会话 → 删除该会话本地存档；小米端实时消息不允许删除）
@@ -372,6 +362,7 @@ private fun ConversationRow(
     state: HFState,
     sender: String,
     rows: List<Array<String>>,
+    q: String = "",
     isSel: Boolean,
     selectionMode: Boolean,
     onOpen: () -> Unit,
@@ -381,7 +372,7 @@ private fun ConversationRow(
     val latest = rows.maxByOrNull { timeToEpoch(it[0]) } ?: return
     val devTag = if (latest[1].isNotEmpty()) "｜来自" + latest[1] else ""
     val localTag = if (latest.getOrNull(3) == "local") "（本地）" else ""
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(
@@ -392,36 +383,50 @@ private fun ConversationRow(
                 onClick = onOpen,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // 行 1：发送人名称（左，17sp 加粗）+ 最近时间｜来自设备（右，灰色小字，短信 App 样式）
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                sender,
-                style = MiuixTheme.textStyles.body1,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                fmtTime(latest[0]) + devTag + localTag,
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 8.dp)
+        // 1.1.0 M16：多选勾选视觉（miuix RadioButton —— 圆形单选点，小米短信多选同款）
+        if (selectionMode) {
+            RadioButton(
+                selected = isSel,
+                onClick = onOpen,
+                modifier = Modifier.padding(end = 10.dp)
             )
         }
-        // 行 2：最新正文预览（灰色小字，最多两行）
-        Text(
-            latest[2].ifEmpty { "(无正文)" },
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 3.dp)
-        )
+        Column(Modifier.weight(1f)) {
+            // 行 1：发送人名称（左，17sp 加粗）+ 最近时间｜来自设备（右，灰色小字，短信 App 样式）
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    sender,
+                    style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    fmtTime(latest[0]) + devTag + localTag,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            // 行 2：最新正文预览（灰色小字，最多两行；搜索命中时主色高亮）
+            val preview = if (q.isNotEmpty() && latest[2].contains(q, ignoreCase = true))
+                highlightText(latest[2], q, MiuixTheme.colorScheme.primary)
+            else androidx.compose.ui.text.AnnotatedString(latest[2].ifEmpty { "(无正文)" })
+            Text(
+                preview,
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
     }
 }
 
@@ -608,183 +613,4 @@ internal fun highlightText(
         start = idx + q.length
     }
     return builder.toAnnotatedString()
-}
-
-/** 搜索分组标题（KSU 分组头同款：灰色小字） */
-@Composable
-private fun SearchGroupHeader(title: String) {
-    Text(
-        title,
-        style = MiuixTheme.textStyles.body2,
-        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 20.dp, top = 12.dp, bottom = 6.dp)
-    )
-}
-
-/** 搜索结果会话行（KSU GroupItem 同款：左侧命中色条 + 发送人 + 最新正文预览） */
-@Composable
-private fun SearchConvRow(
-    sender: String,
-    rows: List<Array<String>>,
-    matched: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 命中标注色条：发送人命中 → 主色（KSU matched），仅正文命中 → 浅主色
-        Box(
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .width(6.dp)
-                .height(24.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (matched) MiuixTheme.colorScheme.primary
-                    else MiuixTheme.colorScheme.primary.copy(alpha = 0.35f)
-                )
-        )
-        Column(
-            Modifier
-                .weight(1f)
-                .padding(start = 10.dp, end = 16.dp)
-        ) {
-            Text(
-                sender,
-                style = MiuixTheme.textStyles.body1,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val last = rows.lastOrNull()
-            if (last != null) {
-                Text(
-                    last.getOrElse(2) { "" }.ifEmpty { "(无正文)" },
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-/** 搜索结果消息行（KSU 搜索 item 同款：发送人 + 圆角正文块 + 时间，命中段高亮） */
-@Composable
-private fun SearchMsgRow(
-    sender: String,
-    row: Array<String>,
-    q: String,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(start = 12.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
-    ) {
-        Text(
-            sender,
-            style = MiuixTheme.textStyles.body1,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.04f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                highlightText(row.getOrElse(2) { "" }.ifEmpty { "(无正文)" }, q, MiuixTheme.colorScheme.primary),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                fmtTime(row.getOrElse(0) { "" }),
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                maxLines = 1,
-                modifier = Modifier.padding(start = 10.dp)
-            )
-        }
-    }
-}
-
-/** 全屏搜索结果：会话分组 + 信息分组（KSU 搜索页同款），空结果提示 */
-@Composable
-fun MessageSearchResults(state: HFState, modifier: Modifier = Modifier) {
-    val convHits = MainHolder.searchConvs
-    val msgHits = MainHolder.searchMsgs
-    val q = MainHolder.searchStatus.searchText.trim()
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        if (convHits.isEmpty() && msgHits.isEmpty()) {
-            item(key = "noMatch") {
-                Text(
-                    "没找到短信",
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            if (convHits.isNotEmpty()) {
-                // q 为空 = 默认全量列表（KSU 展开态），不显示"会话"分组标题
-                if (q.isNotEmpty()) item(key = "grpHdrConv") { SearchGroupHeader("会话") }
-                items(convHits, key = { "sc_" + it.first }) { (sender, rows) ->
-                    val matched = sender.contains(q, ignoreCase = true)
-                    SearchConvRow(
-                        sender = sender,
-                        rows = rows,
-                        matched = matched,
-                        onClick = {
-                            // V0.6.16.9：先收起搜索页再进会话 —— 否则会话详情被覆盖层盖住看不见
-                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
-                                searchText = "",
-                                current = SearchStatus.Status.COLLAPSING
-                            )
-                            state.currentConversation = sender to rows
-                        }
-                    )
-                }
-            }
-            if (msgHits.isNotEmpty()) {
-                item(key = "grpHdrMsg") { SearchGroupHeader("信息") }
-                items(msgHits.size, key = { "sm_" + it }) { idx ->
-                    val (sender, row) = msgHits[idx]
-                    SearchMsgRow(
-                        sender = sender,
-                        row = row,
-                        q = q,
-                        onClick = {
-                            val rows = convHits.firstOrNull { it.first == sender }?.second ?: listOf(row)
-                            // V0.6.16.9：先收起搜索页再进会话（同会话行点击）
-                            MainHolder.searchStatus = MainHolder.searchStatus.copy(
-                                searchText = "",
-                                current = SearchStatus.Status.COLLAPSING
-                            )
-                            state.currentConversation = sender to rows
-                        }
-                    )
-                }
-            }
-        }
-    }
 }

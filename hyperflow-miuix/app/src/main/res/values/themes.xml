@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- HyperFlow 窗口主题（浅色）：Compose 由 MiuixTheme 全权控制配色，
+         这里只负责启动瞬间的窗口底色（避免系统深色模式下闪白） -->
+    <style name="Theme.HyperFlow" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

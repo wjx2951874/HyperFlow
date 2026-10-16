@@ -65,6 +65,7 @@ private fun PlainBar(
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
     items: List<Pair<ImageVector, String>>,
+    badgeIndex: Int?,
 ) {
     NavigationBar {
         items.forEachIndexed { i, (icon, label) ->
@@ -73,6 +74,9 @@ private fun PlainBar(
                 onClick = { onTabSelected(i) },
                 icon = icon,
                 label = label,
+                badge = if (badgeIndex == i) {
+                    { top.yukonga.miuix.kmp.basic.Badge() }
+                } else null
             )
         }
     }
@@ -88,6 +92,7 @@ fun LiquidNavBar(
     floatEnabled: Boolean,
     glassEnabled: Boolean,
     backdrop: LayerBackdrop? = null,
+    badgeIndex: Int? = null,
 ) {
     if (items.isEmpty()) return
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -104,7 +109,8 @@ fun LiquidNavBar(
             else -> FloatingBottomBarMode.None
         }
         Box(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp + navBottom),
+            // 1.1.0 M12：悬浮胶囊离底 28dp（有导航条 inset 时 8dp+inset，规范 01 §4 硬指标）
+            modifier = Modifier.fillMaxWidth().padding(bottom = if (navBottom != 0.dp) 8.dp + navBottom else 28.dp),
             contentAlignment = Alignment.Center,
         ) {
             FloatingBottomBar(
@@ -114,12 +120,26 @@ fun LiquidNavBar(
                 backdrop = bd,
                 mode = mode,
                 iconContent = { item, _ ->
-                    Icon(
-                        imageVector = item.first,
-                        contentDescription = null,
-                        tint = LocalFloatingBottomBarContentColor.current,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    if (badgeIndex == null) {
+                        Icon(
+                            imageVector = item.first,
+                            contentDescription = null,
+                            tint = LocalFloatingBottomBarContentColor.current,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        top.yukonga.miuix.kmp.basic.BadgedBox(
+                            badge = { top.yukonga.miuix.kmp.basic.Badge() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = item.first,
+                                contentDescription = null,
+                                tint = LocalFloatingBottomBarContentColor.current,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
                 },
                 labelContent = { item, _ ->
                     Text(
@@ -131,6 +151,6 @@ fun LiquidNavBar(
             )
         }
     } else {
-        PlainBar(selectedTabIndex, onTabSelected, items)
+        PlainBar(selectedTabIndex, onTabSelected, items, badgeIndex)
     }
 }

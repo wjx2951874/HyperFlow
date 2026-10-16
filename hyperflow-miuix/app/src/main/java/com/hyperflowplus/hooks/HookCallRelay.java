@@ -1,28 +1,53 @@
 package com.hyperflowplus.hooks;
 
+import android.os.PowerManager;
+
+import com.hyperflowplus.Config;
 import com.hyperflowplus.MiflowLog;
 
+import java.lang.reflect.Method;
+
+import io.github.libxposed.api.XposedInterface.Chain;
+import io.github.libxposed.api.XposedInterface.ExceptionMode;
+import io.github.libxposed.api.XposedInterface.Hooker;
+import io.github.libxposed.api.XposedModule;
+
 /**
- * 来电在线接听（亮屏 + 锁屏都走全屏接听，而不是通知卡片）。
+ * v1.1.0：亮屏来电流转修复。
  *
- * v0.5.15.4 改回原版逻辑：本类不再装任何 hook。
+ * 参考"仅亮屏流转.apk"的做法：在 com.milink.service 进程内 hook
+ * PowerManager.isInteractive()，当开关开启时强制返回 false，
+ * 让 milink 以为屏幕始终处于锁屏状态 → 来电走 voip 全屏接听路径，
+ * 而不是亮屏时拒绝流转。
  *
- * 原实现（v0.4.27 起）叠了两层 hack：
- *   ② buildPlainMessage 前给来电通知打 broadcast 标、③ isVoipSupported 强制 true，
- *   配合 HookForceTransfer 对来电通知短路 —— 结果亮屏时广播链路无广播、
- *   通知链路又被短路，来电完全不流转（用户实测）。
+ * 与 v0.5.15.4 的区别：
+ *   - 之前 hook system_server 全局 → 误伤正常通话流程
+ *   - 本方案只在 com.milink.service 进程内 hook → 不影响系统其他地方
  *
- * 用户确认方案：milink 原生分流不碰（OS4 设备走 voip 全屏接听、
- * OS3 不支持设备降级为通知卡片），只由 HookForceTransfer 做"模拟锁屏"
- * （isDeviceSupported=true + isKeyguardLocked=true + isInteractive=false，
- * 后两者仅在 milink 调用栈内生效），让 milink 自己按原生锁屏逻辑跑。
- * 去重（广播 voip 与通知卡片的同 key 合并）也由 milink 原生处理。
+ * 开关：Config.isForceTransferEnabled()（复用亮屏强制流转开关）
  */
 public class HookCallRelay {
 
     public static void install(ClassLoader cl) {
-        // v0.5.15.4：改回原版，由 milink 原生分流 + HookForceTransfer 模拟锁屏，
-        // 不再注入任何来电 hack。
-        MiflowLog.i("HookCallRelay: reverted to stock flow (simulated-lock via HookForceTransfer)");
+        try {
+            Class<?> pmCls = Class.forName("android.os.PowerManager", false, cl);
+            Method isInteractive = pmCls.getDeclaredMethod("isInteractive");
+            XposedModule xp = com.hyperflowplus.XposedEntry.get();
+            xp.hook(isInteractive)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept(new Hooker() {
+                        @Override
+                        public Object intercept(Chain chain) throws Throwable {
+                            if (Config.isForceTransferEnabled()) {
+                                // 让 milink 以为屏幕没亮 → 走锁屏 voip 路径
+                                return false;
+                            }
+                            return chain.proceed();
+                        }
+                    });
+            MiflowLog.i("HookCallRelay: PowerManager.isInteractive() hooked in milink process (v1.1.0 screen-on call relay)");
+        } catch (Throwable t) {
+            MiflowLog.e("HookCallRelay install failed", t);
+        }
     }
 }

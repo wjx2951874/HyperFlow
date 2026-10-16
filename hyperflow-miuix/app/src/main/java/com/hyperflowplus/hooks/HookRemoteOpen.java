@@ -58,6 +58,7 @@ public class HookRemoteOpen {
     /** 允许改写为分身的调用方：小米互联（远程镜像打开）+ 本 App 消息页点击 */
     private static final Set<String> ALLOWED_CALLERS = new HashSet<String>() {{
         add("com.milink.service");
+        add("com.xiaomi.mirror");   // V1.1.0：小米 15 等机型点击流转通知走 mirror 进程 RelayAppLocalHelper
         add("com.hyperflowplus");
     }};
 
@@ -188,12 +189,13 @@ public class HookRemoteOpen {
         return chain.proceed();
     }
 
-    /** 找 callingPackage 参数（String 类型且值 = com.milink.service 的那个） */
+    /** 找 callingPackage 参数：只认白/黑名单中的 String 值（V1.1.0 起按集合匹配，
+     *  兼容 com.xiaomi.mirror 等新调用方；resolvedType 等无关 String 不命中） */
     private static String findCallingPackage(List<Object> args) {
         for (Object a : args) {
             if (a instanceof String) {
                 String s = (String) a;
-                if ("com.milink.service".equals(s)) {
+                if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
                     return s;
                 }
             }

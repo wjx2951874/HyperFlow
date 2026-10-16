@@ -181,8 +181,25 @@ object HFState {
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val archiveApp: Boolean get() = cfg.optBoolean("archive_app", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
-    val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏
-    val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃
+    val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏（兼容旧配置）
+    val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃（兼容旧配置）
+    // 1.1.0：底栏形态三值枚举（standard/floating/liquid）；未设置时按旧布尔派生（老用户配置无缝迁移）
+    val bottomBarStyle: String get() = cfg.optString("bottom_bar_style", "").let {
+        if (it == "standard" || it == "floating" || it == "liquid") it
+        else when {
+            navFloat && glassEffect -> "liquid"
+            navFloat -> "floating"
+            else -> "standard"
+        }
+    }
+    // 1.1.0：主题系统（深浅色 + 动态取色 + 自定义主题色）
+    val themeMode: String get() = cfg.optString("theme_mode", "system")     // system/light/dark
+    val amoled: Boolean get() = cfg.optBoolean("amoled", false)              // 纯黑背景
+    val monet: Boolean get() = cfg.optBoolean("miuix_monet", false)          // 跟随壁纸取色
+    val keyColor: Int get() = cfg.optInt("key_color", 0xFF3482FF.toInt())    // 主题色（默认 HyperOS 蓝）
+    val enableBlur: Boolean get() = cfg.optBoolean("enable_blur", true)       // 玻璃模糊总开关
+    val enableBadge: Boolean get() = cfg.optBoolean("enable_navigation_badge", true) // 底栏角标
+    val enablePredictiveBack: Boolean get() = cfg.optBoolean("enable_predictive_back", false) // 预测性返回
     val debugMode: Boolean get() = cfg.optBoolean("debug_mode", false)       // 调试模式
     // 消息第一层显示模式（V0.6.15 三态）：all=实时与本地合并显示（默认）/ live=仅显示实时 / local=仅显示本地
     val msgMode: String get() = cfg.optString("msg_mode", if (cfg.optBoolean("msg_live_only", false)) "live" else "all")
