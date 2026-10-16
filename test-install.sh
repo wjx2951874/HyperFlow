@@ -20,9 +20,9 @@ OUT_ZIP=../HyperFlow-Beta-flashable.zip
 cp "$APK" "$OUT_APK"
 
 # 组装 flashable zip（改 hook 时才需要刷；纯 UI 改动用不到）
-rm -rf /tmp/hf_test_flash && mkdir -p /tmp/hf_test_flash/system/priv-app/HyperFlowPlus
-cp "$APK" /tmp/hf_test_flash/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk
-cp "$APK" /tmp/hf_test_flash/HyperFlowPlus.apk
+rm -rf /tmp/hf_test_flash && mkdir -p /tmp/hf_test_flash/system/priv-app/HyperFlow
+cp "$APK" /tmp/hf_test_flash/system/priv-app/HyperFlow/HyperFlow.apk
+cp "$APK" /tmp/hf_test_flash/HyperFlow.apk
 cp ../hyperflow-miuix/ksu-module/service.sh /tmp/hf_test_flash/service.sh
 cp ../hyperflow-miuix/ksu-module/customize.sh /tmp/hf_test_flash/customize.sh
 cp ../hyperflow-miuix/ksu-module/module.prop /tmp/hf_test_flash/module.prop
