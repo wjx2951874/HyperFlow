@@ -1,4 +1,4 @@
-# v1.1.0-beta17
+# v1.1.0-beta18
 
-- 外观选择改用 miuix OverlayDropdownPreference 官方组件（小弹窗 + 选中箭头）
-- 日志列表删除全部按钮改用 miuix IconButton 官方组件
+- 新增"设备协同"分组，内含"静默验证"开关
+- 打开后远控连接时自动完成密码验证，无需手动输入
