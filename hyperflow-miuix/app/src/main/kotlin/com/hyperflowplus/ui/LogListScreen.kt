@@ -147,14 +147,13 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 )
                 // v0.5.15.5：一键删除全部（数量 > 0 时显示，删除前弹确认）
                 if (logs.isNotEmpty()) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "删除全部",
-                        tint = MiuixTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .clickable { confirmDelAll = true }
-                    )
+                    IconButton(onClick = { confirmDelAll = true }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "删除全部",
+                            tint = MiuixTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         )

@@ -46,6 +46,8 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -87,23 +89,21 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 外观：跟随系统 / 浅色 / 深色
-                val appearanceText = when (state.themeMode) {
-                    "light" -> "浅色"
-                    "dark" -> "深色"
-                    else -> "跟随系统"
-                }
-                ArrowPreference(
+                // 外观：跟随系统 / 浅色 / 深色（miuix OverlayDropdownPreference）
+                OverlayDropdownPreference(
                     title = "外观",
-                    summary = appearanceText,
-                    onClick = {
-                        // 循环切换：跟随系统 → 浅色 → 深色
-                        val next = when (state.themeMode) {
-                            "system" -> "light"
-                            "light" -> "dark"
+                    items = listOf("跟随系统", "浅色", "深色"),
+                    selectedIndex = when (state.themeMode) {
+                        "light" -> 1
+                        "dark" -> 2
+                        else -> 0
+                    },
+                    onSelectedIndexChange = { index ->
+                        state.setString("theme_mode", when (index) {
+                            1 -> "light"
+                            2 -> "dark"
                             else -> "system"
-                        }
-                        state.setString("theme_mode", next)
+                        })
                     }
                 )
 

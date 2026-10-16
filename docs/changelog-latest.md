@@ -1,5 +1,4 @@
-# v1.1.0-beta16
+# v1.1.0-beta17
 
-- 二级页面（日志列表/开源许可）加背景色，修复悬浮导航栏透明问题
-- 更新弹窗加 Beta 版提示文字
-- 激活 Beta 通道后，App 内部同时检测 main + beta 两个分支更新
+- 外观选择改用 miuix OverlayDropdownPreference 官方组件（小弹窗 + 选中箭头）
+- 日志列表删除全部按钮改用 miuix IconButton 官方组件
