@@ -147,16 +147,23 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         // ===== 关于 =====
         GroupTitle("关于")
 
+        // v1.1.0-beta1：Beta 机关 —— 连点版本行 7 次解锁 Beta 通道显示
+        var betaTapCount by remember { mutableStateOf(0) }
+        var betaUnlocked by remember { mutableStateOf(false) }
+
         Card(Modifier.fillMaxWidth()) {
             Column {
                 // V0.6.15：版本行 —— 常驻醒目色状态提示（有新版=橙 / 已是最新=绿 / 检查中=灰），
                 // 点击不再弹检查结果窗：有新版时直接进入更新方式，其余静默检查
-                val updTxt = when (MainHolder.updState) {
-                    "new" -> "发现新版本 v${MainHolder.latestVer}，点击更新"
-                    "none" -> "已是最新版本 · v${BuildConfig.VERSION_NAME}"
-                    "checking", "busy" -> "正在检查更新…"
-                    "error" -> "检查更新失败，点击重试 · v${BuildConfig.VERSION_NAME}"
-                    else -> "点击可检查更新 · v${BuildConfig.VERSION_NAME}"
+                val updTxt = when {
+                    betaUnlocked -> "Beta 通道 · v${BuildConfig.VERSION_NAME}"
+                    else -> when (MainHolder.updState) {
+                        "new" -> "发现新版本 v${MainHolder.latestVer}，点击更新"
+                        "none" -> "已是最新版本 · v${BuildConfig.VERSION_NAME}"
+                        "checking", "busy" -> "正在检查更新…"
+                        "error" -> "检查更新失败，点击重试 · v${BuildConfig.VERSION_NAME}"
+                        else -> "点击可检查更新 · v${BuildConfig.VERSION_NAME}"
+                    }
                 }
                 val updColor = when (MainHolder.updState) {
                     "new" -> Color(0xFFF08A00)          // 醒目橙：有新版
@@ -168,8 +175,17 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (MainHolder.updState == "new") MainHolder.onOpenUpdater()
-                            else MainHolder.onCheckUpdate()
+                            if (MainHolder.updState == "new") {
+                                MainHolder.onOpenUpdater()
+                            } else {
+                                // v1.1.0-beta1：连点 7 次解锁 Beta 标记
+                                betaTapCount++
+                                if (betaTapCount >= 7) {
+                                    betaUnlocked = true
+                                } else {
+                                    MainHolder.onCheckUpdate()
+                                }
+                            }
                         }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
