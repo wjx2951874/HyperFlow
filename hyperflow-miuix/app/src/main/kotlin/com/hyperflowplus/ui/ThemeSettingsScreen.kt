@@ -1,11 +1,15 @@
 package com.hyperflowplus.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -27,20 +33,24 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 /**
- * 1.1.0 主题设置页（KernelSU 同款结构，01 手册 §3/§5 决策表）：
- * 深色模式三选 TabRow + AMOLED + 壁纸取色(Monet) + 主题色 16 选 1 下拉 + 底栏形态三选一
- * + 模糊/角标/预测性返回开关 + 恢复默认。切换立即生效（全局 state 驱动重组）。
+ * 1.1.0 主题设置页（严格按 00 规范 §8.2 / KernelSU ColorPaletteScreenMiuix.kt 结构）：
+ *
+ * 分组结构：
+ *   外观 → 深色模式 TabRow(跟随系统/浅色/深色) + AMOLED 纯黑
+ *   颜色 → 动态取色(Monet) + 主题色16选1(带调色图标) + Monet时显示调色板风格
+ *   底栏 → 底栏形态(标准/悬浮/液态玻璃) + 导航角标
+ *   系统 → 液态玻璃模糊 + 预测性返回 + 恢复默认
  */
 @Composable
 fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
     val scrollBehavior = MiuixScrollBehavior()
-    // 预测性返回需要 applicationInfo（hidden API 反射调用，提前在 Composable 上下文取）
     val appInfo = LocalContext.current.applicationInfo
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = "主题与显示",
-                largeTitle = "主题与显示",
+                title = "主题设置",
+                largeTitle = "主题设置",
                 navigationIcon = {
                     MiuixBackButton(onClick = onBack)
                 },
@@ -56,8 +66,9 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(horizontal = 12.dp)
         ) {
-            // ===== 深色模式 =====
-            item { SmallTitle("深色模式") }
+            // ===== 外观 / 深色模式 =====
+            item { Spacer(Modifier.height(4.dp)) }
+            item { SmallTitle("外观") }
             item {
                 Card(Modifier.fillMaxWidth()) {
                     Column {
@@ -75,7 +86,8 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                                     when (i) { 1 -> "light"; 2 -> "dark"; else -> "system" }
                                 )
                             },
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier
+                                .padding(12.dp)
                         )
                         SwitchPreference(
                             title = "纯黑背景",
@@ -93,8 +105,8 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                 Card(Modifier.fillMaxWidth()) {
                     Column {
                         SwitchPreference(
-                            title = "跟随壁纸取色",
-                            summary = "从当前壁纸提取主题色（Monet 动态取色）",
+                            title = "动态取色",
+                            summary = "跟随系统壁纸配色",
                             checked = state.monet,
                             onCheckedChange = { state.set("miuix_monet", it) }
                         )
@@ -121,9 +133,15 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                             title = "主题色",
                             items = keyColors.map { it.second },
                             selectedIndex = curIdx,
-                            summary = keyColors[curIdx].second,
                             onSelectedIndexChange = { i ->
                                 state.setInt("key_color", keyColors[i].first)
+                            },
+                            startAction = {
+                                Icon(
+                                    imageVector = Icons.Filled.Colorize,
+                                    contentDescription = "主题色",
+                                    modifier = Modifier.padding(end = 6.dp)
+                                )
                             }
                         )
                     }
@@ -145,19 +163,12 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
                             title = "底栏形态",
                             items = barStyles,
                             selectedIndex = barIdx,
-                            summary = barStyles[barIdx],
                             onSelectedIndexChange = { i ->
                                 state.setString(
                                     "bottom_bar_style",
                                     when (i) { 1 -> "floating"; 2 -> "liquid"; else -> "standard" }
                                 )
                             }
-                        )
-                        SwitchPreference(
-                            title = "液态玻璃模糊",
-                            summary = "玻璃底栏的模糊与折射效果开关",
-                            checked = state.enableBlur,
-                            onCheckedChange = { state.set("enable_blur", it) }
                         )
                         SwitchPreference(
                             title = "显示导航角标",
@@ -174,6 +185,12 @@ fun ThemeSettingsScreen(state: HFState, onBack: () -> Unit) {
             item {
                 Card(Modifier.fillMaxWidth()) {
                     Column {
+                        SwitchPreference(
+                            title = "液态玻璃模糊",
+                            summary = "玻璃底栏的模糊与折射效果开关",
+                            checked = state.enableBlur,
+                            onCheckedChange = { state.set("enable_blur", it) }
+                        )
                         SwitchPreference(
                             title = "预测性返回动画",
                             summary = "返回时预览上一页缩略图（需系统支持）",
@@ -222,7 +239,6 @@ object PredictiveBack {
     fun apply(enabled: Boolean, appInfo: android.content.pm.ApplicationInfo?) {
         if (appInfo == null) return
         runCatching {
-            // 优先普通反射；命中 hidden API 限制时回退 HiddenApiBypass（org.lsposed 官方库）
             runCatching {
                 val method = android.content.pm.ApplicationInfo::class.java
                     .getDeclaredMethod("setEnableOnBackInvokedCallback", Boolean::class.javaPrimitiveType)
