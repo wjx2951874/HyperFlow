@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -66,6 +67,8 @@ fun HyperDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // imePadding：键盘弹出时弹窗整体上移，输入框保持在输入法正上方（底部弹出场景）
+                .imePadding()
                 .background(Color.Black.copy(alpha = 0.35f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },

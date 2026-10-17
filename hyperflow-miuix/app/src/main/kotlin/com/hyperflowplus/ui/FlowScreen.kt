@@ -238,13 +238,13 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     }
 
     // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
-    // 居中稳定卡片：不用底部 + imeBottom，避免卡片随键盘上下飘/卡顿
+    // 底部弹出 + HyperDialog imePadding：点击输入后弹窗整体上移到输入法正上方
     if (showPrefixEdit) {
         HyperDialog(
             show = true,
             title = "双开标识前缀",
             summary = "标题前自动包进【】，留空则用默认「双开」",
-            centered = true,
+            centered = false,
             onDismiss = { showPrefixEdit = false }
         ) {
             TextField(

@@ -1,12 +1,14 @@
 package com.hyperflowplus.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -64,7 +66,14 @@ fun SwitchPref(
         Column(
             Modifier
                 .weight(1f)
-                .then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier)
+                .then(
+                    if (onTitleClick != null) Modifier.clickable(
+                        // 机关入口（连点标题触发）：无涟漪无高亮，避免暴露可点击性
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onTitleClick
+                    ) else Modifier
+                )
         ) {
             Text(
                 title,

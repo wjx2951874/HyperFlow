@@ -3,6 +3,7 @@ package com.hyperflowplus.ui
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -781,7 +782,12 @@ private fun DevInfoRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (onTap != null || expandable) Modifier.clickable {
+                if (onTap != null || expandable) Modifier.clickable(
+                    // 机关/展开行点击：无涟漪无高亮（如"系统"行连点 5 下抓日志的调试机关），
+                    // 避免视觉上暴露可点击性
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
                     if (expandable) expanded = !expanded
                     onTap?.invoke()
                 } else Modifier
