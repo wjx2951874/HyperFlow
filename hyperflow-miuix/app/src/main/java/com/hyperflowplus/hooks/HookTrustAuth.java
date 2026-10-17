@@ -56,27 +56,27 @@ public class HookTrustAuth {
                         public Object intercept(Chain chain) throws Throwable {
                             try {
                                 String t = Config.getAuthType();
+                                String inject = null;
                                 if ("pin".equals(t) || "password".equals(t)) {
                                     String s = Config.getAuthSecret();
-                                    if (s != null && !s.isEmpty()) {
-                                        List<Object> args = chain.getArgs();
-                                        if (args != null && !args.isEmpty()) {
-                                            args.set(0, s);
-                                            MiflowLog.i("HookTrustAuth: filled " + t + " into A.d.e");
-                                        }
-                                    }
+                                    if (s != null && !s.isEmpty()) inject = s;
                                 } else if ("pattern".equals(t)) {
                                     // MiuiLockPatternView 编码：3x3 点编号 1..9(row*3+col+1)，
                                     // 按连线顺序直接拼接、无分隔（如对角线 1-5-9 = "159"），
                                     // 与 A.d.e(str) 收到的串一致，直接替换入参。
                                     String p = Config.getAuthPattern();
-                                    if (p != null && !p.isEmpty()) {
-                                        List<Object> args = chain.getArgs();
-                                        if (args != null && !args.isEmpty()) {
-                                            args.set(0, p);
-                                            MiflowLog.i("HookTrustAuth: filled pattern into A.d.e");
-                                        }
-                                    }
+                                    if (p != null && !p.isEmpty()) inject = p;
+                                }
+                                if (inject != null) {
+                                    // libxposed Chain 无 setArgs，getArgs() 返回只读 List（写抛
+                                    // UnsupportedOperationException）。改参必须复制成新数组走
+                                    // proceed(Object[])。
+                                    List<Object> args = chain.getArgs();
+                                    MiflowLog.i("HookTrustAuth: hit, orig=" + args.get(0)
+                                            + " -> inject=" + inject + " (type=" + t + ")");
+                                    Object[] newArgs = args.toArray();
+                                    newArgs[0] = inject;
+                                    return chain.proceed(newArgs);
                                 }
                             } catch (Throwable t2) {
                                 MiflowLog.e("HookTrustAuth: fill failed, pass through", t2);
