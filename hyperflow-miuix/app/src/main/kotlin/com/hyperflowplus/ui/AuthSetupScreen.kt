@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -71,9 +72,10 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     var redetect by remember { mutableStateOf(0) }       // 点"更换"递增，重新触发识别
 
     // root 自动识别本机锁屏类型；识别到直进输入页，识别不到才落到手选；更换后递增 redetect 重新识别
+    val appCtx = LocalContext.current.applicationContext
     LaunchedEffect(redetect) {
         if (state.hasAuth && redetect == 0) return@LaunchedEffect
-        val (detected, raw) = withContext(Dispatchers.IO) { detectLockType() }
+        val (detected, raw) = withContext(Dispatchers.IO) { detectLockType(appCtx) }
         if (detected != null) {
             type = detected
             stage = "input"
@@ -267,18 +269,23 @@ private fun typeName(t: String): String = when (t) {
 /**
  * root 探测本机锁屏密码类型（返回 Pair<类型?, 原始探测输出?>）。
  *
- * 通道1（首选）：`cmd lock_settings get-credential-type` —— Android 11+ 系统服务权威回答，
- *   不依赖 sqlite3 二进制（多数 ROM 未内置）。输出为 credential type：
+ * 通道1：`cmd lock_settings get-credential-type` —— Android 11+ 系统服务权威回答，
  *   1=图案 / 2=数字PIN / 3=混合密码 / 0 或 -1=无锁。
- * 通道2（兜底）：读 `/data/system/locksettings.db` 的 `lockscreen.password_type`（AOSP quality 值）：
+ *   注意：小米 HyperOS 会拦截该命令，输出 "User has a lock credential, but old credential
+ *   was not provided"（非数字）→ 本通道自动跳过，不会误判。
+ * 通道2：`sqlite3 /data/system/locksettings.db` 读 `lockscreen.password_type`
+ *   （多数 ROM 未内置 sqlite3，报 not found 时跳过）。
+ * 通道3（最可靠兜底）：root 把 locksettings.db 拷到应用缓存，用框架自带的
+ *   SQLiteDatabase 直读（不依赖任何系统命令/二进制），quality 映射：
  *   0x20000=复杂数字PIN、0x40000/0x80000/0x90000=字母/字母数字/复杂混合密码；
- *   0x10000 是 SOMETHING（图案）与简单 NUMERIC（数字）共用值、无法区分，放弃判断避免误判。
- * 两通道都拿不到确定类型 → 返回 null，界面落到手动选择；原始输出打日志便于排查。
+ *   0x10000 是 SOMETHING（图案）与简单 NUMERIC（数字）共用值、无法区分，放弃避免误判。
+ * 三通道都拿不到确定类型 → 返回 null，界面落到手动选择；原始输出打日志便于排查。
  */
-private fun detectLockType(): Pair<String?, String?> {
-    // 通道1：系统服务权威回答（不依赖 sqlite3）
+private fun detectLockType(ctx: android.content.Context): Pair<String?, String?> {
+    // 通道1：系统服务权威回答（不依赖 sqlite3；小米拦截时输出非数字自动跳过）
     val t1 = RootExec.su("cmd lock_settings get-credential-type 2>/dev/null")
-    val t1v = t1?.trim()?.let { Regex("-?\\d+").find(it)?.value?.toIntOrNull() }
+    val t1s = t1?.trim().orEmpty()
+    val t1v = Regex("-?\\d+").find(t1s)?.value?.toIntOrNull()
     if (t1v != null) {
         val d = when (t1v) {
             1 -> "pattern"
@@ -292,18 +299,59 @@ private fun detectLockType(): Pair<String?, String?> {
     val t2 = RootExec.su("sqlite3 /data/system/locksettings.db \"select value from locksettings where name='lockscreen.password_type';\" 2>/dev/null")
     val v = t2?.trim()?.filter { it.isDigit() }?.toIntOrNull()
     if (v != null) {
-        val d = when {
-            v and 0x20000 != 0 -> "pin"      // PASSWORD_QUALITY_NUMERIC_COMPLEX
-            v and 0x40000 != 0 -> "password" // PASSWORD_QUALITY_ALPHABETIC
-            v and 0x80000 != 0 -> "password" // PASSWORD_QUALITY_ALPHANUMERIC
-            v and 0x90000 != 0 -> "password" // PASSWORD_QUALITY_COMPLEX
-            else -> null // 0 / 0x10000(SOMETHING=NUMERIC 共用) 无法区分，放弃避免误判
-        }
+        val d = qualityToType(v)
         if (d != null) return d to t2
     }
-    // 诊断：识别失败时把两通道原始输出记录下来，方便真机排查
-    android.util.Log.d("HyperFlowPlus", "auth type detect fail: cmdLockSettings='${t1?.trim()}' sqlite='${t2?.trim()}'")
-    return null to (t1?.trim() ?: t2?.trim())
+    // 通道3：root 拷贝 + 框架 SQLiteDatabase 直读（不依赖 sqlite3 命令，最可靠）
+    val t3 = detectViaDbCopy(ctx)
+    if (t3 != null) return t3 to "db-copy"
+    // 诊断：识别失败时把各通道原始输出记录下来，方便真机排查
+    android.util.Log.d("HyperFlowPlus",
+        "auth type detect fail: cmdLockSettings='${t1s}' sqlite='${t2?.trim()}' dbcopy=null")
+    return null to (t1s.ifEmpty { t2?.trim().orEmpty() })
+}
+
+/** AOSP lockscreen quality 值 → 类型；0x10000 歧义值放弃判断。 */
+private fun qualityToType(v: Int): String? = when {
+    v and 0x20000 != 0 -> "pin"      // PASSWORD_QUALITY_NUMERIC_COMPLEX
+    v and 0x40000 != 0 -> "password" // PASSWORD_QUALITY_ALPHABETIC
+    v and 0x80000 != 0 -> "password" // PASSWORD_QUALITY_ALPHANUMERIC
+    v and 0x90000 != 0 -> "password" // PASSWORD_QUALITY_COMPLEX
+    else -> null                      // 0 / 0x10000(SOMETHING=NUMERIC 共用) 无法区分
+}
+
+/** 通道3：root 把 locksettings.db 拷到应用缓存后，用框架 SQLiteDatabase 直读密码类型。 */
+private fun detectViaDbCopy(ctx: android.content.Context): String? {
+    val candidates = listOf("/data/system/locksettings.db", "/data/system_de/0/locksettings.db")
+    for (path in candidates) {
+        val dst = java.io.File(ctx.cacheDir, "lsdb_${path.hashCode()}.db")
+        // cp 后 chmod 644：文件归 root 所有，必须放开读权限应用进程才能打开
+        val r = RootExec.su("cp $path '${dst.absolutePath}' && chmod 644 '${dst.absolutePath}' 2>/dev/null")
+        if (r != null && dst.exists() && dst.length() > 0) {
+            try {
+                val db = android.database.sqlite.SQLiteDatabase.openDatabase(
+                    dst.absolutePath, null,
+                    android.database.sqlite.SQLiteDatabase.OPEN_READONLY)
+                try {
+                    db.rawQuery("select value from locksettings where name='lockscreen.password_type'", null)
+                        .use { c ->
+                            if (c.moveToFirst()) {
+                                val v = c.getString(0)?.trim()?.filter { it.isDigit() }?.toIntOrNull()
+                                val d = v?.let { qualityToType(it) }
+                                if (d != null) return d
+                            }
+                        }
+                } finally {
+                    db.close()
+                }
+            } catch (t: Throwable) {
+                // 该路径打不开，试下一个候选路径
+            } finally {
+                dst.delete()
+            }
+        }
+    }
+    return null
 }
 
 private fun checkRule(type: String, first: String, second: String, step: Int): String? {
