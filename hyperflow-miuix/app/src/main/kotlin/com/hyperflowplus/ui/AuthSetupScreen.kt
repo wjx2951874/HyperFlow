@@ -334,7 +334,7 @@ private fun qualityToType(v: Int): String? = when {
  * 旧版 trustservice sp 作兜底。这里用 root 读回并加密入库。
  * 始终用最新捕获值覆盖（换密码后新密码验证成功即刷新）；无捕获值时不动现有预存。
  */
-private fun syncCapturedAuth(state: HFState) {
+internal fun syncCapturedAuth(state: HFState) {
     try {
         // 通道A：公共文件（system_server 日常解锁 / trustservice 授权盘双源写入）
         val pub = RootExec.su("cat /data/system/hyperflow_captured 2>/dev/null")?.trim()

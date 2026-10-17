@@ -245,6 +245,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             title = "双开标识前缀",
             summary = "标题前自动包进【】，留空则用默认「双开」",
             centered = false,
+            imeAware = true,
             onDismiss = { showPrefixEdit = false }
         ) {
             TextField(

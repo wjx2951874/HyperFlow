@@ -51,6 +51,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import top.yukonga.miuix.kmp.basic.DropdownEntry
@@ -99,6 +101,7 @@ import com.hyperflowplus.navigation.AppNavigation
 import com.hyperflowplus.navigation.LocalNavigator
 import com.hyperflowplus.navigation.Route
 import com.hyperflowplus.ui.OnboardingScreen
+import com.hyperflowplus.ui.syncCapturedAuth
 import com.hyperflowplus.ui.SettingsScreen
 import com.hyperflowplus.ui.ThemeSettingsScreen
 
@@ -139,6 +142,12 @@ fun HyperFlowApp() {
         remember(state) { state.loadCacheSync(); Unit }
         LaunchedEffect(Unit) {
             state.loadAll()
+            // 免预填自同步：妙享直通开启时，App 每次启动自动用 root 读回
+            // /data/system/hyperflow_captured（最近一次解锁/授权校验成功的真实凭证）并加密入库，
+            // 让"解锁过一次 → 连接直接通"，不再依赖手动打开预设置页触发读回
+            if (state.cfg.optBoolean("silent_auth", false)) {
+                withContext(Dispatchers.IO) { syncCapturedAuth(state) }
+            }
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
             MainHolder.onOpenLicenses = { navigator.push(Route.Licenses) }
             MainHolder.onOpenLogs = { navigator.push(Route.Logs) }

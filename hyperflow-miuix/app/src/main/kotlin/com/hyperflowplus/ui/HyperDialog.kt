@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -52,8 +54,19 @@ fun HyperDialog(
     bottomInset: Dp = smartInset,
     /** true=屏幕正中央对齐（输入类弹窗，避免底部随键盘上下飘）；false=底部弹出（默认） */
     centered: Boolean = false,
+    /**
+     * 键盘跟随（双开标识输入框等带输入框的弹窗）：在 Popup 外读取当前窗口的 IME 高度，
+     * 卡片底部 padding = 键盘高度 + bottomInset，让输入框紧贴输入法上方。
+     * 不能在 Popup 内部用 imePadding（Popup 窗口读不到真实 IME inset，
+     * 键盘动画期间会反复 resize 导致弹窗上下乱蹦）。
+     */
+    imeAware: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
+    if (!show) return
+    // Popup 外读取 IME 高度（跟随键盘动画实时更新；Popup 内 WindowInsets 恒为 0）
+    val imeBottom = if (imeAware) WindowInsets.ime.getBottom(LocalDensity.current) else 0
+
     if (!show) return
     // 窗口层 Popup 渲染：全屏遮罩盖住包括悬浮导航栏在内的一切（引导页同款层级），
     // 不受 Scaffold/悬浮栏遮挡；非系统 Dialog，KernelSU 环境不闪退
@@ -67,8 +80,6 @@ fun HyperDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // imePadding：键盘弹出时弹窗整体上移，输入框保持在输入法正上方（底部弹出场景）
-                .imePadding()
                 .background(Color.Black.copy(alpha = 0.35f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -80,7 +91,7 @@ fun HyperDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = if (centered) 0.dp else bottomInset)
+                    .padding(bottom = if (centered) 0.dp else bottomInset + with(LocalDensity.current) { imeBottom.toDp() })
                     .clip(RoundedCornerShape(28.dp))
                     .background(
                         if (MiuixTheme.colorScheme.background.luminance() < 0.5f)

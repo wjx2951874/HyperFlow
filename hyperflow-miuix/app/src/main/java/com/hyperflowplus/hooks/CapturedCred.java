@@ -77,6 +77,73 @@ public class CapturedCred {
         }
     }
 
+    /**
+     * 读取公共文件（免预填实时通道）：先直接文件读（system uid 进程可用），
+     * 失败再用 su 读（App root / 有 root 的进程可用）。
+     * @return [type, secret, pattern]，文件不存在或解析失败返回 null
+     */
+    public static String[] readPublic() {
+        try {
+            String raw = readDirect();
+            if (raw == null) {
+                raw = readViaSu();
+            }
+            if (raw == null || raw.trim().isEmpty()) {
+                return null;
+            }
+            String type = regex(raw, "\"type\":\"([^\"]*)\"");
+            String secret = regex(raw, "\"secret\":\"([^\"]*)\"");
+            String pattern = regex(raw, "\"pattern\":\"([^\"]*)\"");
+            if (type == null || type.isEmpty()) {
+                return null;
+            }
+            return new String[]{type, secret == null ? "" : secret, pattern == null ? "" : pattern};
+        } catch (Throwable t) {
+            MiflowLog.w("CapturedCred: readPublic failed: " + t);
+            return null;
+        }
+    }
+
+    private static String readDirect() {
+        try {
+            java.io.File f = new java.io.File(CAP_FILE);
+            if (!f.exists() || f.length() <= 0) {
+                return null;
+            }
+            byte[] buf = new byte[(int) Math.min(f.length(), 65536)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            try {
+                int n = in.read(buf);
+                return n > 0 ? new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8) : null;
+            } finally {
+                in.close();
+            }
+        } catch (Throwable t) {
+            return null; // 无权限等，走 su 通道
+        }
+    }
+
+    private static String readViaSu() {
+        try {
+            Process p = new ProcessBuilder("su", "-c", "cat " + CAP_FILE + " 2>/dev/null")
+                    .redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            p.waitFor();
+            return out == null || out.trim().isEmpty() ? null : out;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static String regex(String s, String pat) {
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(pat).matcher(s);
+            return m.find() ? m.group(1) : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** JSON 字符串转义（密码为数字/点序串，极少特殊字符，兜底处理即可）。 */
     private static String esc(String s) {
         return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"")

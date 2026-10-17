@@ -55,17 +55,31 @@ public class HookTrustAuth {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
                             try {
-                                String t = Config.getAuthType();
+                                String t = null;
+                                String secret = null;
+                                String pattern = null;
+                                // 免预填实时通道：优先读公共文件（HookKeyguardCapture 每次解锁成功都会
+                                // 刷新 /data/system/hyperflow_captured）——用户只要日常解锁过一次，
+                                // 这里就能拿到最新真实密码，即使 App 从未打开/从未入库也能直接连接。
+                                String[] cap = CapturedCred.readPublic();
+                                if (cap != null) {
+                                    t = cap[0];
+                                    secret = cap[1];
+                                    pattern = cap[2];
+                                } else {
+                                    // 回退：App 预存（用户手动预填或 App 启动自动同步的加密凭证）
+                                    t = Config.getAuthType();
+                                    secret = Config.getAuthSecret();
+                                    pattern = Config.getAuthPattern();
+                                }
                                 String inject = null;
                                 if ("pin".equals(t) || "password".equals(t)) {
-                                    String s = Config.getAuthSecret();
-                                    if (s != null && !s.isEmpty()) inject = s;
+                                    if (secret != null && !secret.isEmpty()) inject = secret;
                                 } else if ("pattern".equals(t)) {
                                     // MiuiLockPatternView 编码：3x3 点编号 1..9(row*3+col+1)，
                                     // 按连线顺序直接拼接、无分隔（如对角线 1-5-9 = "159"），
                                     // 与 A.d.e(str) 收到的串一致，直接替换入参。
-                                    String p = Config.getAuthPattern();
-                                    if (p != null && !p.isEmpty()) inject = p;
+                                    if (pattern != null && !pattern.isEmpty()) inject = pattern;
                                 }
                                 if (inject != null) {
                                     // libxposed Chain 无 setArgs，getArgs() 返回只读 List（写抛
