@@ -616,7 +616,7 @@ echo ==END""") }.getOrNull()
             devLine.firstOrNull { it.startsWith("机型：") }?.removePrefix("机型：")?.substringBefore("（")?.trim() ?: "加载中…"
         }
         val modelCode = devLine.firstOrNull { it.startsWith("机型：") }?.substringAfter("（", "")?.substringBefore("）")?.trim() ?: ""
-        val miuiV = devLine.firstOrNull { it.startsWith("澎湃OS：") }?.removePrefix("澎湃OS：")?.trim() ?: state.miuiOsVersion
+        val miuiV = devLine.firstOrNull { it.startsWith("系统：") || it.startsWith("澎湃OS：") }?.substringAfter("：")?.trim() ?: state.miuiOsVersion
         val andV = devLine.firstOrNull { it.startsWith("Android：") }?.removePrefix("Android：")?.trim() ?: state.androidVersion
         val kernV = devLine.firstOrNull { it.startsWith("内核：") }?.removePrefix("内核：")?.trim() ?: state.kernelVersion
         val rootV = if (state.rootInfo.isNotEmpty()) "${state.rootInfo} / KSU ${state.ksuVersion}" else "未授权"
@@ -655,7 +655,7 @@ echo ==END""") }.getOrNull()
                     expandable = true,
                     onTap = { onSysTap() })
                 DevInfoRow(Icons.Filled.DeveloperBoard, "内核", kernV.ifEmpty { "未知" }, expandable = true)
-                DevInfoRow(Icons.Filled.Fingerprint, "模块", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
+                DevInfoRow(Icons.Filled.Fingerprint, "应用版本", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
             }
         }
 

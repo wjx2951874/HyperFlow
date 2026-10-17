@@ -472,7 +472,7 @@ object HFState {
             var cfgText: String? = null
             var flowText: String? = null
             var rootRaw = "su 不可用"
-            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devOsCode = ""; var devKsu = "未检测"; var devDisplayId = ""
+            var devMiui = ""; var devAndroid = ""; var devKernel = ""; var devModel = ""; var devKsu = "未检测"
             try {
                 // 先读本地缓存（渲染素材）
                 val cache = readCache()
@@ -484,30 +484,52 @@ object HFState {
                 // KSU allowlist 兜底
                 try { RootExec.exec("ksud", "allowlist", "add", "com.milink.service") } catch (t: Throwable) {}
                 try { RootExec.exec("ksud", "allowlist", "add", "com.hyperflowplus") } catch (t: Throwable) {}
+                // su 只负责需要 root 的部分：全局配置 / 实时 flow / root 身份 / KSU 版本
                 val all = RootExec.su("echo @@CFG; cat " + Config.GLOBAL_CFG + " 2>/dev/null; echo @@FLOW; "
                         + "content query --uri content://com.android.mms.flow.provider/messageflow 2>&1 | head -60; "
-                        + "echo @@ROOT; id -u; echo @@DEV; "
-                        + "getprop ro.mi.os.version.name; getprop ro.build.version.release; uname -r; "
-                        + "getprop ro.product.marketname; ksud -V 2>/dev/null || echo 'none'; "
-                        + "getprop ro.mi.os.version.code; getprop ro.build.display.id; getprop ro.miui.ui.version.name; getprop ro.build.version.incremental")
+                        + "echo @@ROOT; id -u; echo @@KSU; ksud -V 2>/dev/null || echo 'none'")
                 if (all != null) {
-                    val parts = all.split("@@CFG|@@FLOW|@@ROOT|@@DEV".toRegex())
+                    val parts = all.split("@@CFG|@@FLOW|@@ROOT|@@KSU".toRegex())
                     if (parts.size > 1) cfgText = parts[1].trim()
                     if (parts.size > 2) flowText = parts[2].trim()
                     if (parts.size > 3 && parts[3].trim() == "0") rootRaw = "su 可用"
-                    if (parts.size > 4) {
-                        val dev = parts[4].trim().split("\n")
-                        if (dev.size > 0) devMiui = dev[0].trim()
-                        if (dev.size > 1) devAndroid = dev[1].trim()
-                        if (dev.size > 2) devKernel = dev[2].trim()
-                        if (dev.size > 3) devModel = dev[3].trim()
-                        if (dev.size > 4) devKsu = if (dev[4].trim() == "none") "未安装" else dev[4].trim()
-                        if (dev.size > 5) devOsCode = dev[5].trim()
-                        if (dev.size > 6) devDisplayId = dev[6].trim()
-                        if (dev.size > 7 && dev[7].trim().isNotEmpty() && devDisplayId.isEmpty()) devDisplayId = dev[7].trim()
-                        if (dev.size > 8 && dev[8].trim().isNotEmpty() && devDisplayId.isEmpty()) devDisplayId = dev[8].trim()
-                    }
+                    if (parts.size > 4) devKsu = if (parts[4].trim() == "none") "未安装" else parts[4].trim()
                 }
+                // ===== 设备信息：非 root 通道（getprop 命令普通进程可执行，不需要 su）=====
+                // 逐 key 独立读取，任一属性为空不会造成行错位；覆盖全部主流安卓系统：
+                // HyperOS/MIUI(小米) · ColorOS(OPPO) · One UI(三星) · EMUI/HarmonyOS(华为)
+                // · OriginOS/Funtouch(vivo) · 原生 AOSP（display.id 兜底）
+                val dModel = getProp("ro.product.marketname")
+                    .ifEmpty { (android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL).trim() }
+                val dOsName = getProp("ro.mi.os.version.name")      // HyperOS：如 "HyperOS" 或 "HyperOS 4.0.1.0"
+                val dOsCode = getProp("ro.mi.os.version.code")      // HyperOS 版本码：如 "4.0.1.0.VNCCNXM"
+                val dMiuiV = getProp("ro.miui.ui.version.name")     // 旧 MIUI：如 "V14.0.10.0.TKPCNXM"
+                val dColor = getProp("ro.build.version.oplusrom")   // ColorOS 版本号
+                val dOneUI = getProp("ro.build.version.oneui")      // One UI 版本号
+                val dEmui = getProp("ro.build.version.emui")        // EMUI 版本号
+                val dVivo = getProp("ro.vivo.os.build.display.id")  // OriginOS/Funtouch 版本串
+                val dDisplay = getProp("ro.build.display.id")       // 通用 build 显示串
+                val dIncremental = getProp("ro.build.version.incremental") // 通用增量版本
+                val dRelease = android.os.Build.VERSION.RELEASE
+                val dKernel = runCatching { System.getProperty("os.version") }.getOrNull()?.trim() ?: ""
+                // 厂商系统名+版本去重拼接（name 已含 code 则不重复拼）
+                val osNameVer = when {
+                    dOsName.isBlank() -> dOsCode
+                    dOsCode.isBlank() -> dOsName
+                    dOsName.contains(dOsCode) || dOsCode.contains(dOsName) -> dOsName
+                    else -> "$dOsName $dOsCode"
+                }
+                val osVer = listOf(osNameVer, dMiuiV, dColor, dOneUI, dEmui, dVivo, dDisplay, dIncremental)
+                    .firstOrNull { it.isNotBlank() } ?: ""
+                val sysLine = if (osVer.isNotEmpty()) {
+                    if (dDisplay.isNotEmpty() && dDisplay != osVer && !osVer.contains(dDisplay) && !dDisplay.contains(osVer)) {
+                        "$osVer（$dDisplay）"
+                    } else osVer
+                } else "未知"
+                devModel = dModel
+                devMiui = sysLine
+                devAndroid = dRelease
+                devKernel = dKernel
             } catch (t: Throwable) {
             }
             val finalCfg = cfgText
@@ -515,7 +537,7 @@ object HFState {
             val finalRoot = rootRaw
             val fMiui = devMiui; val fAndroid = devAndroid; val fKernel = devKernel; val fKsu = devKsu
             val finalDev = "机型：${devModel.ifEmpty { android.os.Build.MANUFACTURER.uppercase() + " " + android.os.Build.MODEL }}（${android.os.Build.MODEL}）\n" +
-                    "澎湃OS：${if (fMiui.isNotEmpty()) fMiui + " " + devOsCode + (if (devDisplayId.isNotEmpty()) "（" + devDisplayId + "）" else "") else "未知"}\n" +
+                    "系统：${if (fMiui.isNotEmpty()) fMiui else "未知"}\n" +
                     "Android：${fAndroid.ifEmpty { android.os.Build.VERSION.RELEASE }}\n" +
                     "内核：${fKernel.ifEmpty { "未知" }}\n" +
                     "Root：${finalRoot} / KSU ${fKsu}"
@@ -593,7 +615,7 @@ object HFState {
         for (l in snap.split("\n")) {
             when {
                 l.startsWith("机型：") -> deviceName = l.removePrefix("机型：").substringBefore("（").trim()
-                l.startsWith("澎湃OS：") -> miuiOsVersion = l.removePrefix("澎湃OS：").trim()
+                l.startsWith("澎湃OS：") || l.startsWith("系统：") -> miuiOsVersion = l.substringAfter("：").trim()
                 l.startsWith("Android：") -> androidVersion = l.removePrefix("Android：").trim()
                 l.startsWith("内核：") -> kernelVersion = l.removePrefix("内核：").trim()
                 l.startsWith("Root：") -> {
@@ -605,6 +627,18 @@ object HFState {
             }
         }
         deviceInfo = snap
+    }
+
+    /**
+     * 非 root 读取系统属性：getprop 命令以普通进程（shell 权限）即可执行，无需 su。
+     * 逐 key 独立 exec，任一属性缺失只返回空串，不会造成后续字段错位。
+     * 覆盖全部主流安卓系统属性（HyperOS/MIUI/ColorOS/One UI/EMUI/OriginOS/原生）。
+     */
+    private fun getProp(key: String): String = try {
+        val p = Runtime.getRuntime().exec(arrayOf("getprop", key))
+        p.inputStream.bufferedReader().readText().trim()
+    } catch (t: Throwable) {
+        ""
     }
 
     private fun saveCfgLater() {
