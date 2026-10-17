@@ -329,20 +329,28 @@ private fun qualityToType(v: Int): String? = when {
 }
 
 /**
- * 免预填：模块（HookTrustAuthAuto）在 trustservice 进程"校验成功"后把真实锁屏凭证写入其
- * SharedPreferences（hyperflow_captured.xml），这里用 root 读回该文件，加密入库。
- * 始终用最新捕获值覆盖（含换密码场景：新密码验证成功即刷新）；无捕获值时不动现有预存。
+ * 免预填：模块在 trustservice（授权盘校验成功）或 system_server（日常解锁校验成功）捕获
+ * 真实锁屏凭证，落盘 /data/system/hyperflow_captured（公共文件，system uid 可写、普通 App 不可读），
+ * 旧版 trustservice sp 作兜底。这里用 root 读回并加密入库。
+ * 始终用最新捕获值覆盖（换密码后新密码验证成功即刷新）；无捕获值时不动现有预存。
  */
 private fun syncCapturedAuth(state: HFState) {
     try {
-        val xml = RootExec.su(
-            "cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
-            ?: return
-        val type = Regex("hf_cap_type\">([^<]*)<").find(xml)?.groupValues?.get(1)
-            ?: return
-        if (type.isEmpty()) return
-        val secret = Regex("hf_cap_secret\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
-        val pattern = Regex("hf_cap_pattern\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+        // 通道A：公共文件（system_server 日常解锁 / trustservice 授权盘双源写入）
+        val pub = RootExec.su("cat /data/system/hyperflow_captured 2>/dev/null")?.trim()
+        var type = pub?.let { Regex("\"type\":\"([^\"]*)\"").find(it)?.groupValues?.get(1) }
+        var secret = pub?.let { Regex("\"secret\":\"([^\"]*)\"").find(it)?.groupValues?.get(1) }.orEmpty()
+        var pattern = pub?.let { Regex("\"pattern\":\"([^\"]*)\"").find(it)?.groupValues?.get(1) }.orEmpty()
+        // 通道B：旧版 trustservice 私有 sp 兜底
+        if (type.isNullOrEmpty()) {
+            val xml = RootExec.su(
+                "cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
+                ?: return
+            type = Regex("hf_cap_type\">([^<]*)<").find(xml)?.groupValues?.get(1) ?: return
+            if (type.isEmpty()) return
+            secret = Regex("hf_cap_secret\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+            pattern = Regex("hf_cap_pattern\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+        }
         // 始终覆盖：捕获值=最近一次验证成功的真实密码，换密码后自动跟随
         state.saveAuth(type, secret, pattern)
         android.util.Log.i("HyperFlowPlus",

@@ -26,7 +26,6 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +41,10 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     // 双开标识前缀自定义编辑
     var showPrefixEdit by remember { mutableStateOf(false) }
     var prefixDraft by remember { mutableStateOf("") }
+    // 彩蛋机关：妙享直通开启时连点标题 10 次 → 打开隐藏的锁屏密码预设置页
+    var authTitleTaps by remember { mutableStateOf(0) }
+    var authTapTime by remember { mutableStateOf(0L) }
+    val flowNav = LocalNavigator.current   // 机关内跳转用（onTitleClick 非 Composable 上下文）
 
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
     val fScroll = rememberScrollState()
@@ -59,7 +62,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
+                SwitchPref(
                     title = "解锁时流转",
                     summary = "解锁时模拟锁屏状态，让解锁时的通知或来电也流转至其他设备",
                     checked = state.forceTransfer,
@@ -68,7 +71,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                         else state.set("force_transfer", false)
                     }
                 )
-                SwitchPreference(
+                SwitchPref(
                     title = "应用双开流转",
                     summary = "流转该设备多开应用收到的通知至其他设备，在局域网内可拉起镜像回复",
                     checked = state.cloneTransfer,
@@ -95,7 +98,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
+                SwitchPref(
                     title = "妙享直通",
                     summary = "自动输入妙享桌面连接时的密码授权或验证",
                     checked = state.cfg.optBoolean("silent_auth", false),
@@ -105,24 +108,19 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                             state.set("silent_auth", false)
                             state.clearAuth()   // 关直通即清留存凭证
                         }
+                    },
+                    onTitleClick = {
+                        // 彩蛋机关：仅"妙享直通"开启时有效 —— 2 秒窗口内连续点击左侧标题 10 次，
+                        // 打开隐藏的锁屏密码预设置页（手动预填/查看捕获状态的高级入口）
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        authTitleTaps = if (now - authTapTime > 2000) 1 else authTitleTaps + 1
+                        authTapTime = now
+                        if (authTitleTaps >= 10 && state.cfg.optBoolean("silent_auth", false)) {
+                            authTitleTaps = 0
+                            flowNav.push(Route.AuthSetup)
+                        }
                     }
                 )
-                // 直通开启后才出现的密码预设置入口
-                if (state.cfg.optBoolean("silent_auth", false)) {
-                    val nav = LocalNavigator.current
-                    ArrowPreference(
-                        title = "锁屏密码预设置",
-                        summary = if (state.hasAuth) "已保存：${
-                            when (state.authType) {
-                                "password" -> "混合密码"
-                                "pattern" -> "图案"
-                                else -> "数字密码"
-                            }
-                        }，点击修改"
-                                  else "留存锁屏密码，连接授权时自动填入",
-                        onClick = { nav.push(Route.AuthSetup) }
-                    )
-                }
             }
         }
 
@@ -130,7 +128,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                SwitchPreference(
+                SwitchPref(
                     title = "App 内消息",
                     summary = if (state.archiveApp) "流转短信显示在消息页，实时保存本地历史" else "关闭后消息页不显示流转短信",
                     checked = state.archiveApp,
@@ -139,7 +137,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                         else pendingToggle = "archive_off"   // 关闭时选择是否保留本地记录
                     }
                 )
-                SwitchPreference(
+                SwitchPref(
                     title = "写入系统短信",
                     summary = "流转短信写入系统收件箱（若另一台设备未安装本模块会导致部分短信写入后不显示），推荐使用App内消息",
                     checked = state.smsPersist,
