@@ -66,6 +66,13 @@ public class HookForceTransfer {
                             MiflowLog.v("isDeviceSupported: pkg=" + sbn.getPackageName()
                                     + " category=" + (gateN != null ? gateN.category : "null")
                                     + " key=" + sbn.getKey());
+                            // v1.1.0-beta33：来电跨设备接听 —— 仅"来电中"强制放行流转，
+                            // 由 HookCallVoip 把形态修正为 voip 全屏（亮屏也能接听）。
+                            // 去电/未接/已结束一律交给原生，避免非来电窗口错乱。
+                            if (isCallSbn(sbn) && isIncomingCallState(sbn)) {
+                                MiflowLog.d("isDeviceSupported: force true for incoming call, key=" + sbn.getKey());
+                                return Boolean.TRUE;
+                            }
                             // v1.1.0-beta24：只拦截运行状态卡片，其他通知完全交给小米原生。
                             // 通过 HookCallRelay 模拟锁屏，让原生自己判断要不要流转。
                             if (isRunnableStateCard(sbn)) {
@@ -125,6 +132,21 @@ public class HookForceTransfer {
             android.app.Notification n = sbn.getNotification();
             return n != null && n.category != null
                     && n.category.equals(android.app.Notification.CATEGORY_CALL);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 是否"来电中"：extras 无 callType（早期来电通知缺失，视为来电中）或 callType==1；
+     *  去电(2)/未接(3)/已结束排除，避免接听/挂断后的残留通知被强制走 voip 全屏。 */
+    private static boolean isIncomingCallState(StatusBarNotification sbn) {
+        try {
+            android.app.Notification n = sbn.getNotification();
+            if (n == null || n.extras == null) {
+                return false;
+            }
+            int callType = n.extras.getInt("android.callType", 1);
+            return callType == 1;
         } catch (Throwable t) {
             return false;
         }
