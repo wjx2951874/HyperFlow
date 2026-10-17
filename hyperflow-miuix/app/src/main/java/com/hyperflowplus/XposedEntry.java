@@ -10,6 +10,7 @@ import com.hyperflowplus.hooks.HookRemoteOpen;
 import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
 import com.hyperflowplus.hooks.HookTrustAuth;
+import com.hyperflowplus.hooks.HookTrustAuthAuto;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
