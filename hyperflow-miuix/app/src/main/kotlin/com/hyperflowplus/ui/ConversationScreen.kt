@@ -325,7 +325,8 @@ fun ConversationTopBar(
             MiuixBackButton(onClick = onBack)
         },
         actions = {
-            // 排序：Window 级独立渲染，不依赖 Scaffold 宿主，点击不闪退
+            // 排序：页内 Overlay，renderInRootScaffold 强制画到根 Scaffold 层，
+            // 不开独立 Dialog（否则丢 NavigationEventDispatcherOwner 闪退）
             OverlayIconDropdownMenu(
                 entry = DropdownEntry(
                     items = listOf(
@@ -340,7 +341,8 @@ fun ConversationTopBar(
                             onClick = { if (desc) onSetSort("asc") }
                         )
                     )
-                )
+                ),
+                renderInRootScaffold = true,
             ) {
                 Icon(
                     imageVector = MiuixIcons.Sort,

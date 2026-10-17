@@ -366,7 +366,10 @@ fun HyperFlowApp() {
                                             }
                                         )
                                     )
-                                )
+                                ),
+                                // 画到根 Scaffold overlay 层、不开独立 Dialog；
+                                // 否则新 composition 拿不到 NavDisplay 的 NavigationEventDispatcherOwner 而崩
+                                renderInRootScaffold = true,
                             ) {
                                 top.yukonga.miuix.kmp.basic.Icon(
                                     imageVector = MiuixIcons.Sort,
@@ -393,7 +396,8 @@ fun HyperFlowApp() {
                                             onClick = { state.setMsgMode("local") }
                                         )
                                     )
-                                )
+                                ),
+                                renderInRootScaffold = true,
                             ) {
                                 top.yukonga.miuix.kmp.basic.Icon(
                                     imageVector = MiuixIcons.Filter,
