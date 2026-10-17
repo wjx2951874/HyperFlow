@@ -43,7 +43,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -132,30 +132,29 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                     }
                 }
             } else if (stage == "choose") {
-                // 第一步：选择密码类型（仅识别失败时到达）
+                // 第一步：选择密码类型（仅识别失败时到达）。
+                // 本页只是"选一个去录入"、无已存限制态，不用单选圆圈占位，
+                // 直接左对齐列表行（ArrowPreference），点击即进输入页。
                 GroupTitle("选择密码类型")
                 Card(Modifier.fillMaxWidth()) {
                     Column {
-                        RadioButtonPreference(
+                        ArrowPreference(
                             title = "数字密码",
                             summary = "4–16 位纯数字",
-                            selected = type == "pin",
                             onClick = {
                                 type = "pin"; first = ""; second = ""; step = 0; error = ""; stage = "input"
                             }
                         )
-                        RadioButtonPreference(
+                        ArrowPreference(
                             title = "混合密码",
-                            summary = "字母 / 数字 / 符号，4–16 位",
-                            selected = type == "password",
+                            summary = "字母 / 数字 / 符号，6–16 位",
                             onClick = {
                                 type = "password"; first = ""; second = ""; step = 0; error = ""; stage = "input"
                             }
                         )
-                        RadioButtonPreference(
+                        ArrowPreference(
                             title = "图案",
                             summary = "3×3 连线，至少连接 4 个点",
-                            selected = type == "pattern",
                             onClick = {
                                 type = "pattern"; first = ""; second = ""; step = 0; error = ""; stage = "input"
                             }
@@ -314,7 +313,9 @@ private fun checkRule(type: String, first: String, second: String, step: Int): S
         if (step == 1 && first != second) return "两次图案不一致，请重新绘制"
         return null
     }
-    if (cur.length !in 4..16) return "长度需为 4–16 位"
+    // 长度下限：混合密码（字母/数字/符号）系统要求至少 6 位，数字 PIN 4 位起
+    val minLen = if (type == "password") 6 else 4
+    if (cur.length !in minLen..16) return "长度需为 $minLen–16 位"
     if (type == "pin" && !cur.all { it.isDigit() }) return "数字密码只能包含 0–9"
     if (step == 1 && first != second) return "两次输入不一致，请重新输入"
     return null

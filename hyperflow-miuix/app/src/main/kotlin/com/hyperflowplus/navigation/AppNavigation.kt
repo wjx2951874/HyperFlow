@@ -117,7 +117,10 @@ fun AppNavigation() {
                 entry<Route.Theme>(swipeDismiss = swipeBackDirection) {
                     ThemeSettingsScreen(HFState, onBack = { navigator.pop() })
                 }
-                entry<Route.AuthSetup>(swipeDismiss = swipeBackDirection) {
+                // AuthSetup（锁屏密码预设置）不注册横滑返回：图案绘制中右滑会误退丢失路径，
+                // BackHandler 拦不住 NavDisplay 的手势级 swipeDismiss，只能整页禁用横滑，
+                // 返回统一走系统返回键（图案输入时 AuthSetupScreen 内 BackHandler 已拦截）。
+                entry<Route.AuthSetup> {
                     AuthSetupScreen(HFState, onBack = { navigator.pop() })
                 }
             }
