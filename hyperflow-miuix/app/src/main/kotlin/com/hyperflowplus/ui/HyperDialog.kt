@@ -49,6 +49,8 @@ fun HyperDialog(
     titleAction: (@Composable () -> Unit)? = null,
     onDismiss: () -> Unit,
     bottomInset: Dp = smartInset,
+    /** true=屏幕正中央对齐（输入类弹窗，避免底部随键盘上下飘）；false=底部弹出（默认） */
+    centered: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     if (!show) return
@@ -69,13 +71,13 @@ fun HyperDialog(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) { onDismiss() },
-            contentAlignment = Alignment.BottomCenter
+            contentAlignment = if (centered) Alignment.Center else Alignment.BottomCenter
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = bottomInset)
+                    .padding(bottom = if (centered) 0.dp else bottomInset)
                     .clip(RoundedCornerShape(28.dp))
                     .background(
                         if (MiuixTheme.colorScheme.background.luminance() < 0.5f)

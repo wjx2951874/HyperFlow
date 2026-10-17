@@ -30,9 +30,6 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.ime
 
 /**
  * 流转页（底部导航第 2 页）：四个功能开关集中管理。
@@ -84,7 +81,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 if (state.cloneTransfer) {
                     ArrowPreference(
                         title = "双开标识前缀",
-                        summary = "【${state.clonePrefix}】，点击修改",
+                        summary = "现在为【${state.clonePrefix}】，点击可修改",
                         onClick = {
                             prefixDraft = state.clonePrefix
                             showPrefixEdit = true
@@ -243,20 +240,19 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     }
 
     // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
+    // 居中稳定卡片：不用底部 + imeBottom，避免卡片随键盘上下飘/卡顿
     if (showPrefixEdit) {
-        // 键盘避让走 bottomInset（卡片底部 padding，不撑高卡片）；
-        // 不再用末尾大 Spacer：独立 Popup 内 ime inset 会被算成巨大值把卡片拉成空大块
-        val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
         HyperDialog(
             show = true,
             title = "双开标识前缀",
-            bottomInset = imeBottom,
+            summary = "标题前自动包进【】，留空则用默认「双开」",
+            centered = true,
             onDismiss = { showPrefixEdit = false }
         ) {
             TextField(
                 value = prefixDraft,
                 onValueChange = { prefixDraft = it },
-                label = "标识文字（自动包进【】）",
+                label = "标识文字",
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             )

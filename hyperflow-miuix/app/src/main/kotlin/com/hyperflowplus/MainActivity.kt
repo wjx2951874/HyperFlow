@@ -270,12 +270,12 @@ fun HyperFlowApp() {
 
             val tabs = listOf(
                 Tab("首页", Icons.Filled.Home),
-                Tab("流转", Icons.Filled.Send),
+                Tab("功能", Icons.Filled.Send),
                 Tab("消息", Icons.Filled.Notifications),
                 Tab("设置", Icons.Filled.Settings)
             )
             // 四个页面各显示页面名（软件名移到设置页关于区）
-            val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
+            val title = when (tab) { 0 -> "首页"; 1 -> "功能"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
             // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动上移避开悬浮胶囊；标准导航贴底（仅留安全边距）
             com.hyperflowplus.ui.smartInset = if (state.bottomBarStyle != "standard") 88.dp else 20.dp

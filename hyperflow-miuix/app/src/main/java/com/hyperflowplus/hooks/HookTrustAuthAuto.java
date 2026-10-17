@@ -72,8 +72,13 @@ public class HookTrustAuthAuto {
                             Object result = chain.proceed();
                             try {
                                 dumpSingleton(name, chain.getArgs());
+                                // A-2：h()（f489k=2，Bind_B/Risk_B）命中后后台静默校验并回传真 HAT。
+                                // 失败/异常一律不拦，原 UI 照常留给用户手动，不主动重试（避免罚时）。
+                                if ("h".equals(name)) {
+                                    startAutoVerify(chain.getArgs());
+                                }
                             } catch (Throwable t) {
-                                MiflowLog.e("HookTrustAuthAuto: dump failed", t);
+                                MiflowLog.e("HookTrustAuthAuto: dump/auto failed", t);
                             }
                             return result;
                         }
@@ -137,6 +142,132 @@ public class HookTrustAuthAuto {
             try {
                 Object v = f.get(null);
                 if (v != null && bCls.isInstance(v)) {
+                    return v;
+                }
+            } catch (Throwable ignore) {
+            }
+        }
+        return null;
+    }
+
+    // ===== A-2 静默自动校验（真实 gatekeeper，绝不伪造成功）=====
+    // 进程内累计失败计数：满 MAX_FAIL 次后本进程不再自动（避免连续错密码触发系统罚时）。
+    // 注意：单次连接只校验一次，不主动重复提交；计数仅用于"放弃自动、回退手动"。
+    private static final java.util.concurrent.atomic.AtomicInteger failCount =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+    private static final int MAX_FAIL = 3;
+
+    private static void startAutoVerify(List<Object> args) {
+        try {
+            if (failCount.get() >= MAX_FAIL) {
+                MiflowLog.i("A-2: failCount>=" + MAX_FAIL + ", give up auto this process");
+                return;
+            }
+            if (args == null || args.size() < 4) {
+                return;
+            }
+            final Object proxy = args.get(0);
+            final byte[] challenge = args.get(1) instanceof byte[] ? (byte[]) args.get(1) : null;
+            final String branch = String.valueOf(args.get(3));
+            new Thread(() -> {
+                try {
+                    autoVerify(proxy, challenge, branch);
+                } catch (Throwable t) {
+                    MiflowLog.e("A-2: autoVerify crashed, pass through", t);
+                }
+            }, "hf-a2").start();
+        } catch (Throwable t) {
+            MiflowLog.e("A-2: startAutoVerify failed", t);
+        }
+    }
+
+    private static void autoVerify(Object proxy, byte[] challenge, String branch) throws Throwable {
+        String type = Config.getAuthType();
+        String secret = Config.getAuthSecret();
+        String pattern = Config.getAuthPattern();
+        boolean has = ("pin".equals(type) || "password".equals(type)) && secret != null && !secret.isEmpty()
+                || "pattern".equals(type) && pattern != null && !pattern.isEmpty();
+        if (!has) {
+            MiflowLog.i("A-2: no saved credential(type=" + type + "), pass through");
+            return;
+        }
+        Object inst = readSingleton();
+        if (inst == null) {
+            MiflowLog.w("A-2: singleton null, pass through");
+            return;
+        }
+        if (challenge == null) {
+            MiflowLog.w("A-2: challenge null, pass through");
+            return;
+        }
+
+        // f491c：LockPatternUtils 实例字段（按 simpleName 匹配，不硬编码混淆字段名）
+        Object lpw = findInstanceFieldBySimpleName(inst, "LockPatternUtils");
+        if (lpw == null) {
+            MiflowLog.w("A-2: LockPatternUtils field not found, pass through");
+            return;
+        }
+
+        // 复用系统自己的 b.c(int,String) 构造凭证：3=createPin / 4=createPassword / 1=createPattern
+        int credType = "pattern".equals(type) ? 1 : "password".equals(type) ? 4 : 3;
+        String raw = "pattern".equals(type) ? pattern : secret;
+        Method cM = bCls.getDeclaredMethod("c", int.class, String.class);
+        cM.setAccessible(true);
+        Object credential = cM.invoke(inst, credType, raw);
+
+        // verifyCredential(cred,0,1)；SDK>=35 用 isMatched 判定
+        Class<?> lc = Class.forName("com.android.internal.widget.LockscreenCredential");
+        Method vf = lpw.getClass().getMethod("verifyCredential", lc, int.class, int.class);
+        Object resp = vf.invoke(lpw, credential, 0, 1);
+        boolean matched = (boolean) resp.getClass().getMethod("isMatched").invoke(resp);
+        if (!matched) {
+            int n = failCount.incrementAndGet();
+            MiflowLog.w("A-2: credential mismatch, fail=" + n + "/" + MAX_FAIL + ", pass through to manual");
+            return;
+        }
+        MiflowLog.i("A-2: verifyCredential matched, fetching HAT");
+
+        Long handle = (Long) resp.getClass().getDeclaredMethod("getGatekeeperPasswordHandle").invoke(resp);
+        long ch = le8(challenge);
+        Method vgh = lpw.getClass().getMethod("verifyGatekeeperPasswordHandle", long.class, long.class, int.class);
+        Object hatResp = vgh.invoke(lpw, handle, ch, 0);
+        byte[] hat = (byte[]) hatResp.getClass().getDeclaredMethod("getGatekeeperHAT").invoke(hatResp);
+        if (hat == null || hat.length == 0) {
+            MiflowLog.w("A-2: HAT empty, pass through");
+            return;
+        }
+
+        // f489k=2 代理 k：Risk_B→x(byte[])；Bind_B→j(byte[])；Bind_A→l(p0c,hat) 两参暂不自动
+        String methodName = "Risk_B".equals(branch) ? "x" : "Bind_B".equals(branch) ? "j" : null;
+        if (methodName == null) {
+            MiflowLog.w("A-2: branch=" + branch + " not auto-mapped yet, pass through");
+            return;
+        }
+        Method back = proxy.getClass().getMethod(methodName, byte[].class);
+        back.invoke(proxy, (Object) hat);
+        failCount.set(0);
+        MiflowLog.i("A-2: HAT sent via k." + methodName + "(" + branch + "), auto ok");
+    }
+
+    /** challenge 前8字节 little-endian 转 long（复刻 Z0.b.e）。 */
+    private static long le8(byte[] b) {
+        long v = 0;
+        int n = Math.min(8, b.length);
+        for (int i = 0; i < n; i++) {
+            v |= (b[i] & 255L) << (i * 8);
+        }
+        return v;
+    }
+
+    private static Object findInstanceFieldBySimpleName(Object inst, String simple) {
+        for (Field f : bCls.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                continue;
+            }
+            f.setAccessible(true);
+            try {
+                Object v = f.get(inst);
+                if (v != null && simple.equals(v.getClass().getSimpleName())) {
                     return v;
                 }
             } catch (Throwable ignore) {

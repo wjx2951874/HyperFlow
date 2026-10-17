@@ -1,4 +1,4 @@
-# HyperFlow 1.1.0-beta32 更新日志
+# HyperFlow 1.1.0-beta33 更新日志
 
 ## 修复
 
@@ -15,6 +15,11 @@
 - **根源**：miuix 菜单内部的 `NavigationBackHandler` 需要 `LocalNavigationEventDispatcherOwner`，菜单被提层到独立 composition 后读不到 entry 内的 owner（null）即抛 `IllegalStateException: No NavigationEventDispatcher was provided`。`renderInRootScaffold=true` 只改绘制层级、补不上 owner。
 - **根治**：在 `AppNavigation` 最外层（`MiuixTheme` 内、`NavDisplay` 外）用 `CompositionLocalProvider` 提供一个兜底空 `NavigationEventDispatcher()`，entry 内 `NavDisplay` 自行覆盖；不再依赖 `renderInRootScaffold` 开关。
 
+### 3. 界面小调整
+- 底部导航第 2 个 tab「流转」改名为「功能」（顶部页名同步）；页面内"通知流转"分组能力名保留。
+- 设置页「版本」标题字重由 Regular 提到 Medium，与其他条目对齐，不再偏细。
+- 双开标识前缀：条目提示改为「现在为【内容】，点击可修改」；编辑弹窗由底部随键盘飘移改为屏幕居中稳定卡片（标题+说明+输入框+取消/保存）。
+
 ## 进展（开发埋点，不影响现有行为）
 
 ### A 方案 · 主动后台静默校验 A-1（只读观测）
@@ -23,9 +28,13 @@
 - A-2 待 A-1 日志确认字段后，再接 `verifyCredential → getGatekeeperPasswordHandle → verifyGatekeeperPasswordHandle → getGatekeeperHAT → 按分支回传真 HAT`，实现不用手输、后台自动过校验。
 - 旧被动填值 `HookTrustAuth`（hook `A.d.e` 替换入参）保留不动。
 
+### A 方案 · A-2 主动静默校验（本版编码，待实机联调）
+- A-1 已在真实连接命中 Risk_B 分支，dump 出单例字段（见 `docs/HANDOFF-next.md` 第 4.3 节）。
+- `HookTrustAuthAuto` 在 `Z0.b.h()` 命中后开后台线程：复用系统 `b.c(type,str)` 构造凭证（PIN/混合密码/图案三型）→ `verifyCredential` 真实校验 → 取真 HAT → 按分支回传（Risk_B→`k.x`、Bind_B→`k.j`）。
+- 不模拟点击、不伪造成功；失败/异常静默放行回手动，**连续失败满 3 次本进程放弃自动**，避免反复触发系统罚时。
+- 待联调：实机确认 `A-2: SUCCESS, HAT sent via k.x`；补 Bind_A(`k.l` 两参)；图案实机验证。
+
 ## 已知问题
 
-- 外观"跟随系统"尚未随系统深浅色实时切换。
-- 设置页"版本"二字字重与其他条目不一致（偏细）。
-- A-2 主动回传待 A-1 日志联调。
+- A-2 已编码，待实机联调确认自动过；Bind_A/图案分支待补。
 - 电话流转：锁屏可流转，亮屏不行。
