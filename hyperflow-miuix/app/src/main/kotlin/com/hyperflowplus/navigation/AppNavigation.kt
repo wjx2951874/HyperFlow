@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.hyperflowplus.HFState
 import com.hyperflowplus.HyperFlowApp
 import com.hyperflowplus.ui.AuthSetupScreen
@@ -79,7 +82,18 @@ fun AppNavigation() {
     val swipeBackDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl)
         NavSwipeDirection.RightToLeft else NavSwipeDirection.LeftToRight
 
+    // 兜底返回分发器：根 Scaffold 的 MiuixPopupHost 把菜单/气泡提升到 NavDisplay entry 之外时，
+    // entry 内 provide 的 owner 取不到，NavigationBackHandler 直接抛
+    // "No NavigationEventDispatcher was provided via LocalNavigationEventDispatcherOwner"。
+    // 这里在最外层 provide 一个空 dispatcher 兜底（entry 内 NavDisplay 会自行覆盖，不影响弹栈）。
+    val fallbackDispatcher = remember { NavigationEventDispatcher() }
+    val fallbackOwner = remember(fallbackDispatcher) {
+        object : NavigationEventDispatcherOwner {
+            override val navigationEventDispatcher = fallbackDispatcher
+        }
+    }
     val content: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides fallbackOwner) {
         CompositionLocalProvider(LocalNavigator provides navigator) {
             // 全局返回键处理：栈中多于 1 页时弹栈，否则不处理（让系统退出 App）
             BackHandler(enabled = backStack.size > 1) {
@@ -107,6 +121,7 @@ fun AppNavigation() {
                     AuthSetupScreen(HFState, onBack = { navigator.pop() })
                 }
             }
+        }
         }
     }
     if (amoledColors != null) {

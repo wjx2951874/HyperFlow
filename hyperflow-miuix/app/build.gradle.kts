@@ -12,8 +12,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 158
-        versionName = "1.1.0-beta30"
+        versionCode = 159
+        versionName = "1.1.0-beta31"
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -77,6 +77,10 @@ dependencies {
     // 1.1.0：导航栈（NavDisplay 页面转场）+ 超椭圆圆角（squircle）—— miuix 0.9.4 专属模块
     implementation("top.yukonga.miuix.kmp:miuix-nav-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-squircle-android:0.9.4")
+    // 弹窗兜底返回分发器：根 Scaffold 的 MiuixPopupHost 提升到 entry 外时提供 owner，消除
+    // "No NavigationEventDispatcher was provided via LocalNavigationEventDispatcherOwner" 闪退
+    implementation("androidx.navigationevent:navigationevent-compose:1.1.2")
+    implementation("androidx.navigationevent:navigationevent:1.1.2")
 
     // 1.1.0：预测性返回（反射调用 hidden API setEnableOnBackInvokedCallback，00 规范 §10）
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
