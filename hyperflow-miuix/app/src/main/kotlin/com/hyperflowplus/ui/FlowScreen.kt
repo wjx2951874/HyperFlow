@@ -196,7 +196,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启妙享直通嘛？",
-            content = "开启后，其他设备通过小米妙享桌面连接该设备被要求输入密码完成授权或验证时，能够自动填入在预设置中保存的密码以自动完成验证。若未预填入密码，该功能不生效。\n\n开启后可能会增加安全风险，请谨慎使用！",
+            content = "开启后，其他设备通过小米妙享桌面连接该设备被要求输入密码完成验证或授权时，会自动填入此前在该设备解锁或授权时读取到的密码完成验证。\n\n相关数据均存储在本地，若担心安全问题，请勿开启此功能。",
             countdownSec = 5,
             onConfirm = { state.set("silent_auth", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
