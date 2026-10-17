@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
 
+import com.hyperflowplus.Config;
 import com.hyperflowplus.MiflowLog;
 import com.hyperflowplus.XposedEntry;
 
@@ -31,6 +32,7 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  *   - 旧版混入 iOS 强开 voip（与本需求无关，且可能改变 iOS 设备行为）。
  *
  * 本版门控：
+ *   - 全部依赖功能①开关（force_transfer）：关闭 = 零干预，保持小米原生（仅真实锁屏流转）；
  *   - 仅 callType == 1（来电中）设 notification_from_broadcast=true 并放行过滤；
  *   - 去电（2）/未接（3）/未知（0 或缺失）一律交给原生；
  *   - 由 HookForceTransfer 负责 isDeviceSupported 对"来电中"强制放行，
@@ -58,6 +60,9 @@ public class HookCallVoip {
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
+                            if (!Config.isForceTransferEnabled()) {
+                                return chain.proceed();
+                            }
                             StatusBarNotification sbn = (StatusBarNotification) chain.getArg(0);
                             if (isIncomingCall(sbn)) {
                                 Notification n = sbn.getNotification();
@@ -89,6 +94,9 @@ public class HookCallVoip {
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
+                            if (!Config.isForceTransferEnabled()) {
+                                return chain.proceed();
+                            }
                             StatusBarNotification sbn = (StatusBarNotification) chain.getArg(0);
                             if (isIncomingCall(sbn)) {
                                 MiflowLog.d("filterCall: bypass for incoming call, pkg="

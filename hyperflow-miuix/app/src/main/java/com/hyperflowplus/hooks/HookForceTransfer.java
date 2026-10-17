@@ -66,10 +66,11 @@ public class HookForceTransfer {
                             MiflowLog.v("isDeviceSupported: pkg=" + sbn.getPackageName()
                                     + " category=" + (gateN != null ? gateN.category : "null")
                                     + " key=" + sbn.getKey());
-                            // v1.1.0-beta33：来电跨设备接听 —— 仅"来电中"强制放行流转，
-                            // 由 HookCallVoip 把形态修正为 voip 全屏（亮屏也能接听）。
-                            // 去电/未接/已结束一律交给原生，避免非来电窗口错乱。
-                            if (isCallSbn(sbn) && isIncomingCallState(sbn)) {
+                            // v1.1.0-beta33：来电跨设备接听 —— 仅"来电中"强制放行流转（受功能①开关门控，
+                            // 关闭=原生判定：锁屏可流转、亮屏拒绝），由 HookCallVoip 把形态修正为
+                            // voip 全屏（亮屏也能接听）。去电/未接/已结束一律交给原生。
+                            if (Config.isForceTransferEnabled()
+                                    && isCallSbn(sbn) && isIncomingCallState(sbn)) {
                                 MiflowLog.d("isDeviceSupported: force true for incoming call, key=" + sbn.getKey());
                                 return Boolean.TRUE;
                             }
