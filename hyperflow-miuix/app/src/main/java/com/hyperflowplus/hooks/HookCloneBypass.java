@@ -1,6 +1,7 @@
 package com.hyperflowplus.hooks;
 
 import android.app.Notification;
+import android.content.Intent;
 import android.service.notification.StatusBarNotification;
 
 import com.hyperflowplus.Config;
@@ -140,6 +141,24 @@ public class HookCloneBypass {
             Notification n = sbn.getNotification();
             if (n == null || n.extras == null) {
                 return;
+            }
+            // 给分身通知的"打开 Intent"打上 hf_is_clone 标记：
+            // 点击通知时系统会用 contentIntent 里的 Intent 发起 startActivity，
+            // HookRemoteOpen 检查到该标记就直接改写为 999 空间，
+            // 不再依赖"先收到 u999 打开、3 秒内再收到 u0"的时序反推（该时序有竞态，
+            // 第一发 u0 先到时主微信会被误放行 → 两个微信都被拉起）。
+            try {
+                android.app.PendingIntent pi = n.contentIntent;
+                if (pi != null) {
+                    // getIntent() 是 API 33+ 方法，编译期按 minSdk 不可直接调用，用反射（运行期必在 Android 14+）
+                    java.lang.reflect.Method gm = android.app.PendingIntent.class.getMethod("getIntent");
+                    Intent ci = (Intent) gm.invoke(pi);
+                    if (ci != null) {
+                        ci.putExtra(HF_IS_CLONE, true);
+                    }
+                }
+            } catch (Throwable t) {
+                MiflowLog.w("markCloneTitle intent tag failed: " + t.getMessage());
             }
             CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
             if (title == null || title.length() == 0) {

@@ -41,7 +41,11 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  */
 public class HookRemoteOpen {
 
-    // v1.1.0-beta9：记录最近一次 u999 打开时间，用于区分主/分身通知
+    // v1.1.0-beta10：分身通知打开 Intent 上的自描述标记（HookCloneBypass.markCloneTitle 写入）。
+    // 命中即确认这是"点击分身通知"发起的打开，直接改 999，不再依赖时序反推。
+    private static final String HF_IS_CLONE = "hf_is_clone";
+
+    // v1.1.0-beta9：记录最近一次 u999 打开时间（仅作标记丢失时的兜底反推）
     private static long lastCloneOpenTime = 0;
 
     /**
@@ -167,38 +171,40 @@ public class HookRemoteOpen {
             MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
                 + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
             
-            // v1.1.0-beta9：区分主/分身通知
-            // - 如果是 u999 请求（分身微信自己打开的），记录时间戳
-            // - 如果是 u0 请求（mirror 又开了一次主微信），检查最近 3 秒内有没有 u999
-            //   有 u999 → 分身通知场景 → 改写成 999
-            //   没有 u999 → 主通知场景 → 不拦截
-            if (userId == USER_CLONE) {
-                lastCloneOpenTime = System.currentTimeMillis();
-                MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
-                return chain.proceed();
-            }
-            if (userId != 0 && userId != -1) {
-                return chain.proceed();
+            // 识别"分身通知点击"（V1.1.0-beta10 重构：请求自描述，摆脱时序竞态）
+            // 之前的反推法（先收到 u999 打开、3 秒内再收到 u0 → 认为分身通知）有竞态：
+            // 第一发 u0 经常在 u999 之前到达 → 被判成"主通知"放行 → 主微信先被拉起，
+            // 随后分身再开 → "两个微信都起来"。现在优先看请求自带的 hf_is_clone 标记：
+            boolean isCloneMarked = intent.getBooleanExtra(HF_IS_CLONE, false);
+            if (!isCloneMarked) {
+                // 标记缺失时兜底用旧的"最近 u999 打开时间"反推（兼容标记在链路中丢失的情况）
+                if (userId == USER_CLONE) {
+                    lastCloneOpenTime = System.currentTimeMillis();
+                    MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
+                    return chain.proceed();
+                }
+                if (userId != 0 && userId != -1) {
+                    return chain.proceed();
+                }
+                long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
+                if (sinceClone > 3000) {
+                    MiflowLog.d("clone open: no clone marker & no recent clone open (" + sinceClone + "ms ago), main notification, skip");
+                    return chain.proceed();
+                }
             }
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 MiflowLog.d("clone open: " + pkg + " not dual-installed, fallback to main user");
                 return chain.proceed();
             }
-            // v1.1.0-beta9：只有最近 3 秒内有 u999 打开记录，才认为这是分身通知的二次打开
-            long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
-            if (sinceClone > 3000) {
-                MiflowLog.d("clone open: no recent clone open (" + sinceClone + "ms ago), treating as main notification, skip");
-                return chain.proceed();
-            }
-            MiflowLog.d("clone open: detected clone notification (clone open " + sinceClone + "ms ago), redirecting");
+            MiflowLog.d("clone open: detected clone notification (marker=" + isCloneMarked + "), redirecting to user " + USER_CLONE);
             if (userId == 0) {
-                // 4a) 有 userId 参数：改写为 999，让 system_server 在分身空间打开
+                // 4a) 有 userId 参数：直接改写为 999，让 system_server 在分身空间打开（无反射失败风险）
                 setUserId(args, USER_CLONE);
                 MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
                 Config.bump(Config.CNT_CLONE);
             } else {
                 // 4b) 签名无 userId 参数（系统默认主空间打开）：
-                //     吞掉原调用，改用 IActivityTaskManager.startActivityAsUser 重发到 999。
+                //     吞掉原调用，改用 IActivityTaskManager.startActivityAsUser 以 999 重发。
                 //     反射失败/不可用时兜底走原逻辑，绝不误伤本地打开。
                 if (relaunchAsClone(chain, intent, pkg)) {
                     MiflowLog.d("clone open relaunched: " + pkg + " → user " + USER_CLONE);

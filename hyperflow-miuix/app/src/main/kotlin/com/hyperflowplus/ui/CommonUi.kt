@@ -14,20 +14,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** 分组标题（设置/消息/首页分组用） */
+/** 分组标题（设置/消息/首页分组用）；onTitleClick 非空时支持无反馈连点机关入口 */
 @Composable
-fun GroupTitle(text: String) {
+fun GroupTitle(text: String, onTitleClick: (() -> Unit)? = null) {
     Text(
         text,
         style = MiuixTheme.textStyles.body2,
         color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+            .then(
+                if (onTitleClick != null) Modifier.clickable(
+                    // 机关入口：无涟漪无高亮，避免暴露可点击性
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onTitleClick
+                ) else Modifier
+            )
     )
 }
 
@@ -43,53 +51,3 @@ fun MiuixBackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * 开关项（替代 miuix SwitchPreference）：**只有右侧 Switch 可点切换**，
- * 标题/摘要行不触发开关（用户要求：点击开关打开，而不是点击标题进行开关操作）。
- * onTitleClick 非空时标题列可点（供"彩蛋机关"等特殊入口用），默认 null 则标题完全不可点。
- */
-@Composable
-fun SwitchPref(
-    title: String,
-    summary: String? = null,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    onTitleClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            Modifier
-                .weight(1f)
-                .then(
-                    if (onTitleClick != null) Modifier.clickable(
-                        // 机关入口（连点标题触发）：无涟漪无高亮，避免暴露可点击性
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onTitleClick
-                    ) else Modifier
-                )
-        ) {
-            Text(
-                title,
-                style = MiuixTheme.textStyles.body1,
-                color = MiuixTheme.colorScheme.onBackground
-            )
-            if (summary != null) {
-                Text(
-                    summary,
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-        }
-        // 只有 Switch 本身响应点击切换
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}

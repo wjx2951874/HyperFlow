@@ -51,6 +51,7 @@ import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.hyperflowplus.ui.fixLspScript
 
@@ -110,7 +111,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
 
                 // 悬浮导航栏
-                SwitchPref(
+                SwitchPreference(
                     title = "悬浮导航栏",
                     summary = "以悬浮胶囊替代系统导航栏",
                     checked = state.navFloat,
@@ -119,7 +120,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
                 // 液态玻璃（仅悬浮开启时显示）
                 if (state.navFloat) {
-                    SwitchPref(
+                    SwitchPreference(
                         title = "液态玻璃",
                         summary = "为悬浮胶囊开启系统级液态玻璃",
                         checked = state.glassEffect,
