@@ -119,22 +119,30 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                 .verticalScroll(scroll)
                 .padding(horizontal = 12.dp)
         ) {
+            // 常驻调试入口：检测捕获状态（任何页面状态都可见）。
+            // 免预填排查用——点一下就知道"解锁时模块有没有读到密码"：
+            // 公共文件有值 → 捕获成功可直连；无值 → 先解锁输一次密码再回来点。
+            GroupTitle("免预填调试")
+            Card(Modifier.fillMaxWidth()) {
+                Column {
+                    ArrowPreference(
+                        title = "检测捕获状态",
+                        summary = if (diagText.isBlank()) "检查模块是否读到本机锁屏密码（公共文件/兜底/入库三处）" else diagText,
+                        onClick = {
+                            diagText = "检测中…"
+                            scope.launch { diagText = withContext(Dispatchers.IO) { checkCaptureDiag() } }
+                        }
+                    )
+                }
+            }
+
             // 已保存态：显示当前类型 + 更改 + 清除（首次进入已有凭证，或本次保存成功）
             if (saved) {
                 GroupTitle("已保存")
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("已保存：${typeName(type.ifBlank { state.authType })}", color = MiuixTheme.colorScheme.onSurface)
-                        Spacer(Modifier.height(8.dp))
-                        ArrowPreference(
-                            title = "检测捕获状态",
-                            summary = if (diagText.isBlank()) "检查模块是否读到本机锁屏密码（调试用）" else diagText,
-                            onClick = {
-                                diagText = "检测中…"
-                                scope.launch { diagText = withContext(Dispatchers.IO) { checkCaptureDiag() } }
-                            }
-                        )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(16.dp))
                         Button(
                             // 更换：清空本地输入、重新走识别流程；旧凭证暂不动，新密码两遍一致成功后才覆盖，失败绝不写入
                             onClick = {
@@ -397,7 +405,7 @@ private fun checkCaptureDiag(): String {
             when {
                 !pub.isNullOrEmpty() -> "结论：解锁/授权已捕获成功，连接时可直连"
                 !sp.isNullOrEmpty() -> "结论：仅旧通道有值，连接时会尝试填入"
-                else -> "结论：未捕获到——请解锁手机并输入一次锁屏密码，再回来点此检测"
+                else -> "结论：未捕获到——请解锁手机并输入一次锁屏密码，再回来点此检测；仍无则检查 LSPosed 模块作用域是否勾选【系统框架】（日常解锁捕获依赖注入 system_server）"
             }
         )
     }

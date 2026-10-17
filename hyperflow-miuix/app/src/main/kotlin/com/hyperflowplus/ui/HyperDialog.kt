@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,19 +56,81 @@ fun HyperDialog(
     /** true=屏幕正中央对齐（输入类弹窗，避免底部随键盘上下飘）；false=底部弹出（默认） */
     centered: Boolean = false,
     /**
-     * 键盘跟随（双开标识输入框等带输入框的弹窗）：在 Popup 外读取当前窗口的 IME 高度，
-     * 卡片底部 padding = 键盘高度 + bottomInset，让输入框紧贴输入法上方。
-     * 不能在 Popup 内部用 imePadding（Popup 窗口读不到真实 IME inset，
-     * 键盘动画期间会反复 resize 导致弹窗上下乱蹦）。
+     * 渲染载体（双开标识输入框等带键盘的弹窗必须用 inApp=true）：
+     *   - false（默认）= Popup 独立窗口：能盖住悬浮导航栏，但键盘弹出时 PopupWindow 默认
+     *     ADJUST_PAN 会把整个窗口顶上去（卡片"飞上边"），且 Popup 内读不到真实 IME inset
+     *     （imePadding 无效/乱蹦）。只适合无键盘的确认类弹窗。
+     *   - true = App 内 Box 覆盖层（不建窗口）：在 MainActivity 内容树里渲染，
+     *     imePadding 直接响应键盘 inset、跟随动画平滑，输入框紧贴输入法上方不蹦跳。
+     *     代价：层级低于系统悬浮导航栏（键盘弹出时悬浮栏通常被系统顶走，影响可忽略）。
      */
-    imeAware: Boolean = false,
+    inApp: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    if (!show) return
-    // Popup 外读取 IME 高度（跟随键盘动画实时更新；Popup 内 WindowInsets 恒为 0）
-    val imeBottom = if (imeAware) WindowInsets.ime.getBottom(LocalDensity.current) else 0
-
-    if (!show) return
+    if (inApp) {
+        // App 内覆盖层：不建独立窗口，imePadding 在 MainActivity 内容树内真实响应键盘。
+        // 键盘弹出时遮罩区域收窄到键盘上方，卡片贴键盘顶；键盘动画平滑跟随，不蹦跳。
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = if (centered) Alignment.Center else Alignment.BottomCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = if (centered) 0.dp else bottomInset)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(
+                        if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
+                            Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
+                        else MiuixTheme.colorScheme.surface
+                    )
+                    // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {}
+                    .padding(horizontal = 26.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (title != null) {
+                    Box(Modifier.fillMaxWidth()) {
+                        Text(
+                            title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        titleAction?.let {
+                            Box(Modifier.align(Alignment.CenterEnd)) { it() }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+                if (summary != null) {
+                    Text(
+                        summary,
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(20.dp))
+                }
+                content()
+            }
+        }
+        return
+    }
     // 窗口层 Popup 渲染：全屏遮罩盖住包括悬浮导航栏在内的一切（引导页同款层级），
     // 不受 Scaffold/悬浮栏遮挡；非系统 Dialog，KernelSU 环境不闪退
     Popup(
@@ -91,7 +154,7 @@ fun HyperDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = if (centered) 0.dp else bottomInset + with(LocalDensity.current) { imeBottom.toDp() })
+                    .padding(bottom = if (centered) 0.dp else bottomInset)
                     .clip(RoundedCornerShape(28.dp))
                     .background(
                         if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
