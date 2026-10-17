@@ -75,6 +75,14 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     val appCtx = LocalContext.current.applicationContext
     LaunchedEffect(redetect) {
         if (state.hasAuth && redetect == 0) return@LaunchedEffect
+        // 免预填：先把模块捕获的真实锁屏密码同步入库（有捕获值 → 直接"已保存"，跳过手动录入）
+        withContext(Dispatchers.IO) { syncCapturedAuth(state) }
+        if (state.hasAuth) {
+            type = state.authType
+            stage = "saved"
+            autoHint = "已自动捕获本机锁屏密码，免手动录入"
+            return@LaunchedEffect
+        }
         val (detected, raw) = withContext(Dispatchers.IO) { detectLockType(appCtx) }
         if (detected != null) {
             type = detected
@@ -318,6 +326,30 @@ private fun qualityToType(v: Int): String? = when {
     v and 0x80000 != 0 -> "password" // PASSWORD_QUALITY_ALPHANUMERIC
     v and 0x90000 != 0 -> "password" // PASSWORD_QUALITY_COMPLEX
     else -> null                      // 0 / 0x10000(SOMETHING=NUMERIC 共用) 无法区分
+}
+
+/**
+ * 免预填：模块（HookTrustAuthAuto）在 trustservice 进程捕获到真实锁屏凭证后写入其
+ * SharedPreferences（hyperflow_captured.xml），这里用 root 读回该文件，加密入库。
+ * 前提：用户曾通过授权盘输入过一次（或 A-2 注入触发过 Z0.b.c），此后永久免手动录入。
+ * 已有预存凭证时不覆盖（用户手动管理优先）。
+ */
+private fun syncCapturedAuth(state: HFState) {
+    try {
+        if (state.hasAuth) return
+        val xml = RootExec.su(
+            "cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
+            ?: return
+        val type = Regex("hf_cap_type\">([^<]*)<").find(xml)?.groupValues?.get(1)
+            ?: return
+        if (type.isEmpty()) return
+        val secret = Regex("hf_cap_secret\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+        val pattern = Regex("hf_cap_pattern\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+        state.saveAuth(type, secret, pattern)
+        android.util.Log.i("HyperFlowPlus", "captured auth synced: type=$type len=${secret.length + pattern.length}")
+    } catch (t: Throwable) {
+        android.util.Log.d("HyperFlowPlus", "syncCapturedAuth failed: $t")
+    }
 }
 
 /** 通道3：root 把 locksettings.db 拷到应用缓存后，用框架 SQLiteDatabase 直读密码类型。 */

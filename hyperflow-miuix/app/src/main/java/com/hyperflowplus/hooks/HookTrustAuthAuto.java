@@ -40,8 +40,9 @@ public class HookTrustAuthAuto {
             bCls = cl.loadClass("Z0.b");
             hookMethod("g");
             hookMethod("h");
+            hookCredentialCapture();   // 免预填：捕获系统每次构造的锁屏凭证（真实值）
             hookAuthUi(cl);   // A-2 成功回传 HAT 后自动关闭锁屏验证输入框
-            MiflowLog.i("HookTrustAuthAuto: installed on Z0.b.g/h (A-2, auto-close UI)");
+            MiflowLog.i("HookTrustAuthAuto: installed on Z0.b.g/h/c (A-2, auto-close UI)");
         } catch (ClassNotFoundException e) {
             MiflowLog.w("HookTrustAuthAuto: Z0.b not found (version mismatch?), skip");
         } catch (Throwable t) {
@@ -223,6 +224,85 @@ public class HookTrustAuthAuto {
             });
         } catch (Throwable t) {
             MiflowLog.e("A-2: finishAuthUi failed", t);
+        }
+    }
+
+    // ===== 免预填：捕获系统每次构造的锁屏凭证（Z0.b.c(int,String)）=====
+    // Android 系统不存锁屏密码明文（gatekeeper 只有不可逆 hash，root 也读不出），
+    // 唯一能拿到"实际值"的时机是系统构造凭证的瞬间。trustservice 校验（授权盘输入完成
+    // 或 A-2 注入）都会调 Z0.b.c(int,String)：1=createPattern / 3=createPin / 4=createPassword。
+    // 这里在 proceed 后把真实凭证写入 trustservice 进程自己的 SharedPreferences，
+    // App 侧（有 root）读回该文件 → 加密入库，之后 A-2 直接用，用户无需在设置页手动预填。
+    // 注意：A-2 自己反射调 b.c 也会触发本 hook，记录的是注入值，幂等无害。
+    private static void hookCredentialCapture() {
+        try {
+            for (Method m : bCls.getDeclaredMethods()) {
+                if (!m.getName().equals("c")) {
+                    continue;
+                }
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length != 2 || pt[0] != int.class || pt[1] != String.class) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                Object result = chain.proceed();
+                                try {
+                                    int type = (Integer) chain.getArgs().get(0);
+                                    String raw = (String) chain.getArgs().get(1);
+                                    captureCredential(type, raw);
+                                } catch (Throwable t) {
+                                    MiflowLog.e("A-2: capture credential err", t);
+                                }
+                                return result;
+                            }
+                        });
+                MiflowLog.i("A-2: hooked Z0.b.c(int,String) for credential capture");
+                return;
+            }
+            MiflowLog.w("A-2: Z0.b.c(int,String) not found, capture unavailable");
+        } catch (Throwable t) {
+            MiflowLog.w("A-2: hookCredentialCapture failed: " + t);
+        }
+    }
+
+    private static void captureCredential(int type, String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return;
+        }
+        String t = type == 1 ? "pattern" : type == 4 ? "password" : type == 3 ? "pin" : null;
+        if (t == null) {
+            return;
+        }
+        android.content.SharedPreferences sp = capturedSp();
+        if (sp == null) {
+            return;
+        }
+        // commit() 同步落盘：App 侧读取时文件必须已写入
+        sp.edit()
+                .putString("hf_cap_type", t)
+                .putString("hf_cap_secret", "pattern".equals(t) ? "" : raw)
+                .putString("hf_cap_pattern", "pattern".equals(t) ? raw : "")
+                .commit();
+        MiflowLog.i("A-2: captured " + t + " (len=" + raw.length() + ") to trustservice sp");
+    }
+
+    /** trustservice 进程自己的 SharedPreferences（App 侧 root 读取该文件）。 */
+    private static android.content.SharedPreferences capturedSp() {
+        try {
+            android.app.Application app = (android.app.Application)
+                    Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
+            if (app == null) {
+                return null;
+            }
+            return app.getSharedPreferences("hyperflow_captured", android.content.Context.MODE_PRIVATE);
+        } catch (Throwable t) {
+            MiflowLog.e("A-2: capturedSp failed", t);
+            return null;
         }
     }
 

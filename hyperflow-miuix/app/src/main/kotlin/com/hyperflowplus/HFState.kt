@@ -532,9 +532,23 @@ object HFState {
                 val detail = listOf(dIncremental, dDisplay).firstOrNull {
                     it.isNotBlank() && it != osVer && !osVer.contains(it) && !it.contains(osVer)
                 }
+                // 用户要求：不要"主串（detail）"括号结构，直接显示完整版本串，前面带厂商品牌
+                // （小米 → "HyperOS 4.0.2.0.XPCCNXM.D01"，与系统设置页一致）
                 val sysLine = when {
-                    osVer.isNotEmpty() -> if (detail != null) "$osVer（$detail）" else osVer
-                    detail != null -> detail
+                    detail != null -> {
+                        val brand = when {
+                            dOsName.isNotBlank() || dOsCode.isNotBlank() -> "HyperOS"
+                            dMiuiV.isNotBlank() -> "MIUI"
+                            dColor.isNotBlank() -> "ColorOS"
+                            dOneUI.isNotBlank() -> "One UI"
+                            dEmui.isNotBlank() -> "EMUI"
+                            dVivo.isNotBlank() -> "OriginOS"
+                            else -> osVer
+                        }
+                        val detail2 = if (detail.startsWith("OS")) detail.removePrefix("OS").trimStart() else detail
+                        if (brand.isNotBlank() && brand != osVer && !detail2.contains(brand)) "$brand $detail2" else detail2
+                    }
+                    osVer.isNotEmpty() -> osVer
                     else -> "未知"
                 }
                 devModel = dModel
