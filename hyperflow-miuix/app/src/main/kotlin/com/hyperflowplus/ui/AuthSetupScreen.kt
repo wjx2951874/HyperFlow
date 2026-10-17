@@ -73,21 +73,7 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     // root 自动识别本机锁屏类型；识别到直进输入页，识别不到才落到手选；更换后递增 redetect 重新识别
     LaunchedEffect(redetect) {
         if (state.hasAuth && redetect == 0) return@LaunchedEffect
-        val out = withContext(Dispatchers.IO) {
-            RootExec.su("sqlite3 /data/system/locksettings.db \"select value from locksettings where name='lockscreen.password_type';\" 2>/dev/null")
-        }
-        // sqlite3 输出为十进制整数；先清洗为纯数字再按十进制解析（此前误按16进制解析导致必然识别失败）
-        val v = out?.trim()?.filter { it.isDigit() }?.toIntOrNull()
-        val detected = when {
-            v == null -> null
-            v and 0xF == 1 -> "pin"        // 低4位 type：1=数字密码
-            v and 0xF == 2 -> "password"  // 2=混合密码
-            v and 0xF == 0 -> "pattern"   // 0=图案
-            v and 0x20000 != 0 -> "pin"   // quality 位兜底
-            v and 0x40000 != 0 -> "password"
-            v and 0x10000 != 0 -> "pattern"
-            else -> null
-        }
+        val (detected, raw) = withContext(Dispatchers.IO) { detectLockType() }
         if (detected != null) {
             type = detected
             stage = "input"
@@ -277,6 +263,48 @@ private fun typeName(t: String): String = when (t) {
     "password" -> "混合密码"
     "pattern" -> "图案"
     else -> "数字密码"
+}
+
+/**
+ * root 探测本机锁屏密码类型（返回 Pair<类型?, 原始探测输出?>）。
+ *
+ * 通道1（首选）：`cmd lock_settings get-credential-type` —— Android 11+ 系统服务权威回答，
+ *   不依赖 sqlite3 二进制（多数 ROM 未内置）。输出为 credential type：
+ *   1=图案 / 2=数字PIN / 3=混合密码 / 0 或 -1=无锁。
+ * 通道2（兜底）：读 `/data/system/locksettings.db` 的 `lockscreen.password_type`（AOSP quality 值）：
+ *   0x20000=复杂数字PIN、0x40000/0x80000/0x90000=字母/字母数字/复杂混合密码；
+ *   0x10000 是 SOMETHING（图案）与简单 NUMERIC（数字）共用值、无法区分，放弃判断避免误判。
+ * 两通道都拿不到确定类型 → 返回 null，界面落到手动选择；原始输出打日志便于排查。
+ */
+private fun detectLockType(): Pair<String?, String?> {
+    // 通道1：系统服务权威回答（不依赖 sqlite3）
+    val t1 = RootExec.su("cmd lock_settings get-credential-type 2>/dev/null")
+    val t1v = t1?.trim()?.let { Regex("-?\\d+").find(it)?.value?.toIntOrNull() }
+    if (t1v != null) {
+        val d = when (t1v) {
+            1 -> "pattern"
+            2 -> "pin"
+            3 -> "password"
+            else -> null // 0/-1 = 无锁屏密码，无法录入（让用户手动选类型无意义，仍落 choose 由 UI 提示）
+        }
+        if (d != null) return d to t1
+    }
+    // 通道2：sqlite3 兜底（部分 ROM 保留 sqlite3 二进制）
+    val t2 = RootExec.su("sqlite3 /data/system/locksettings.db \"select value from locksettings where name='lockscreen.password_type';\" 2>/dev/null")
+    val v = t2?.trim()?.filter { it.isDigit() }?.toIntOrNull()
+    if (v != null) {
+        val d = when {
+            v and 0x20000 != 0 -> "pin"      // PASSWORD_QUALITY_NUMERIC_COMPLEX
+            v and 0x40000 != 0 -> "password" // PASSWORD_QUALITY_ALPHABETIC
+            v and 0x80000 != 0 -> "password" // PASSWORD_QUALITY_ALPHANUMERIC
+            v and 0x90000 != 0 -> "password" // PASSWORD_QUALITY_COMPLEX
+            else -> null // 0 / 0x10000(SOMETHING=NUMERIC 共用) 无法区分，放弃避免误判
+        }
+        if (d != null) return d to t2
+    }
+    // 诊断：识别失败时把两通道原始输出记录下来，方便真机排查
+    android.util.Log.d("HyperFlowPlus", "auth type detect fail: cmdLockSettings='${t1?.trim()}' sqlite='${t2?.trim()}'")
+    return null to (t1?.trim() ?: t2?.trim())
 }
 
 private fun checkRule(type: String, first: String, second: String, step: Int): String? {
