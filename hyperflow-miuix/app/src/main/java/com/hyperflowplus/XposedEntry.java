@@ -5,6 +5,7 @@ import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCallVoip;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
+import com.hyperflowplus.hooks.HookKeyguardCapture;
 import com.hyperflowplus.hooks.HookMirrorObserve;
 import com.hyperflowplus.hooks.HookRemoteOpen;
 import com.hyperflowplus.hooks.HookSmsPersist;
@@ -56,11 +57,14 @@ public class XposedEntry extends XposedModule {
         ClassLoader cl = param.getDefaultClassLoader();
         if ("android".equals(pkgName)) {
             // system_server：拦截"远程打开应用"请求，把分身通知的点击改为打开 999 空间
-            // 微信/QQ（需要作用域勾选 android）
+            // 微信/QQ（需要作用域勾选 android）；并捕获日常锁屏解锁的凭证（免预填）
             try {
-                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect) ===");
+                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect + keyguard capture) ===");
                 installSafely("HookRemoteOpen[system]", new Runnable() {
                     @Override public void run() { HookRemoteOpen.installSystem(cl); }
+                });
+                installSafely("HookKeyguardCapture", new Runnable() {
+                    @Override public void run() { HookKeyguardCapture.install(cl); }
                 });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry system init failed", t);

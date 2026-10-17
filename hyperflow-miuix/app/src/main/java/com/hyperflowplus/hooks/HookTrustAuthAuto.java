@@ -358,37 +358,12 @@ public class HookTrustAuthAuto {
         }
     }
 
-    /** 写入 trustservice 进程自己的 SharedPreferences（App 侧 root 读回）。 */
+    /** 写入捕获凭证：统一走 CapturedCred（公共文件 + trustservice sp 双写），App 侧 root 读回。 */
     private static void writeCaptured(String type, String raw) {
         try {
-            android.content.SharedPreferences sp = capturedSp();
-            if (sp == null) {
-                return;
-            }
-            // commit() 同步落盘：App 侧读取时文件必须已写入
-            sp.edit()
-                    .putString("hf_cap_type", type)
-                    .putString("hf_cap_secret", "pattern".equals(type) ? "" : raw)
-                    .putString("hf_cap_pattern", "pattern".equals(type) ? raw : "")
-                    .commit();
-            MiflowLog.i("A-2: captured verified " + type + " (len=" + raw.length() + ") -> trustservice sp");
+            CapturedCred.write(type, raw);
         } catch (Throwable t) {
             MiflowLog.e("A-2: writeCaptured failed", t);
-        }
-    }
-
-    /** trustservice 进程自己的 SharedPreferences（App 侧 root 读取该文件）。 */
-    private static android.content.SharedPreferences capturedSp() {
-        try {
-            android.app.Application app = (android.app.Application)
-                    Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
-            if (app == null) {
-                return null;
-            }
-            return app.getSharedPreferences("hyperflow_captured", android.content.Context.MODE_PRIVATE);
-        } catch (Throwable t) {
-            MiflowLog.e("A-2: capturedSp failed", t);
-            return null;
         }
     }
 
