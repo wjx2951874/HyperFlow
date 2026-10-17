@@ -73,6 +73,10 @@ public class XposedEntry extends XposedModule {
                 installSafely("HookTrustAuth", new Runnable() {
                     @Override public void run() { HookTrustAuth.install(cl); }
                 });
+                // A方案-1：观测会话建立点 g/h，dump 单例字段（只读，不抢流程），为 A-2 HAT 回传定位
+                installSafely("HookTrustAuthAuto", new Runnable() {
+                    @Override public void run() { HookTrustAuthAuto.install(cl); }
+                });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry trustservice init failed", t);
             }

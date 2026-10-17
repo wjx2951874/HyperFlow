@@ -40,3 +40,34 @@
 - PIN：直接替换数字串。混合：直接替换密码串。图案：留存 3×3 点位序列，hook 时还原成 `e` 期望的编码串（编码待核 MiuiLockPatternView）。
 - 配置沿用 `auto_unlock` / `auto_unlock_pwd`；图案单独存点序列字段。
 - 注意罚时（错密码后 getLockoutAttemptDeadline），自动填只在密码正确时触发，避免连续错误触发锁定；只试一次，失败不重试。
+
+---
+
+## 6. A 主动后台静默校验（不模拟点击、不碰 UI）· 逆向结论与进度
+
+目标：会话一建立，后台直接用留存真实密码调系统 gatekeeper 校验，拿真 HAT 回传对端，无需手输/点提交。否决模拟点击；不伪造成功（TEE HAT 绕不过）。
+
+### 6.1 会话建立注入点（Z0.b / LockSettingUtils）
+- 静态单例 `static b f488j`（由 `i(Context)` 创建，内含 `LockPatternUtils`/`MiuiLockPatternUtils`）。
+- 静态分支 `static int f489k`：1 = g 代理（Y0.g，Bind_A），2 = k 代理（remoteauthservice.k，Bind_B/Risk_B）；静态分支名 `static String f490l`（Bind_A/Bind_B/Risk_B/Auth_Risk_B）。
+- 实例字段（jadx 占位名，运行时不保留，须按类型/位置反射）：
+  - `g f492e`（f489k=1 回传代理）、`k f493f`（f489k=2 回传代理）
+  - `byte[] f494g`（challenge）、`int f495i`、`String h`(deviceId)
+- 会话建立：
+  - `g(Y0.g, byte[] challenge, String deviceId, String branch, int)`：注入 f492e/f494g/f490l/h/f495i，f489k=1，随后拉起 LockScreenUIActivity。
+  - `h(k, byte[] challenge, String deviceId, String branch)`：注入 f493f/f494g/f490l，f489k=2，拉起 UI。
+  - 发起方 synthetic Runnable：`A/o` 调 g（Bind_A），`A/n` 调 h（Bind_B/Risk_B）。
+
+### 6.2 校验与回传（静态 d() 核心，A-2 复刻并跳过依赖 UI 的 hVar.n()）
+1. `c(int type, String)` 构造凭证：3=createPin，4=createPassword（混合密码），1=createPattern。
+2. `verifyCredential(credential, 0, 1).isMatched()` 预校验。
+3. `getGatekeeperPasswordHandle` → `verifyGatekeeperPasswordHandle(handle, challenge 前8字节 little-endian 转 long, 0)` → `getGatekeeperHAT`。
+4. 按分支回传（代理内部自行完成 SA 交换/checkHATV2，只需传 HAT byte[]）：
+   - f489k=1 / Y0.g：`c(byte[])`=Bind_A，`e(byte[])`=Bind_B，`v(byte[])`=Auth_Risk_B。
+   - f489k=2 / k：`l(P0.c, byte[])`=Bind_A，`j(byte[])`=Bind_B，`x(byte[])`=Risk_B。
+- `netbus.h.n(int)` 强转 `((A.d)this.b).f4c`(AuthInputView) post 回调，主动场景无此 UI 对象，故 A-2 复刻 d() 时跳过 hVar.n()，不构造该句柄。
+
+### 6.3 当前进度
+- A-1（已落 `HookTrustAuthAuto.java`，只读观测）：hook g/h，proceed 后遍历单例字段、打印类型/值摘要，定位 challenge 与回传代理；不抢流程、不回传。
+- A-2（待 A-1 日志）：按日志确定字段后反射完成 6.2 全链，回传真 HAT。
+- 用户锁屏为混合密码（type4 / createPassword），先通此档，PIN/图案留接口。

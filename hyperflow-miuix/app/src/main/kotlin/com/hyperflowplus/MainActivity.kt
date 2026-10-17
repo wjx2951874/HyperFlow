@@ -335,6 +335,13 @@ fun HyperFlowApp() {
                             OverlayIconDropdownMenu(
                                 entry = DropdownEntry(
                                     items = listOf(
+                                        // 分组标题（禁用、不可点，仅分隔"依据"与"方向"两组）
+                                        DropdownItem(
+                                            text = "排序依据",
+                                            enabled = false,
+                                            selected = false,
+                                            onClick = {}
+                                        ),
                                         DropdownItem(
                                             text = "按发送人",
                                             selected = dim == "name",
@@ -356,12 +363,28 @@ fun HyperFlowApp() {
                                             }
                                         ),
                                         DropdownItem(
-                                            text = if (desc) "切换为正序" else "切换为倒序",
+                                            text = "排序方向",
+                                            enabled = false,
+                                            selected = false,
+                                            onClick = {}
+                                        ),
+                                        DropdownItem(
+                                            text = "正序",
+                                            selected = !desc,
+                                            onClick = {
+                                                state.setSortValue(
+                                                    Config.KEY_ARCHIVE_SORT,
+                                                    dim + "_asc"
+                                                )
+                                            }
+                                        ),
+                                        DropdownItem(
+                                            text = "倒序",
                                             selected = desc,
                                             onClick = {
                                                 state.setSortValue(
                                                     Config.KEY_ARCHIVE_SORT,
-                                                    dim + "_" + (if (desc) "asc" else "desc")
+                                                    dim + "_desc"
                                                 )
                                             }
                                         )
