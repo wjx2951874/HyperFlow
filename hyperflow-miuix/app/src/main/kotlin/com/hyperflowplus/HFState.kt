@@ -178,9 +178,20 @@ object HFState {
     // 首次安装全部默认关闭，用户进首页自行开启（V0.4.28 起）
     val forceTransfer: Boolean get() = cfg.optBoolean("force_transfer", false)
     val cloneTransfer: Boolean get() = cfg.optBoolean("clone_transfer", false)
+    // 双开标题标识前缀文字（不含方括号）；空白回退默认"双开"
+    val clonePrefix: String get() =
+        cfg.optString(Config.KEY_CLONE_PREFIX, "双开").trim().ifEmpty { "双开" }
     val smsPersist: Boolean get() = cfg.optBoolean("sms_persist", false)
     val archiveApp: Boolean get() = cfg.optBoolean("archive_app", false)
     val autoUnlock: Boolean get() = cfg.optBoolean("auto_unlock", false)
+    // 妙享直通预存锁屏凭证：pin/password/pattern；secret 已 AES 加密，UI 不回显明文
+    val authType: String get() = cfg.optString(Config.KEY_AUTH_TYPE, "")
+    val hasAuth: Boolean
+        get() = when (authType) {
+            "pin", "password" -> !cfg.optString(Config.KEY_AUTH_SECRET, "").isNullOrEmpty()
+            "pattern" -> cfg.optString(Config.KEY_AUTH_PATTERN, "").isNotBlank()
+            else -> false
+        }
     val navFloat: Boolean get() = cfg.optBoolean("nav_float", false)         // 主题：悬浮导航栏（兼容旧配置）
     val glassEffect: Boolean get() = cfg.optBoolean("glass_effect", false)   // 主题：液态玻璃（兼容旧配置）
     // 1.1.0：底栏形态三值枚举（standard/floating/liquid）；未设置时按旧布尔派生（老用户配置无缝迁移）
@@ -216,6 +227,13 @@ object HFState {
     fun set(key: String, value: Boolean) {
         // 必须新建 JSONObject 实例：mutableStateOf 按引用比较，同实例 put 不触发重组
         cfg = JSONObject(cfg.toString()).put(key, value)
+        // 悬浮/玻璃布尔变化时，同步重算底栏形态枚举：否则旧枚举残留会导致关闭后仍显玻璃/悬浮
+        if (key == Config.KEY_NAV_FLOAT || key == Config.KEY_GLASS) {
+            val nav = cfg.optBoolean(Config.KEY_NAV_FLOAT, false)
+            val glass = cfg.optBoolean(Config.KEY_GLASS, false)
+            val style = if (nav && glass) "liquid" else if (nav) "floating" else "standard"
+            cfg = JSONObject(cfg.toString()).put("bottom_bar_style", style)
+        }
         saveCfgLater()
     }
 
@@ -226,6 +244,34 @@ object HFState {
 
     fun setString(key: String, value: String) {
         cfg = JSONObject(cfg.toString()).put(key, value)
+        saveCfgLater()
+    }
+
+    /** 保存预存锁屏凭证；secretPlain 仅 pin/password 传，pattern 传点序列(0-8逗号分隔) */
+    fun saveAuth(type: String, secretPlain: String?, pattern: String?) {
+        val next = JSONObject(cfg.toString())
+        next.put(Config.KEY_AUTH_TYPE, type)
+        when (type) {
+            "pin", "password" -> {
+                next.put(Config.KEY_AUTH_SECRET, Config.authEncrypt(secretPlain ?: "") ?: "")
+                next.remove(Config.KEY_AUTH_PATTERN)
+            }
+            "pattern" -> {
+                next.remove(Config.KEY_AUTH_SECRET)
+                next.put(Config.KEY_AUTH_PATTERN, pattern ?: "")
+            }
+        }
+        cfg = next
+        saveCfgLater()
+    }
+
+    /** 清空预存凭证（关闭妙享直通或手动清除时调用） */
+    fun clearAuth() {
+        val next = JSONObject(cfg.toString())
+        next.remove(Config.KEY_AUTH_TYPE)
+        next.remove(Config.KEY_AUTH_SECRET)
+        next.remove(Config.KEY_AUTH_PATTERN)
+        cfg = next
         saveCfgLater()
     }
 
@@ -355,8 +401,9 @@ object HFState {
                 if (body.isNotEmpty() && !line.contains(body)) return false
                 if (title.isNotEmpty()) {
                     val plain = "content_title=" + title
-                    val prefixed = "content_title=【分身】" + title
-                    if (!line.contains(plain) && !line.contains(prefixed)) return false
+                    // 双开标识前缀（自定义/旧"分身"通用）：content_title=【任意词】标题
+                    val prefixed = Regex("content_title=【[^】]*】" + Regex.escape(title))
+                    if (!line.contains(plain) && !prefixed.containsMatchIn(line)) return false
                 }
                 if (time.isNotEmpty()) {
                     val m = Regex("content_time=([^,\\s]+)").find(line)?.groupValues?.get(1)
@@ -402,6 +449,19 @@ object HFState {
                 liveAvailable = finalF != null
             }
         }.start()
+    }
+
+    /** 主线程同步预热：冷启动先读本地缓存快照直接填 cfg，避免首帧全默认、等后台 post 才显示。
+     *  后台 loadAll 只负责真值（root 配置/设备信息/实时 flow）刷新覆盖。 */
+    fun loadCacheSync() {
+        val cache = readCache() ?: return
+        val parts = cache.split("@@CFG|@@FLOW|@@DEV".toRegex())
+        val cCfg = if (parts.size > 1) parts[1].trim() else ""
+        if (cCfg.isNotEmpty()) {
+            cfg = runCatching { JSONObject(cCfg) }.getOrDefault(JSONObject())
+        }
+        if (parts.size > 3 && parts[3].trim().isNotEmpty()) applyDevSnapshot(parts[3].trim())
+        loadEnvCache()   // 环境检测结果同步预热，首帧不闪红再变绿
     }
 
     /** 一次 su 会话读全部数据 + 写缓存（App 秒开）。
@@ -548,6 +608,14 @@ object HFState {
     }
 
     private fun saveCfgLater() {
+        // 同步刷新本地缓存 CFG 段（保留 FLOW/DEV）：冷启动 loadCacheSync 立刻读到最新开关，避免闪默认值
+        runCatching {
+            val f = cacheFile ?: return@runCatching
+            val old = if (f.exists()) f.readText() else ""
+            val tail = Regex("@@FLOW[\\s\\S]*").find(old)?.value ?: ""
+            f.parentFile?.mkdirs()
+            f.writeText("@@CFG\n" + cfg.toString() + "\n" + tail)
+        }
         val c = ctx ?: return
         Thread {
             try {

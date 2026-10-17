@@ -111,9 +111,10 @@ public class HookCloneBypass {
                                     if (n != null && n.extras != null
                                             && n.extras.getBoolean(HF_IS_CLONE, false)) {
                                         CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
-                                        if (title != null && !title.toString().startsWith("【分身】")) {
-                                            n.extras.putCharSequence(Notification.EXTRA_TITLE, "【分身】" + title);
-                                            MiflowLog.d("clone title guard applied: 【分身】" + title);
+                                        String pf = bracketPrefix();
+                                        if (title != null && !title.toString().startsWith(pf)) {
+                                            n.extras.putCharSequence(Notification.EXTRA_TITLE, pf + title);
+                                            MiflowLog.d("clone title guard applied: " + pf + title);
                                         }
                                     }
                                 }
@@ -128,7 +129,12 @@ public class HookCloneBypass {
         }
     }
 
-    /** 分身通知标题加【分身】前缀（仅流转数据生效，防重复叠加） */
+    /** 当前配置的带括号标识前缀（【双开】，文字可在 App 内自定义） */
+    private static String bracketPrefix() {
+        return "【" + Config.getClonePrefix() + "】";
+    }
+
+    /** 双开通知标题加标识前缀（仅流转数据生效，防重复叠加） */
     private static void markCloneTitle(StatusBarNotification sbn) {
         try {
             Notification n = sbn.getNotification();
@@ -140,14 +146,15 @@ public class HookCloneBypass {
                 return;
             }
             String s = title.toString();
-            if (s.startsWith("【分身】")) {
+            String pf = bracketPrefix();
+            if (s.startsWith(pf)) {
                 // 已加过前缀：仍写入自定义标记，供第二道兜底 hook 使用
                 n.extras.putBoolean(HF_IS_CLONE, true);
                 return;
             }
-            n.extras.putCharSequence(Notification.EXTRA_TITLE, "【分身】" + s);
+            n.extras.putCharSequence(Notification.EXTRA_TITLE, pf + s);
             n.extras.putBoolean(HF_IS_CLONE, true);
-            MiflowLog.d("clone title marked: 【分身】" + s);
+            MiflowLog.d("clone title marked: " + pf + s);
         } catch (Throwable t) {
             MiflowLog.w("markCloneTitle failed: " + t.getMessage());
         }

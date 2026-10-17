@@ -18,8 +18,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hyperflowplus.Config
 import com.hyperflowplus.HFState
+import com.hyperflowplus.navigation.LocalNavigator
+import com.hyperflowplus.navigation.Route
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
 
 /**
  * 流转页（底部导航第 2 页）：四个功能开关集中管理。
@@ -29,6 +42,9 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 @Composable
 fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     var pendingToggle by remember { mutableStateOf<String?>(null) }
+    // 双开标识前缀自定义编辑
+    var showPrefixEdit by remember { mutableStateOf(false) }
+    var prefixDraft by remember { mutableStateOf("") }
 
     // v0.5.12：滚动 → 全局 tick（驱动玻璃 backdrop 重录）
     val fScroll = rememberScrollState()
@@ -48,7 +64,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "解锁时流转",
-                    summary = "解锁时模拟锁屏状态，让通知和来电也能流转",
+                    summary = "解锁时模拟锁屏状态，让解锁时的通知或来电也流转至其他设备",
                     checked = state.forceTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "force"
@@ -57,13 +73,24 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 SwitchPreference(
                     title = "应用双开流转",
-                    summary = "微信、QQ、钉钉等双开分身通知独立流转（标题带【分身】）",
+                    summary = "流转该设备多开应用收到的通知至其他设备，在局域网内可拉起镜像回复",
                     checked = state.cloneTransfer,
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "clone"
                         else state.set("clone_transfer", false)
                     }
                 )
+                // 双开开启后才出现：自定义标题标识前缀（自动包进【】）
+                if (state.cloneTransfer) {
+                    ArrowPreference(
+                        title = "双开标识前缀",
+                        summary = "【${state.clonePrefix}】，点击修改",
+                        onClick = {
+                            prefixDraft = state.clonePrefix
+                            showPrefixEdit = true
+                        }
+                    )
+                }
             }
         }
 
@@ -73,13 +100,32 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPreference(
                     title = "妙享直通",
-                    summary = "跳过妙享桌面屏幕连接密码输入",
+                    summary = "自动输入妙享桌面连接时的密码授权或验证",
                     checked = state.cfg.optBoolean("silent_auth", false),
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "silent_auth"
-                        else state.set("silent_auth", false)
+                        else {
+                            state.set("silent_auth", false)
+                            state.clearAuth()   // 关直通即清留存凭证
+                        }
                     }
                 )
+                // 直通开启后才出现的密码预设置入口
+                if (state.cfg.optBoolean("silent_auth", false)) {
+                    val nav = LocalNavigator.current
+                    ArrowPreference(
+                        title = "锁屏密码预设置",
+                        summary = if (state.hasAuth) "已保存：${
+                            when (state.authType) {
+                                "password" -> "混合密码"
+                                "pattern" -> "图案"
+                                else -> "数字密码"
+                            }
+                        }，点击修改"
+                                  else "留存锁屏密码，连接授权时自动填入",
+                        onClick = { nav.push(Route.AuthSetup) }
+                    )
+                }
             }
         }
 
@@ -122,7 +168,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启解锁时流转嘛？",
-            content = "开启后会模拟锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转到其他设备，OS4下的电话跨设备接听也可流转。",
+            content = "开启后，解锁时会模拟为锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转至其他设备。但 OS4 的跨设备电话流转仍需进一步完善。",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
@@ -130,7 +176,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启应用双开流转嘛？",
-            content = "开启后，在小米互联中已开启通知流转的双开分身应用（微信、QQ、钉钉等）的通知也会被流转到另一台设备上，并且能够在标题前添加【分身】用于区分。",
+            content = "开启后，在小米互联中已开启通知流转的应用（微信、QQ、钉钉 等）的双开应用通知也会被流转至其他设备，在同一局域网内还可以镜像回复。标题前还可自定义前缀用于区分通知来源。",
             onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
@@ -155,7 +201,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启妙享直通嘛？",
-            content = "开启后，重启该设备后，其他小米设备通过小米妙享桌面连接时会自动完成所需的密码验证，无需手动输入锁屏密码。仅在小米妙享服务弹出密码输入时生效。\n\n开启后可能会增加安全风险，请谨慎使用！",
+            content = "开启后，其他设备通过小米妙享桌面连接该设备被要求输入密码完成授权或验证时，能够自动填入在预设置中保存的密码以自动完成验证。若未预填入密码，该功能不生效。\n\n开启后可能会增加安全风险，请谨慎使用！",
             countdownSec = 5,
             onConfirm = { state.set("silent_auth", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
@@ -194,5 +240,44 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             },
             onDismiss = { pendingToggle = null }
         )
+    }
+
+    // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
+    if (showPrefixEdit) {
+        HyperDialog(
+            show = true,
+            title = "双开标识前缀",
+            onDismiss = { showPrefixEdit = false }
+        ) {
+            // App 内 Popup 不随键盘上推：取输入法高度把按钮顶到键盘上方，避免保存键被挡
+            val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+            TextField(
+                value = prefixDraft,
+                onValueChange = { prefixDraft = it },
+                label = "标识文字（自动包进【】）",
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showPrefixEdit = false },
+                    modifier = Modifier.weight(1f)
+                ) { Text("取消") }
+                Button(
+                    colors = ButtonDefaults.buttonColorsPrimary(),
+                    onClick = {
+                        val v = prefixDraft.trim()
+                        state.setString(Config.KEY_CLONE_PREFIX, v.ifEmpty { "双开" })
+                        showPrefixEdit = false
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("保存") }
+            }
+            Spacer(Modifier.height(imeBottom))
+        }
     }
 }

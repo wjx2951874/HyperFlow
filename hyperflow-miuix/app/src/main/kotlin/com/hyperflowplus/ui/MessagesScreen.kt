@@ -456,9 +456,9 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         if (title.isEmpty() && body.isEmpty()) continue
         // 按发送人分组：同一服务商/联系人的消息（即使来自不同设备）合并成一个会话；
         // 标题为空时回退到设备名，避免全部挤进"未知"分组
-        // 分组 key：去掉【分身】前缀再分组 —— 带前缀与不带前缀的同一分身消息
-        // 必须进同一会话，否则跨会话不去重会显示两条
-        val key = title.removePrefix("【分身】").ifEmpty { device.ifEmpty { "未知" } }
+        // 分组 key：去掉开头【...】标识前缀（双开/自定义/旧"分身"通用）再分组 ——
+        // 带前缀与不带前缀的同一双开消息必须进同一会话，否则跨会话不去重会显示两条
+        val key = title.replace(Regex("^【[^】]*】"), "").ifEmpty { device.ifEmpty { "未知" } }
         groups.getOrPut(key) { mutableListOf() }.add(arrayOf(time, device, body, src, title))
     }
     // 去重：本地归档与小米端（云端）同一条短信重复显示 → 云端优先，本地隐藏；
@@ -473,7 +473,7 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         for (r in rows) {
             if (r.getOrNull(3) != "local") {
                 liveKeys.add(keyOf(r))
-                if (r.getOrNull(4)?.startsWith("【分身】") == true) prefer.add(keyOf(r))
+                if (r.getOrNull(4)?.matches(Regex("^【[^】]*】.*")) == true) prefer.add(keyOf(r))
             }
         }
         rows.removeAll { r ->
@@ -481,8 +481,8 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
                 // 本地遇小米端同内容 → 隐藏本地（不加（本地）括号）；小米端缺失时本地保留并带标记
                 liveKeys.contains(keyOf(r))
             } else {
-                // live 有带【分身】前缀版本时隐藏不带前缀的
-                val prefixed = r.getOrNull(4)?.startsWith("【分身】") == true
+                // live 有带【标识】前缀版本时隐藏不带前缀的
+                val prefixed = r.getOrNull(4)?.matches(Regex("^【[^】]*】.*")) == true
                 prefer.contains(keyOf(r)) && !prefixed
             }
         }

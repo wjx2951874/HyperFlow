@@ -5,6 +5,8 @@
          本 App（com.hyperflowplus）自身进程无需被 hook，不再列入推荐作用域（LSPosed 中勾不了也属正常）。 -->
     <string-array name="xposedscope">
         <item>com.milink.service</item>
+        <item>com.xiaomi.trustservice</item>
+        <item>com.xiaomi.mirror</item>
         <item>android</item>
         <item>system</item>
     </string-array>

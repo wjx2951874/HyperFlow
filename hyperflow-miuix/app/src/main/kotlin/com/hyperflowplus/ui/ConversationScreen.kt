@@ -43,6 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import com.hyperflowplus.HFState
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Surface
@@ -311,7 +317,6 @@ fun ConversationTopBar(
     onBack: () -> Unit,
     onSetSort: (String) -> Unit
 ) {
-    var showSort by remember { mutableStateOf(false) }
     TopAppBar(
         title = sender,
         subtitle = "",
@@ -320,63 +325,28 @@ fun ConversationTopBar(
             MiuixBackButton(onClick = onBack)
         },
         actions = {
-            // 排序：Popup 选择框（KSU 风格），不再直接切换（用户反馈：点击后应有选择弹窗）
-            IconButton(onClick = { showSort = true }) {
+            // 排序：Window 级独立渲染，不依赖 Scaffold 宿主，点击不闪退
+            WindowIconDropdownMenu(
+                entry = DropdownEntry(
+                    items = listOf(
+                        DropdownItem(
+                            text = "最新在前",
+                            selected = desc,
+                            onClick = { if (!desc) onSetSort("desc") }
+                        ),
+                        DropdownItem(
+                            text = "最早在前",
+                            selected = !desc,
+                            onClick = { if (desc) onSetSort("asc") }
+                        )
+                    )
+                )
+            ) {
                 Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    imageVector = MiuixIcons.Sort,
                     contentDescription = "排序",
                     tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
                 )
-            }
-            if (showSort) {
-                androidx.compose.ui.window.Popup(
-                    alignment = Alignment.TopEnd,
-                    offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
-                    onDismissRequest = { showSort = false }
-                ) {
-                    Surface(
-                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(16.dp),
-                        shadowElevation = 10.dp,
-                        modifier = Modifier.width(230.dp)
-                    ) {
-                        Column(Modifier.padding(vertical = 6.dp)) {
-                            @Composable
-                            fun Item(label: String, sel: Boolean, onClick: () -> Unit) {
-                                Row(
-                                    Modifier.fillMaxWidth()
-                                        .clickable(onClick = onClick)
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        label,
-                                        style = MiuixTheme.textStyles.body1,
-                                        color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    if (sel) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = "已选",
-                                            tint = MiuixTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            Item("最新在前", desc, {
-                                if (!desc) onSetSort("desc")
-                                showSort = false
-                            })
-                            Item("最早在前", !desc, {
-                                if (desc) onSetSort("asc")
-                                showSort = false
-                            })
-                        }
-                    }
-                }
             }
         }
     )

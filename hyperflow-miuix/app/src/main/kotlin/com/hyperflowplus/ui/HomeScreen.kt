@@ -455,7 +455,7 @@ echo ==END""") }.getOrNull()
                     }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
-                        EnvDetailRow("Root 环境", rootEnvOk, "已授予（KernelSU/Root）" to "未授予 Root 权限")
+                        EnvDetailRow("Root 环境", rootEnvOk, "已授予（KernelSU/Magisk/APatch）" to "未授予 Root 权限")
                         EnvDetailRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"))
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
@@ -517,7 +517,7 @@ echo ==END""") }.getOrNull()
                     }
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
-                        EnvItemRow("Root 环境", rootEnvOk, "已授予（KernelSU/Root）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 环境" to GuideType.ROOT }
+                        EnvItemRow("Root 环境", rootEnvOk, "已授予（KernelSU/Magisk/APatch）" to "未授予 Root 权限", GuideType.ROOT) { solveItem = "Root 环境" to GuideType.ROOT }
                         EnvItemRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"), GuideType.LSPOSED) { solveItem = "LSPosed 模块" to GuideType.LSPOSED }
                         EnvItemRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务", GuideType.MILINK) { solveItem = "小米互联服务" to GuideType.MILINK }
                     }
@@ -533,28 +533,28 @@ echo ==END""") }.getOrNull()
             val action: () -> Unit
             when (guide) {
                 GuideType.ROOT -> {
-                    // V0.6.15：引导完整化（KSU 授权界面无法直接打开 → 纯步骤引导，不放打开按钮）
+                    // V0.6.15：引导完整化（Root 授权界面无法直接打开 → 纯步骤引导，不放打开按钮）
                     steps = listOf(
-                        "1. 打开 KernelSU 管理器（桌面应用列表里找 KernelSU）",
-                        "2. 底部切换到「超级用户」页面",
+                        "1. 打开你的 Root 管理器（KernelSU / Magisk / APatch）",
+                        "2. 底部切换到「超级用户」或「应用」页面",
                         "3. 找到 HyperFlow（com.hyperflowplus），点击它",
                         "4. 打开授权开关，授予超级用户权限",
                         "5. 返回本应用，点右上角「重新检测」",
-                        "如果列表里没有 HyperFlow：先随便进一次本应用（触发权限申请），再回 KernelSU 查看"
+                        "如果列表里没有 HyperFlow：先随便进一次本应用（触发权限申请），再回 Root 管理器查看"
                     )
                     actionLabel = null
                     action = {}
                 }
                 GuideType.LSPOSED -> {
                     steps = listOf(
-                        "1. 打开 KernelSU 管理器 → 底部「模块」页",
+                        "1. 打开你的 Root 管理器（KernelSU / Magisk / APatch）→ 底部「模块」页",
                         "2. 确认已安装 LSPosed（Zygisk 版）且已启用，然后重启设备",
                         "3. 重启后打开 LSPosed 管理器（通知栏入口或桌面图标）",
                         "4. 进入「模块」页，找到 HyperFlow 并启用它",
                         "5. 勾选下方推荐作用域：系统框架 + 小米互联服务",
                         "6. 保存并重启设备，回首页重新检测"
                     )
-                    actionLabel = "打开 KernelSU"
+                    actionLabel = "打开 Root 管理器"
                     action = { launchKernelSu() }
                 }
                 GuideType.MODULE_SCOPE -> {

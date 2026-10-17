@@ -74,9 +74,9 @@ fun HyperDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .padding(horizontal = 20.dp)
                     .padding(bottom = bottomInset)
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(28.dp))
                     .background(
                         if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
                             Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
@@ -87,7 +87,7 @@ fun HyperDialog(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {}
-                    .padding(horizontal = 22.dp, vertical = 22.dp),
+                    .padding(horizontal = 26.dp, vertical = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (title != null) {

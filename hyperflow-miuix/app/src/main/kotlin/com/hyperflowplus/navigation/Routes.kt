@@ -25,4 +25,8 @@ sealed interface Route : NavKey {
     /** 主题与显示（设置页入口） */
     @Serializable
     data object Theme : Route
+
+    /** 妙享直通 · 锁屏密码预设置录入 */
+    @Serializable
+    data object AuthSetup : Route
 }

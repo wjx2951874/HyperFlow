@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.ui.window.Popup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyperflowplus.BuildConfig
@@ -45,12 +45,10 @@ import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.window.WindowListPopup
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -92,44 +90,29 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 外观：跟随系统 / 浅色 / 深色（KSU 风格小下拉菜单）
-                var showPopup by remember { mutableStateOf(false) }
-                val themeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
-                Box {
-                    ArrowPreference(
-                        title = "外观",
-                        summary = when (state.themeMode) {
-                            "light" -> "浅色"
-                            "dark" -> "深色"
-                            else -> "跟随系统"
-                        },
-                        onClick = { showPopup = true }
-                    )
-                    WindowListPopup(
-                        show = showPopup,
-                        onDismissRequest = { showPopup = false }
-                    ) {
-                        ListPopupColumn {
-                            themeOptions.forEachIndexed { index, (value, label) ->
-                                DropdownImpl(
-                                    text = label,
-                                    optionSize = themeOptions.size,
-                                    isSelected = state.themeMode == value,
-                                    index = index,
-                                    onSelectedIndexChange = {
-                                        state.setString("theme_mode", value)
-                                        showPopup = false
-                                    }
-                                )
-                            }
-                        }
+                // 外观：跟随系统 / 浅色 / 深色（Window 级独立渲染，不依赖 Scaffold 宿主，点击不闪退）
+                val themeOptions = listOf("跟随系统", "浅色", "深色")
+                val themeValues = listOf("system", "light", "dark")
+                val themeIndex = themeValues.indexOf(state.themeMode).coerceAtLeast(0)
+                WindowSpinnerPreference(
+                    title = "外观",
+                    items = themeOptions.mapIndexed { i, label ->
+                        DropdownItem(
+                            text = label,
+                            selected = i == themeIndex,
+                            onClick = { state.setString("theme_mode", themeValues[i]) }
+                        )
+                    },
+                    selectedIndex = themeIndex,
+                    onSelectedIndexChange = { i ->
+                        state.setString("theme_mode", themeValues[i])
                     }
-                }
+                )
 
                 // 悬浮导航栏
                 SwitchPreference(
                     title = "悬浮导航栏",
-                    summary = if (state.navFloat) "已开启悬浮导航栏" else "关闭后使用系统导航栏",
+                    summary = "以悬浮胶囊替代系统导航栏",
                     checked = state.navFloat,
                     onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
                 )
@@ -138,7 +121,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 if (state.navFloat) {
                     SwitchPreference(
                         title = "液态玻璃",
-                        summary = if (state.glassEffect) "已开启系统级液态玻璃" else "关闭后使用系统默认外观",
+                        summary = "为悬浮胶囊开启系统级液态玻璃",
                         checked = state.glassEffect,
                         onCheckedChange = { state.set(Config.KEY_GLASS, it) }
                     )
@@ -188,7 +171,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 if (hasLog) {
                     ArrowPreference(
                         title = "日志列表",
-                        summary = "查看、删除、分享、下载已捕获的日志",
+                        summary = "查看与管理已捕获的日志",
                         onClick = { MainHolder.onOpenLogs() }
                     )
                 }
@@ -210,16 +193,15 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         Card(Modifier.fillMaxWidth()) {
             Column {
                 // V0.6.15：版本行 —— 常驻醒目色状态提示（有新版=橙 / 已是最新=绿 / 检查中=灰），
-                // 点击不再弹检查结果窗：有新版时直接进入更新方式，其余静默检查
-                val updTxt = when {
-                    betaUnlocked -> "Beta 通道 · v${BuildConfig.VERSION_NAME}"
-                    else -> when (MainHolder.updState) {
-                        "new" -> "发现新版本 v${MainHolder.latestVer}，点击更新"
-                        "none" -> "已是最新版本 · v${BuildConfig.VERSION_NAME}"
-                        "checking", "busy" -> "正在检查更新…"
-                        "error" -> "检查更新失败，点击重试 · v${BuildConfig.VERSION_NAME}"
-                        else -> "点击可检查更新 · v${BuildConfig.VERSION_NAME}"
-                    }
+                // 点击不再弹检查结果窗：有新版时直接进入更新方式，其余静默检查。
+                // 1.1.0：有新版优先显示（beta 通道标识让位，避免检出新版仍显示旧版号）
+                val betaTag = if (betaUnlocked) "检测Beta更新 · " else ""
+                val updTxt = when (MainHolder.updState) {
+                    "new" -> "发现新版本 v${MainHolder.latestVer}，点击更新"
+                    "checking", "busy" -> "正在检查更新…"
+                    "error" -> "检查更新失败，点击重试 · v${BuildConfig.VERSION_NAME}"
+                    "none" -> "${betaTag}已是最新版本 · v${BuildConfig.VERSION_NAME}"
+                    else -> "${betaTag}点击可检查更新 · v${BuildConfig.VERSION_NAME}"
                 }
                 val updColor = when (MainHolder.updState) {
                     "new" -> Color(0xFFF08A00)          // 醒目橙：有新版
@@ -262,12 +244,14 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                         Text(
                             "版本",
                             style = MiuixTheme.textStyles.body1,
+                            fontWeight = FontWeight.Light,
                             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             updTxt,
                             style = MiuixTheme.textStyles.body2,
+                            fontWeight = FontWeight.Light,
                             color = updColor
                         )
                     }
@@ -284,17 +268,16 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 ArrowPreference(
                     title = "查看源代码",
-                    summary = "GitHub：wjx2951874/HyperFlow（GPL-3.0 开源）",
+                    summary = "在 GitHub 上查看源代码",
                     onClick = { browse("https://github.com/wjx2951874/HyperFlow") }
                 )
                 ArrowPreference(
                     title = "开放源代码许可",
-                    summary = "Miuix / KernelSU / LSPosed / AndroidX 等开源库许可详情",
+                    summary = "查看本应用所使用的第三方开源库及其许可证信息",
                     onClick = { MainHolder.onOpenLicenses() }
                 )
                 ArrowPreference(
                     title = "隐私说明",
-                    summary = "APP不联网不上传，请放心使用",
                     onClick = { showPrivacy = true }
                 )
             }

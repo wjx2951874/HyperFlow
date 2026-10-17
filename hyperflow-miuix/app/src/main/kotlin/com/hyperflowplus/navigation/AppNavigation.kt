@@ -3,6 +3,7 @@ package com.hyperflowplus.navigation
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,6 +15,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.hyperflowplus.HFState
 import com.hyperflowplus.HyperFlowApp
+import com.hyperflowplus.ui.AuthSetupScreen
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.LogListScreen
 import com.hyperflowplus.ui.ThemeSettingsScreen
@@ -79,6 +81,10 @@ fun AppNavigation() {
 
     val content: @Composable () -> Unit = {
         CompositionLocalProvider(LocalNavigator provides navigator) {
+            // 全局返回键处理：栈中多于 1 页时弹栈，否则不处理（让系统退出 App）
+            BackHandler(enabled = backStack.size > 1) {
+                navigator.pop()
+            }
             NavDisplay(
                 backStack = backStack,
                 onBack = { navigator.pop() },                    // ← 系统返回/全面屏手势走这里弹栈
@@ -96,6 +102,9 @@ fun AppNavigation() {
                 }
                 entry<Route.Theme>(swipeDismiss = swipeBackDirection) {
                     ThemeSettingsScreen(HFState, onBack = { navigator.pop() })
+                }
+                entry<Route.AuthSetup>(swipeDismiss = swipeBackDirection) {
+                    AuthSetupScreen(HFState, onBack = { navigator.pop() })
                 }
             }
         }

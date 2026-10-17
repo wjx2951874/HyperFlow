@@ -8,6 +8,12 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * 模块配置与运行时计数器（V0.2.6 纯 App 架构）。
@@ -49,13 +55,18 @@ public final class Config {
 
     // 功能开关（全局配置 key）
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转
-    public static final String KEY_CLONE_TRANSFER = "clone_transfer";       // 功能② 分身通知流转
+    public static final String KEY_CLONE_TRANSFER = "clone_transfer";       // 功能② 双开通知流转
+    public static final String KEY_CLONE_PREFIX = "clone_prefix";           // 功能② 双开标题标识前缀文字（默认"双开"，实际包成【双开】）
     public static final String KEY_SMS_PERSIST = "sms_persist";             // 功能③ 短信持久化
     public static final String KEY_ARCHIVE_APP = "archive_app";                // ③ App 内消息归档开关（关=消息页不显示）
     public static final String KEY_SMS_NUMERIC_ONLY = "sms_numeric_only";   // ③ 仅纯数字号码写入收件箱
     public static final String KEY_AUTO_UNLOCK = "auto_unlock";             // 功能⑤（P1）自动输锁屏密码开关
     public static final String KEY_AUTO_UNLOCK_PASSWORD = "auto_unlock_pwd"; // 功能⑤（P1）明文密码，用户自行填写
     public static final String KEY_SILENT_AUTH = "silent_auth";              // 妙享直通：远控连接自动跳过密码验证
+    // 妙享直通预存锁屏凭证（供 HookTrustAuth 在 trustservice 授权盘自动填入）
+    public static final String KEY_AUTH_TYPE = "auth_type";                 // pin / password / pattern
+    public static final String KEY_AUTH_SECRET = "auth_secret";             // AES-GCM 加密的 PIN/混合密码
+    public static final String KEY_AUTH_PATTERN = "auth_pattern";           // 图案点序列(0-8，逗号分隔)
     public static final String KEY_GLASS = "glass_effect";                  // UI 玻璃效果开关（毛玻璃卡片）
     public static final String KEY_NAV_FLOAT = "nav_float";                 // 主题：悬浮导航栏开关
     public static final String KEY_DEBUG_MODE = "debug_mode";               // 调试：调试模式（保存详细日志）
@@ -185,6 +196,12 @@ public final class Config {
         return getBool(KEY_CLONE_TRANSFER, true);
     }
 
+    /** 双开标题标识前缀文字（不含方括号）；空白回退默认"双开"。hook 端与 App 端共用。 */
+    public static String getClonePrefix() {
+        String p = getString(KEY_CLONE_PREFIX, "双开").trim();
+        return p.isEmpty() ? "双开" : p;
+    }
+
     public static boolean isSmsPersistEnabled() {
         // V0.4.7：默认关闭 —— 写入系统短信会触发短信通知流转回环（发送端收到两次）。
         // 建议使用 App 内「消息」页归档；如需写入可在设置中手动开启。
@@ -198,5 +215,68 @@ public final class Config {
 
     public static boolean isAutoUnlockEnabled() {
         return getBool(KEY_AUTO_UNLOCK, false); // P1 默认关闭
+    }
+
+    // ===== 妙享直通预存锁屏凭证（本机混淆级 AES-GCM，非云端） =====
+    // 密钥由内置常量 SHA-256 派生，App 与 hook 进程(trustservice)用同一代码即可复现，
+    // 只做"配置文件不明文一眼可见"的本机保护，不等于硬件级加密。
+    private static final byte[] AUTH_KEY;
+    static {
+        byte[] seed = ("HyperFlow::miAuth::v1::" + "9f3c2a71e5b4").getBytes(StandardCharsets.UTF_8);
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            AUTH_KEY = md.digest(seed);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** 明文 → Base64( iv(12) || GCM密文+tag )；失败返回 null */
+    public static String authEncrypt(String plain) {
+        if (plain == null || plain.isEmpty()) return null;
+        try {
+            byte[] iv = new byte[12];
+            new SecureRandom().nextBytes(iv);
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(AUTH_KEY, "AES"), new GCMParameterSpec(128, iv));
+            byte[] ct = c.doFinal(plain.getBytes(StandardCharsets.UTF_8));
+            byte[] out = new byte[iv.length + ct.length];
+            System.arraycopy(iv, 0, out, 0, iv.length);
+            System.arraycopy(ct, 0, out, iv.length, ct.length);
+            return Base64.getEncoder().encodeToString(out);
+        } catch (Throwable t) {
+            MiflowLog.e("authEncrypt failed", t);
+            return null;
+        }
+    }
+
+    /** authEncrypt 的逆；失败/被篡改返回 null */
+    public static String authDecrypt(String packed) {
+        if (packed == null || packed.isEmpty()) return null;
+        try {
+            byte[] all = Base64.getDecoder().decode(packed);
+            byte[] iv = new byte[12];
+            System.arraycopy(all, 0, iv, 0, 12);
+            byte[] ct = new byte[all.length - 12];
+            System.arraycopy(all, 12, ct, 0, ct.length);
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(AUTH_KEY, "AES"), new GCMParameterSpec(128, iv));
+            return new String(c.doFinal(ct), StandardCharsets.UTF_8);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    public static String getAuthType() {
+        return getString(KEY_AUTH_TYPE, "");
+    }
+
+    /** 解密后的 PIN/混合密码；无或失败返回 null */
+    public static String getAuthSecret() {
+        return authDecrypt(getString(KEY_AUTH_SECRET, ""));
+    }
+
+    public static String getAuthPattern() {
+        return getString(KEY_AUTH_PATTERN, "");
     }
 }

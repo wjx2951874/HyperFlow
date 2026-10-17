@@ -53,6 +53,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownImpl
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Sort
+import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -117,8 +124,6 @@ fun HyperFlowApp() {
         // 液态玻璃是系统级效果（HyperLight 等模块实现），App 内保持 HyperOS 原生观感
         // val state = HFState
         var tab by remember { mutableIntStateOf(0) }
-        var showSort by remember { mutableStateOf(false) }
-        var showMsgMode by remember { mutableStateOf(false) }
         var showUpd by remember { mutableStateOf(false) }
         var guideType by remember { mutableStateOf<GuideType?>(null) }
         var updVer by remember { mutableStateOf("") }
@@ -130,6 +135,8 @@ fun HyperFlowApp() {
         var updDownloading by remember { mutableStateOf(false) }
         var updDownloaded by remember { mutableStateOf<String?>(null) }
         var updDlError by remember { mutableStateOf<String?>(null) }
+        // 同步预热：首帧前直接读本地缓存填配置，避免先闪默认值再等后台 post
+        remember(state) { state.loadCacheSync(); Unit }
         LaunchedEffect(Unit) {
             state.loadAll()
             state.startFlowPolling()   // 归档实时刷新（短信流转到达即显示）
@@ -270,8 +277,8 @@ fun HyperFlowApp() {
             // 四个页面各显示页面名（软件名移到设置页关于区）
             val title = when (tab) { 0 -> "首页"; 1 -> "流转"; 2 -> "消息"; 3 -> "设置"; else -> "" }
 
-            // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动再上移（避开悬浮胶囊），否则默认贴底
-            com.hyperflowplus.ui.smartInset = if (state.bottomBarStyle != "standard") 88.dp else 40.dp
+            // 弹窗智能移位：开启悬浮/液态玻璃时弹窗自动上移避开悬浮胶囊；标准导航贴底（仅留安全边距）
+            com.hyperflowplus.ui.smartInset = if (state.bottomBarStyle != "standard") 88.dp else 20.dp
             // v0.5.12：悬浮胶囊底部避让 —— 页面滚动容器尾部加同高间距，
             // 内容最后一行可滚到胶囊上沿（不遮挡、不留白）
             MainHolder.bottomPad = if (state.bottomBarStyle != "standard") 96.dp else 0.dp
@@ -297,6 +304,8 @@ fun HyperFlowApp() {
             val topBarScroll = MiuixScrollBehavior()
             Scaffold(
                 containerColor = MiuixTheme.colorScheme.surface,
+                // KSU 同款显式空宿主：为 Overlay 下拉/菜单注册 popupHost，避免找不到宿主而崩
+                popupHost = { },
                 modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
                 topBar = {
                     if (conversation != null) {
@@ -319,178 +328,77 @@ fun HyperFlowApp() {
                             scrollBehavior = topBarScroll,
                             actions = {
                             if (tab == 2) {
-                            // V0.6.16.6：搜索功能整体移除（用户决策），右上角仅保留排序
-                            Box {
-                                IconButton(onClick = { showSort = true }) {
-                                    top.yukonga.miuix.kmp.basic.Icon(
-                                        // V0.6.15：图标换 Material 标准 Sort（学 LSP 管理器排序风格）
-                                        imageVector = Icons.Filled.Sort,
-                                        contentDescription = "排序"
-                                    )
-                                }
-                                // KSU 风格排序下拉菜单：点 Sort 图标在右上角展开（Popup 锚定，非系统 Dialog，防闪退）
-                                if (showSort) {
-                                    androidx.compose.ui.window.Popup(
-                                        alignment = Alignment.TopEnd,
-                                        offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
-                                        onDismissRequest = { showSort = false }
-                                    ) {
-                                        val cur = state.archiveSort
-                                        val dim = if (cur.startsWith("name")) "name" else "time"
-                                        val desc = cur.endsWith("desc")
-                                        Surface(
-                                            color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                            shadowElevation = 10.dp,
-                                            modifier = Modifier.width(230.dp)
-                                        ) {
-                                            Column(Modifier.padding(vertical = 6.dp)) {
-                                                @Composable
-                                                fun Item(label: String, summary: String, sel: Boolean, onClick: () -> Unit) {
-                                                    Row(
-                                                        Modifier.fillMaxWidth()
-                                                            .clickable(onClick = onClick)
-                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(
-                                                            label,
-                                                            style = MiuixTheme.textStyles.body1,
-                                                            color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-                                                        Text(
-                                                            summary,
-                                                            style = MiuixTheme.textStyles.body2,
-                                                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                                                            modifier = Modifier.padding(end = 6.dp)
-                                                        )
-                                                        if (sel) {
-                                                            top.yukonga.miuix.kmp.basic.Icon(
-                                                                imageVector = Icons.Filled.Check,
-                                                                contentDescription = "已选",
-                                                                tint = MiuixTheme.colorScheme.primary,
-                                                                modifier = Modifier.size(18.dp)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                Item(
-                                                    "发送人",
-                                                    if (dim == "name") (if (desc) "Z→A" else "A→Z") else "",
-                                                    dim == "name",
-                                                    {
-                                                        if (state.archiveSort != "name_" + (if (desc) "desc" else "asc")) {
-                                                            state.setSortValue(Config.KEY_ARCHIVE_SORT, "name_" + (if (desc) "desc" else "asc"))
-                                                        }
-                                                        showSort = false
-                                                    }
+                            // 排序：官方 OverlayIconDropdownMenu（Scaffold popupHost 托管，不再手搓 Popup）
+                            val curSort = state.archiveSort
+                            val dim = if (curSort.startsWith("name")) "name" else "time"
+                            val desc = curSort.endsWith("desc")
+                            WindowIconDropdownMenu(
+                                entry = DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem(
+                                            text = "按发送人",
+                                            selected = dim == "name",
+                                            onClick = {
+                                                state.setSortValue(
+                                                    Config.KEY_ARCHIVE_SORT,
+                                                    "name_" + (if (desc) "desc" else "asc")
                                                 )
-                                                Item(
-                                                    "时间",
-                                                    if (dim == "time") (if (desc) "新→旧" else "旧→新") else "",
-                                                    dim == "time",
-                                                    {
-                                                        if (state.archiveSort != "time_" + (if (desc) "desc" else "asc")) {
-                                                            state.setSortValue(Config.KEY_ARCHIVE_SORT, "time_" + (if (desc) "desc" else "asc"))
-                                                        }
-                                                        showSort = false
-                                                    }
-                                                )
-                                                Box(
-                                                    Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp)
-                                                        .background(MiuixTheme.colorScheme.onBackground.copy(alpha = 0.06f))
-                                                )
-                                                // 底部倒序开关（KSU 风格）
-                                                Row(
-                                                    Modifier.fillMaxWidth()
-                                                        .clickable { showSort = false }
-                                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        "倒序",
-                                                        style = MiuixTheme.textStyles.body1,
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                    top.yukonga.miuix.kmp.basic.Switch(
-                                                        checked = desc,
-                                                        onCheckedChange = {
-                                                            state.setSortValue(
-                                                                Config.KEY_ARCHIVE_SORT,
-                                                                dim + "_" + (if (desc) "asc" else "desc")
-                                                            )
-                                                        }
-                                                    )
-                                                }
                                             }
-                                        }
-                                    }
-                                }
+                                        ),
+                                        DropdownItem(
+                                            text = "按时间",
+                                            selected = dim == "time",
+                                            onClick = {
+                                                state.setSortValue(
+                                                    Config.KEY_ARCHIVE_SORT,
+                                                    "time_" + (if (desc) "desc" else "asc")
+                                                )
+                                            }
+                                        ),
+                                        DropdownItem(
+                                            text = if (desc) "切换为正序" else "切换为倒序",
+                                            selected = desc,
+                                            onClick = {
+                                                state.setSortValue(
+                                                    Config.KEY_ARCHIVE_SORT,
+                                                    dim + "_" + (if (desc) "asc" else "desc")
+                                                )
+                                            }
+                                        )
+                                    )
+                                )
+                            ) {
+                                top.yukonga.miuix.kmp.basic.Icon(
+                                    imageVector = MiuixIcons.Sort,
+                                    contentDescription = "排序"
+                                )
                             }
-                            // V0.6.15：显示模式设置（排序图标右侧：实时与本地合并/仅实时/仅本地）
-                            Box {
-                                IconButton(onClick = { showMsgMode = true }) {
-                                    top.yukonga.miuix.kmp.basic.Icon(
-                                        imageVector = Icons.Filled.Settings,
-                                        contentDescription = "显示模式"
+                            // 显示模式：官方 OverlayIconDropdownMenu
+                            WindowIconDropdownMenu(
+                                entry = DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem(
+                                            text = "实时与本地合并显示",
+                                            selected = state.msgMode == "all",
+                                            onClick = { state.setMsgMode("all") }
+                                        ),
+                                        DropdownItem(
+                                            text = "仅显示实时",
+                                            selected = state.msgMode == "live",
+                                            onClick = { state.setMsgMode("live") }
+                                        ),
+                                        DropdownItem(
+                                            text = "仅显示本地",
+                                            selected = state.msgMode == "local",
+                                            onClick = { state.setMsgMode("local") }
+                                        )
                                     )
-                                }
-                                if (showMsgMode) {
-                                    androidx.compose.ui.window.Popup(
-                                        alignment = Alignment.TopEnd,
-                                        offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 46.dp.roundToPx() }),
-                                        onDismissRequest = { showMsgMode = false }
-                                    ) {
-                                        Surface(
-                                            color = MiuixTheme.colorScheme.surfaceContainerHigh,
-                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                            shadowElevation = 10.dp,
-                                            modifier = Modifier.width(230.dp)
-                                        ) {
-                                            Column(Modifier.padding(vertical = 6.dp)) {
-                                                @Composable
-                                                fun ModeItem(label: String, sel: Boolean, onClick: () -> Unit) {
-                                                    Row(
-                                                        Modifier.fillMaxWidth()
-                                                            .clickable(onClick = onClick)
-                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(
-                                                            label,
-                                                            style = MiuixTheme.textStyles.body1,
-                                                            color = if (sel) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onBackground,
-                                                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-                                                        if (sel) {
-                                                            top.yukonga.miuix.kmp.basic.Icon(
-                                                                imageVector = Icons.Filled.Check,
-                                                                contentDescription = "已选",
-                                                                tint = MiuixTheme.colorScheme.primary,
-                                                                modifier = Modifier.size(18.dp)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                ModeItem("实时与本地合并显示", state.msgMode == "all", {
-                                                    state.setMsgMode("all")
-                                                    showMsgMode = false
-                                                })
-                                                ModeItem("仅显示实时", state.msgMode == "live", {
-                                                    state.setMsgMode("live")
-                                                    showMsgMode = false
-                                                })
-                                                ModeItem("仅显示本地", state.msgMode == "local", {
-                                                    state.setMsgMode("local")
-                                                    showMsgMode = false
-                                                })
-                                            }
-                                        }
-                                    }
-                                }
+                                )
+                            ) {
+                                top.yukonga.miuix.kmp.basic.Icon(
+                                    imageVector = MiuixIcons.Filter,
+                                    contentDescription = "显示模式"
+                                )
                             }
                         }
                     }

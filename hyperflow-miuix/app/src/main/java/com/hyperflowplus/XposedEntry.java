@@ -5,9 +5,11 @@ import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCallVoip;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
+import com.hyperflowplus.hooks.HookMirrorObserve;
 import com.hyperflowplus.hooks.HookRemoteOpen;
 import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
+import com.hyperflowplus.hooks.HookTrustAuth;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
@@ -61,6 +63,30 @@ public class XposedEntry extends XposedModule {
                 });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry system init failed", t);
+            }
+            return;
+        }
+        if ("com.xiaomi.trustservice".equals(pkgName)) {
+            // 妙享直通授权盘：自动填入留存锁屏密码走真实校验（HookTrustAuth）
+            try {
+                MiflowLog.i("=== HyperFlow loaded in com.xiaomi.trustservice (auth auto-fill) ===");
+                installSafely("HookTrustAuth", new Runnable() {
+                    @Override public void run() { HookTrustAuth.install(cl); }
+                });
+            } catch (Throwable t) {
+                MiflowLog.e("XposedEntry trustservice init failed", t);
+            }
+            return;
+        }
+        if ("com.xiaomi.mirror".equals(pkgName)) {
+            // 诊断期：观测分身通知/镜像打开到底走自起 u0 还是转发 999 PendingIntent（只读，不改行为）
+            try {
+                MiflowLog.i("=== HyperFlow loaded in com.xiaomi.mirror (clone-open observe) ===");
+                installSafely("HookMirrorObserve", new Runnable() {
+                    @Override public void run() { HookMirrorObserve.install(cl); }
+                });
+            } catch (Throwable t) {
+                MiflowLog.e("XposedEntry mirror init failed", t);
             }
             return;
         }
