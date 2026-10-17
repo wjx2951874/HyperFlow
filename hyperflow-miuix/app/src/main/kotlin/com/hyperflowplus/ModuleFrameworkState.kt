@@ -39,9 +39,21 @@ object ModuleFrameworkState {
         val systemScoped: Boolean
             get() = active && scope.any { it == "android" || it == "system" }
 
+        /** 信任服务作用域已勾选（妙享直通 A 方案依赖：授权盘自动填 + 免预填捕获） */
+        val trustScoped: Boolean
+            get() = active && scope.any { it == "com.xiaomi.trustservice" }
+
         /** 推荐作用域全部就绪 = 互联 + 系统框架都勾上（这正是检测最关心的判定） */
         val scopeReady: Boolean
             get() = milinkScoped && systemScoped
+
+        /**
+         * 按功能开关动态判定推荐作用域：
+         * 基础恒需 互联 + 系统框架；妙享直通（silent_auth）开启时额外要求信任服务作用域。
+         * 没开的功能不检查对应作用域 → 不误报（用户要求"按开关开启情况检测"）。
+         */
+        fun scopeReadyFor(needTrust: Boolean): Boolean =
+            scopeReady && (!needTrust || trustScoped)
     }
 
     private val mutableSnapshot = mutableStateOf(Snapshot())

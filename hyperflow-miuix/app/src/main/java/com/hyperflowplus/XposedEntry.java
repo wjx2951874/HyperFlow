@@ -141,18 +141,21 @@ public class XposedEntry extends XposedModule {
         }
     }
 
-    /** 写运行态标记（三路径，按注入进程区分，任一命中即视为"模块被 LSP 真正加载"）：
+    /** 写运行态标记（四路径，按注入进程区分，任一命中即视为"模块被 LSP 真正加载"）：
      *  1) /data/adb/hyperflowplus/xposed_loaded —— zygote/system_server（root 进程，对应 android 作用域）可写
      *  2) /data/user/0/com.milink.service/files/hf_loaded —— milink 服务进程（非 root、非本 App uid，
      *     只能写自己的数据目录；对应 com.milink.service 作用域）可写
-     *  3) /data/user/0/com.hyperflowplus/files/xposed_loaded —— 本 App 自身进程可写（保留，兼容旧版）
-     *  检测端按路径区分：1=android 作用域已生效，2=milink 作用域已生效。
-     *  本 App 自身已从推荐作用域移除（无需被 hook），路径 3 仅作兼容。失败静默，不影响功能。
+     *  3) /data/user/0/com.xiaomi.trustservice/files/hf_loaded —— 信任服务进程（对应 com.xiaomi.trustservice
+     *     作用域，妙享直通 A 方案依赖；检测端按开关 silent_auth 判定是否要求）
+     *  4) /data/user/0/com.hyperflowplus/files/xposed_loaded —— 本 App 自身进程可写（保留，兼容旧版）
+     *  检测端按路径区分：1=android 作用域已生效，2=milink 作用域已生效，3=trustservice 作用域已生效。
+     *  本 App 自身已从推荐作用域移除（无需被 hook），路径 4 仅作兼容。失败静默，不影响功能。
      */
     private static void markLoaded() {
         long now = System.currentTimeMillis();
         writeStamp("/data/adb/hyperflowplus/xposed_loaded", now);
         writeStamp("/data/user/0/com.milink.service/files/hf_loaded", now);
+        writeStamp("/data/user/0/com.xiaomi.trustservice/files/hf_loaded", now);
         writeStamp("/data/user/0/com.hyperflowplus/files/xposed_loaded", now);
     }
 

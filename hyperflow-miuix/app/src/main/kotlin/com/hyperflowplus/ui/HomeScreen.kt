@@ -115,16 +115,20 @@ echo ==P_ADB;
 cat /data/adb/hyperflowplus/xposed_loaded 2>/dev/null
 echo ==P_MILINK;
 cat /data/user/0/com.milink.service/files/hf_loaded 2>/dev/null
+echo ==P_TS;
+cat /data/user/0/com.xiaomi.trustservice/files/hf_loaded 2>/dev/null
 echo ==MAPS;
 APP_PID=$(pidof com.hyperflowplus 2>/dev/null | tr ' ' '\n')
 SYSPID=$(pidof system_server 2>/dev/null | tr ' ' '\n')
 MLPID=$(ps -A 2>/dev/null | grep -iE 'milink' | awk '{print $1}' | head -1)
+TSPID=$(pidof com.xiaomi.trustservice 2>/dev/null | tr ' ' '\n')
 for m in $(grep -ilE "hyperflow" /proc/[0-9]*/maps 2>/dev/null); do
   p=${'$'}{m%/*}
   pid=${'$'}{p##*/}
   case " ${'$'}APP_PID " in *" ${'$'}pid "*) continue;; esac
   case " ${'$'}SYSPID " in *" ${'$'}pid "*) echo "==SYS_LOADED"; continue;; esac
   case " ${'$'}MLPID " in *" ${'$'}pid "*) echo "==ML_LOADED"; continue;; esac
+  case " ${'$'}TSPID " in *" ${'$'}pid "*) echo "==TS_LOADED"; continue;; esac
   echo "==LOADED ${'$'}pid"
 done
 echo ==END""") }.getOrNull()
@@ -141,11 +145,13 @@ echo ==END""") }.getOrNull()
             val mapsSeg = out?.substringAfter("==MAPS") ?: ""
             val sysLoaded = mapsSeg.contains("==SYS_LOADED")
             val mlLoaded = mapsSeg.contains("==ML_LOADED")
+            val tsLoaded = mapsSeg.contains("==TS_LOADED")   // 信任服务进程注入（妙享直通）
             // V0.6.16.4：==LOADED <任意pid> 不再作为注入证据 —— grep -i "hyperflow" 大小写不敏感，
             // 会命中 dalvik-cache / dex2oat 残留等假阳性（实测模块未注入时也出现 SYS_LOADED/LOADED），
             // 且注入回调探针（markLoaded 文件）全空。只有 milink/system_server 进程 maps 命中才算真注入。
             val adbProbe = out?.substringAfter("==P_ADB")?.substringBefore("==P_MILINK")?.trim()?.toLongOrNull()
-            val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==SCOPE")?.trim()?.toLongOrNull()
+            val milinkProbe = out?.substringAfter("==P_MILINK")?.substringBefore("==P_TS")?.trim()?.toLongOrNull()
+            val tsProbe = out?.substringAfter("==P_TS")?.substringBefore("==MAPS")?.trim()?.toLongOrNull()
             // V0.6.16.3：不再读取 LSP 作用域参数 —— LSP 状态以 libxposed service 绑定快照为准
             // （启动时注入证据最真实），作用域变化靠"重新检测=强停重启"刷新，shell 读 scope 文件
             // 存在多路径/格式差异误报，且"取消勾选后进程内旧快照仍绿"只能重启根治。
@@ -153,13 +159,17 @@ echo ==END""") }.getOrNull()
             val androidInjected = sysLoaded || fresh(adbProbe)
             // 小米互联（milink 进程注入）：maps 实时证据优先，探针 48h 内命中兜底
             val milinkInjected = mlLoaded || fresh(milinkProbe)
+            // 信任服务（trustservice 进程注入，妙享直通需要）：maps 实时证据优先，探针 48h 内命中兜底
+            val trustInjected = tsLoaded || fresh(tsProbe)
             // 框架活跃 = daemon 存活，或模块已被注入 milink/system_server（maps 命中必然框架在跑）
             val lspInstalled = lspdAlive || mlLoaded || sysLoaded
             // 模块已启用 = 框架在跑 且 有运行时注入证据（milink 或 system_server 真实注入）
             val moduleOkV = if (lspInstalled && (androidInjected || milinkInjected)) 3 else 0
-            // 推荐作用域 = android 与 milink 两进程都被注入（各自探针 48h 内）——
-            // 不再要求"本 App"（模块自身进程无需被 hook，LSPosed 里勾不了属正常）
-            val scopeOkV = if (lspInstalled && androidInjected && milinkInjected) 3 else 0
+            // 推荐作用域 = android 与 milink 两进程都被注入（各自探针 48h 内）；
+            // 妙享直通开启时额外要求 trustservice 进程注入（按开关检测，不开不查不误报）
+            val needTrustV = state.cfg.optBoolean("silent_auth", false)
+            val scopeOkV = if (lspInstalled && androidInjected && milinkInjected
+                && (!needTrustV || trustInjected)) 3 else 0
             val lspOkV = if (lspInstalled) 3 else 0
             // 调试：原始检测结果写入 /data/adb/hyperflowplus/detect.log 便于排查
             // 注意：不能用单引号包 $out（shell 不展开 → 日志永远只有字面 $out）；
@@ -226,11 +236,14 @@ echo ==END""") }.getOrNull()
     // shell 内容为准、允许空集=全取消勾选），兼顾"取消后不重启也能刷出未就绪"。
     val fw = com.hyperflowplus.ModuleFrameworkState.snapshot.value
     val fwActive = fw.active
+    // 按开关动态要求作用域：妙享直通开启时额外要求 com.xiaomi.trustservice（授权盘自动填/免预填捕获）
+    val needTrust = state.cfg.optBoolean("silent_auth", false)
+    val scopeReadyFull = fw.scopeReadyFor(needTrust)
     // LSPosed 模块三态：0=未连接（模块被禁用/service 断开）红；
     // 1=已启用但推荐作用域不全 黄；3=启用+作用域全 绿
     val lspModuleState = when {
         !fwActive -> 0                                   // 模块被禁用/service 断开 → 未连接
-        fw.scopeReady -> 3                               // service scope 含 milink + android/system → 推荐作用域就绪
+        scopeReadyFull -> 3                              // 基础作用域 + 功能所需作用域全就绪
         else -> 1                                        // 已启用但作用域不全 → 部分未就绪
     }
     val lspModuleOk = lspModuleState == 3
@@ -456,7 +469,11 @@ echo ==END""") }.getOrNull()
                 ) {
                     Column(Modifier.padding(horizontal = 8.dp)) {
                         EnvDetailRow("Root 环境", rootEnvOk, "已授予（KernelSU/Magisk/APatch）" to "未授予 Root 权限")
-                        EnvDetailRow3("LSPosed 模块", lspModuleState, Triple("已启用 + 推荐作用域就绪", "已启用但推荐作用域未勾选全", "未连接 LSPosed（模块未启用）"))
+                        EnvDetailRow3("LSPosed 模块", lspModuleState, Triple(
+                            "已启用 + 所需作用域就绪",
+                            if (needTrust) "已启用但作用域未勾选全（妙享直通需勾选：系统框架 / 小米互联 / 信任服务）"
+                            else "已启用但推荐作用域未勾选全（系统框架 / 小米互联）",
+                            "未连接 LSPosed（模块未启用）"))
                         EnvDetailRow("小米互联服务", milinkOk, "服务正常" to "未安装小米互联服务")
                     }
                 }

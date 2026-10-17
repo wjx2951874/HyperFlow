@@ -212,8 +212,9 @@ fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules
     grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
     grep -qx 'system' "${'$'}sc2" || echo 'system' >> "${'$'}sc2"
     grep -qx 'android' "${'$'}sc2" || echo 'android' >> "${'$'}sc2"
+    grep -qx 'com.xiaomi.trustservice' "${'$'}sc2" || echo 'com.xiaomi.trustservice' >> "${'$'}sc2"
   else
-    { echo 'com.milink.service'; echo 'system'; echo 'android'; } > "${'$'}sc2"
+    { echo 'com.milink.service'; echo 'system'; echo 'android'; echo 'com.xiaomi.trustservice'; } > "${'$'}sc2"
   fi
 done
 chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
@@ -223,6 +224,7 @@ for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/conf
   [ -f "${'$'}db" ] || continue
   sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'com.milink.service',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
   sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'system',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
+  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'com.xiaomi.trustservice',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
   chown 0:0 "${'$'}db" 2>/dev/null
 done
 echo done"""

@@ -100,7 +100,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             Column {
                 SwitchPref(
                     title = "妙享直通",
-                    summary = "自动输入妙享桌面连接时的密码授权或验证",
+                    summary = "自动完成妙享桌面连接时要求的密码验证或授权",
                     checked = state.cfg.optBoolean("silent_auth", false),
                     onCheckedChange = { want ->
                         if (want) pendingToggle = "silent_auth"
