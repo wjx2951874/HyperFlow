@@ -244,7 +244,6 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                         Text(
                             "版本",
                             style = MiuixTheme.textStyles.body1,
-                            fontWeight = FontWeight.Light,
                             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
                         )
                         Spacer(Modifier.height(4.dp))

@@ -244,19 +244,21 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
     // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
     if (showPrefixEdit) {
+        // 键盘避让走 bottomInset（卡片底部 padding，不撑高卡片）；
+        // 不再用末尾大 Spacer：独立 Popup 内 ime inset 会被算成巨大值把卡片拉成空大块
+        val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
         HyperDialog(
             show = true,
             title = "双开标识前缀",
+            bottomInset = imeBottom,
             onDismiss = { showPrefixEdit = false }
         ) {
-            // App 内 Popup 不随键盘上推：取输入法高度把按钮顶到键盘上方，避免保存键被挡
-            val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
             TextField(
                 value = prefixDraft,
                 onValueChange = { prefixDraft = it },
                 label = "标识文字（自动包进【】）",
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             )
             Spacer(Modifier.height(20.dp))
             Row(
@@ -277,7 +279,6 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                     modifier = Modifier.weight(1f)
                 ) { Text("保存") }
             }
-            Spacer(Modifier.height(imeBottom))
         }
     }
 }

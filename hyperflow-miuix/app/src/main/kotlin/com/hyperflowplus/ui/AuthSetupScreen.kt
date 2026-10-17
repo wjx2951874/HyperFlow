@@ -59,7 +59,8 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     val scroll = rememberScrollState()
 
     var stage by remember { mutableStateOf(if (state.hasAuth) "saved" else "detecting") } // detecting=识别中；choose=选类型；input=输入；saved=已保存
-    var type by remember { mutableStateOf(state.authType.ifBlank { "pin" }) }
+    // 选择页不预选（去掉默认 pin）：无已存类型时三个圆圈都空，点哪个都一次进入输入页，避免点已选中项无反应
+    var type by remember { mutableStateOf(state.authType) }
     var autoHint by remember { mutableStateOf("") }
     var step by remember { mutableStateOf(0) }          // 0=第一遍 1=确认
     var first by remember { mutableStateOf("") }
@@ -96,8 +97,9 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
         }
     }
 
-    // 录入/选类型/识别阶段拦截系统返回手势（含图案页左滑），避免误退上一层；已保存态放行
-    BackHandler(enabled = !saved) { }
+    // 仅「图案绘制进行中」拦截系统返回（画到一半误退会丢路径）；
+    // 选类型 / 数字 / 混合输入 / 识别中 / 已保存态一律放行系统返回
+    BackHandler(enabled = !saved && stage == "input" && type == "pattern") { }
 
     Column(
         modifier = modifier
@@ -380,13 +382,10 @@ private fun PatternPad(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "已连接 ${path.size} 个点（至少 4 个）",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-            Spacer(Modifier.padding(horizontal = 12.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterEnd
+        ) {
             Text(
                 "清除重画",
                 modifier = Modifier.clickable { onClear() },

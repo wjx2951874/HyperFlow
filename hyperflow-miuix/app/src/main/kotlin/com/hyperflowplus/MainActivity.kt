@@ -56,7 +56,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.Filter
@@ -304,8 +304,8 @@ fun HyperFlowApp() {
             val topBarScroll = MiuixScrollBehavior()
             Scaffold(
                 containerColor = MiuixTheme.colorScheme.surface,
-                // KSU 同款显式空宿主：为 Overlay 下拉/菜单注册 popupHost，避免找不到宿主而崩
-                popupHost = { },
+                // 不显式传 popupHost：回落 Scaffold 默认 popup/overlay 宿主（InstallerX 同款），
+                // 空 { } 会顶掉默认宿主导致 Overlay 菜单找不到宿主而崩
                 modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
                 topBar = {
                     if (conversation != null) {
@@ -332,7 +332,7 @@ fun HyperFlowApp() {
                             val curSort = state.archiveSort
                             val dim = if (curSort.startsWith("name")) "name" else "time"
                             val desc = curSort.endsWith("desc")
-                            WindowIconDropdownMenu(
+                            OverlayIconDropdownMenu(
                                 entry = DropdownEntry(
                                     items = listOf(
                                         DropdownItem(
@@ -374,7 +374,7 @@ fun HyperFlowApp() {
                                 )
                             }
                             // 显示模式：官方 OverlayIconDropdownMenu
-                            WindowIconDropdownMenu(
+                            OverlayIconDropdownMenu(
                                 entry = DropdownEntry(
                                     items = listOf(
                                         DropdownItem(

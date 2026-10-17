@@ -46,7 +46,7 @@ import com.hyperflowplus.HFState
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.menu.WindowIconDropdownMenu
+import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.basic.Icon
@@ -326,7 +326,7 @@ fun ConversationTopBar(
         },
         actions = {
             // 排序：Window 级独立渲染，不依赖 Scaffold 宿主，点击不闪退
-            WindowIconDropdownMenu(
+            OverlayIconDropdownMenu(
                 entry = DropdownEntry(
                     items = listOf(
                         DropdownItem(
