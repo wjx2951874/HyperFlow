@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -70,6 +72,8 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     var error by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(state.hasAuth) }
     var redetect by remember { mutableStateOf(0) }       // 点"更换"递增，重新触发识别
+    var diagText by remember { mutableStateOf("") }      // 检测捕获状态的结果展示（调试用）
+    val scope = rememberCoroutineScope()
 
     // root 自动识别本机锁屏类型；识别到直进输入页，识别不到才落到手选；更换后递增 redetect 重新识别
     val appCtx = LocalContext.current.applicationContext
@@ -121,7 +125,16 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
                         Text("已保存：${typeName(type.ifBlank { state.authType })}", color = MiuixTheme.colorScheme.onSurface)
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(8.dp))
+                        ArrowPreference(
+                            title = "检测捕获状态",
+                            summary = if (diagText.isBlank()) "检查模块是否读到本机锁屏密码（调试用）" else diagText,
+                            onClick = {
+                                diagText = "检测中…"
+                                scope.launch { diagText = withContext(Dispatchers.IO) { checkCaptureDiag() } }
+                            }
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Button(
                             // 更换：清空本地输入、重新走识别流程；旧凭证暂不动，新密码两遍一致成功后才覆盖，失败绝不写入
                             onClick = {
@@ -357,6 +370,36 @@ internal fun syncCapturedAuth(state: HFState) {
             "captured auth synced (overwrite): type=$type len=${secret.length + pattern.length}")
     } catch (t: Throwable) {
         android.util.Log.d("HyperFlowPlus", "syncCapturedAuth failed: $t")
+    }
+}
+
+/** 检测捕获状态（调试用）：公共文件 / trustservice 兜底 / 当前入库 三处逐一探测。 */
+private fun checkCaptureDiag(): String {
+    val pub = RootExec.su("cat /data/system/hyperflow_captured 2>/dev/null")?.trim()
+    val sp = RootExec.su("cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
+    val inCfg = HFState.hasAuth
+    val cfgType = HFState.authType
+
+    fun typeOf(json: String?): String? = json?.let {
+        Regex("\"type\":\"([^\"]*)\" ").find(it)?.groupValues?.get(1)
+    }
+    val pubType = typeOf(pub)
+    val pubLen = pub?.length ?: 0
+
+    return buildString {
+        append(if (pub.isNullOrEmpty()) "公共文件：无捕获" else "公共文件：${pubType ?: "?"}(${pubLen}B)")
+        append("\n")
+        append(if (sp.isNullOrEmpty()) "兜底sp：无" else "兜底sp：有")
+        append("\n")
+        append(if (inCfg) "App已入库：${typeName(cfgType)}" else "App未入库")
+        append("\n")
+        append(
+            when {
+                !pub.isNullOrEmpty() -> "结论：解锁/授权已捕获成功，连接时可直连"
+                !sp.isNullOrEmpty() -> "结论：仅旧通道有值，连接时会尝试填入"
+                else -> "结论：未捕获到——请解锁手机并输入一次锁屏密码，再回来点此检测"
+            }
+        )
     }
 }
 
