@@ -50,3 +50,11 @@
 
 - A-2 已编码，待实机联调确认自动过；Bind_A/图案分支待补。
 - 电话流转：锁屏可流转，亮屏不行。
+
+### 6. A-2 成功后自动关闭锁屏验证输入框（beta33 追加）
+- **问题**：A-2 后台真实校验 + 回传真 HAT 后系统侧已解锁（再次连接可直连、取消输入框即进入系统），但信任服务的锁屏验证输入框（LockScreenUIActivity）仍挂着等输入，甚至被流转到对端显示，体验上"验证成功却卡在弹窗"。
+- **修复**：hook `LockScreenUIActivity.onResume` 记录实例；A-2 成功回传 HAT 后置 `authOk` 并在主线程自动 `finish()` 输入框；若输入框晚于校验弹出，onResume 时见 `authOk=true` 直接关闭。失败/异常仍静默放行回手动。
+
+### 7. 设备信息 UI 调整 + 系统版本串完整化（beta33 追加）
+- OS 版本与 Android 版本拆成两行显示；设备信息去掉图标只留文字左对齐。
+- 系统版本串：优先 `ro.build.version.incremental`（小米完整版本如 "4.0.2.0.XPCCNXM.D01"，与系统设置页"OS 版本"一致），其次 display.id；小米 HyperOS name/code 若为 "OS4.0" 简称则归一为 "HyperOS 4.0"。

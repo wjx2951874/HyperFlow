@@ -644,18 +644,20 @@ echo ==END""") }.getOrNull()
             }
         }
 
-        // v0.5.13：按用户要求精简 —— 只留 机型 / 系统（含安卓版本）/ 内核 / 模块版本
+        // v0.5.13：按用户要求精简 —— 只留 机型 / 系统（OS 版本）/ Android / 内核 / 应用版本，
+        // 纯文字左对齐（无图标）；OS 版本与 Android 版本拆成独立两行
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                DevInfoRow(Icons.Filled.Smartphone, "机型",
+                DevInfoRow("机型",
                     if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName)
-                DevInfoRow(Icons.Filled.Tag, "系统",
-                    if (miuiV.isNotEmpty()) "$miuiV · Android $andV (API ${android.os.Build.VERSION.SDK_INT})"
-                    else "Android $andV (API ${android.os.Build.VERSION.SDK_INT})",
+                DevInfoRow("系统",
+                    if (miuiV.isNotEmpty()) miuiV else "未知",
                     expandable = true,
                     onTap = { onSysTap() })
-                DevInfoRow(Icons.Filled.DeveloperBoard, "内核", kernV.ifEmpty { "未知" }, expandable = true)
-                DevInfoRow(Icons.Filled.Fingerprint, "应用版本", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
+                DevInfoRow("Android",
+                    "Android $andV (API ${android.os.Build.VERSION.SDK_INT})")
+                DevInfoRow("内核", kernV.ifEmpty { "未知" }, expandable = true)
+                DevInfoRow("应用版本", "HyperFlow v${BuildConfig.VERSION_NAME}", bottomPadding = 0.dp)
             }
         }
 
@@ -751,7 +753,6 @@ private fun EnvItemRow3(
  *  点击行切换为完整换行（系统/内核长文本用） */
 @Composable
 private fun DevInfoRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     content: String,
     bottomPadding: androidx.compose.ui.unit.Dp = 24.dp,
@@ -771,14 +772,6 @@ private fun DevInfoRow(
             .padding(bottom = bottomPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = title,
-            modifier = Modifier
-                .padding(end = 12.dp)
-                .size(24.dp),
-            tint = MiuixTheme.colorScheme.onBackground
-        )
         Column {
             Text(
                 title,

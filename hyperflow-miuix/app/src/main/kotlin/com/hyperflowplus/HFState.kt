@@ -513,19 +513,30 @@ object HFState {
                 val dRelease = android.os.Build.VERSION.RELEASE
                 val dKernel = runCatching { System.getProperty("os.version") }.getOrNull()?.trim() ?: ""
                 // 厂商系统名+版本去重拼接（name 已含 code 则不重复拼）
-                val osNameVer = when {
+                var osNameVer = when {
                     dOsName.isBlank() -> dOsCode
                     dOsCode.isBlank() -> dOsName
                     dOsName.contains(dOsCode) || dOsCode.contains(dOsName) -> dOsName
                     else -> "$dOsName $dOsCode"
                 }
-                val osVer = listOf(osNameVer, dMiuiV, dColor, dOneUI, dEmui, dVivo, dDisplay, dIncremental)
+                // 小米 HyperOS 4.x 的 name/code 可能只给 "OS4.0" 这类简称，归一为 "HyperOS 4.0"
+                // （仅在小米系属性命中时处理，避免误伤其他系统）
+                if ((dOsName.isNotBlank() || dOsCode.isNotBlank()) && osNameVer.startsWith("OS")) {
+                    osNameVer = "HyperOS " + osNameVer.removePrefix("OS").trimStart()
+                }
+                // 厂商版本主串（HyperOS/MIUI/ColorOS/OneUI/EMUI/OriginOS 任一）
+                val osVer = listOf(osNameVer, dMiuiV, dColor, dOneUI, dEmui, dVivo)
                     .firstOrNull { it.isNotBlank() } ?: ""
-                val sysLine = if (osVer.isNotEmpty()) {
-                    if (dDisplay.isNotEmpty() && dDisplay != osVer && !osVer.contains(dDisplay) && !dDisplay.contains(osVer)) {
-                        "$osVer（$dDisplay）"
-                    } else osVer
-                } else "未知"
+                // 详细 build 串：优先 incremental（小米完整版本串如 "4.0.2.0.XPCCNXM.D01"，
+                // 与系统设置页"OS 版本"一致），其次 display.id；与主串重复时跳过
+                val detail = listOf(dIncremental, dDisplay).firstOrNull {
+                    it.isNotBlank() && it != osVer && !osVer.contains(it) && !it.contains(osVer)
+                }
+                val sysLine = when {
+                    osVer.isNotEmpty() -> if (detail != null) "$osVer（$detail）" else osVer
+                    detail != null -> detail
+                    else -> "未知"
+                }
                 devModel = dModel
                 devMiui = sysLine
                 devAndroid = dRelease

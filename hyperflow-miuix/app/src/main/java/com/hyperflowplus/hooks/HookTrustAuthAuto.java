@@ -40,7 +40,8 @@ public class HookTrustAuthAuto {
             bCls = cl.loadClass("Z0.b");
             hookMethod("g");
             hookMethod("h");
-            MiflowLog.i("HookTrustAuthAuto: installed on Z0.b.g/h (A-1 observe only)");
+            hookAuthUi(cl);   // A-2 成功回传 HAT 后自动关闭锁屏验证输入框
+            MiflowLog.i("HookTrustAuthAuto: installed on Z0.b.g/h (A-2, auto-close UI)");
         } catch (ClassNotFoundException e) {
             MiflowLog.w("HookTrustAuthAuto: Z0.b not found (version mismatch?), skip");
         } catch (Throwable t) {
@@ -157,6 +158,74 @@ public class HookTrustAuthAuto {
             new java.util.concurrent.atomic.AtomicInteger(0);
     private static final int MAX_FAIL = 3;
 
+    // 锁屏验证输入框（com.xiaomi.trustservice 的 LockScreenUIActivity）弱引用 + 成功标志：
+    // A-2 后台回传真 HAT 后系统侧解锁已成立，但 UI 仍挂着等用户输入（用户实测"停在弹窗"），
+    // 因此成功回传后自动 finish 该输入框；若 UI 后于校验弹出，onResume 时见 authOk=true 直接关。
+    private static volatile java.lang.ref.WeakReference<android.app.Activity> authUi =
+            new java.lang.ref.WeakReference<>(null);
+    private static volatile boolean authOk = false;
+
+    /** hook 锁屏验证输入框的 onResume：记录实例；A-2 已成功则立即自动关闭。 */
+    private static void hookAuthUi(ClassLoader cl) {
+        try {
+            Class<?> act = cl.loadClass("com.xiaomi.trustservice.remoteservice.locksettings.LockScreenUIActivity");
+            for (Method m : act.getDeclaredMethods()) {
+                if (!m.getName().equals("onResume") || m.getParameterCount() != 0) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                try {
+                                    Object self = chain.getThisObject();
+                                    if (self instanceof android.app.Activity) {
+                                        authUi = new java.lang.ref.WeakReference<>((android.app.Activity) self);
+                                        MiflowLog.i("A-2: auth UI shown, authOk=" + authOk);
+                                        if (authOk) {
+                                            finishAuthUi();
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    MiflowLog.e("A-2: ui hook err", t);
+                                }
+                                return chain.proceed();
+                            }
+                        });
+                MiflowLog.i("A-2: hooked LockScreenUIActivity.onResume");
+                return;
+            }
+            MiflowLog.w("A-2: LockScreenUIActivity.onResume not found");
+        } catch (Throwable t) {
+            MiflowLog.w("A-2: LockScreenUIActivity class not found, auto-close UI unavailable: " + t);
+        }
+    }
+
+    /** 主线程 finish 锁屏验证输入框（A-2 成功回传 HAT 后调用）。 */
+    private static void finishAuthUi() {
+        try {
+            final android.app.Activity a = authUi.get();
+            if (a == null) {
+                return;
+            }
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                try {
+                    if (!a.isFinishing()) {
+                        a.finish();
+                        MiflowLog.i("A-2: auth UI auto-closed after HAT sent");
+                    }
+                } catch (Throwable t) {
+                    MiflowLog.e("A-2: finish auth UI err", t);
+                }
+            });
+        } catch (Throwable t) {
+            MiflowLog.e("A-2: finishAuthUi failed", t);
+        }
+    }
+
     private static void startAutoVerify(List<Object> args) {
         try {
             if (failCount.get() >= MAX_FAIL) {
@@ -246,7 +315,9 @@ public class HookTrustAuthAuto {
         Method back = proxy.getClass().getMethod(methodName, byte[].class);
         back.invoke(proxy, (Object) hat);
         failCount.set(0);
-        MiflowLog.i("A-2: HAT sent via k." + methodName + "(" + branch + "), auto ok");
+        authOk = true;
+        finishAuthUi();   // 系统侧已解锁，自动关闭仍挂着的验证输入框
+        MiflowLog.i("A-2: HAT sent via k." + methodName + "(" + branch + "), auto ok, closing UI");
     }
 
     /** challenge 前8字节 little-endian 转 long（复刻 Z0.b.e）。 */
