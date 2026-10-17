@@ -47,7 +47,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
+import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -90,11 +90,12 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
 
         Card(Modifier.fillMaxWidth()) {
             Column {
-                // 外观：跟随系统 / 浅色 / 深色（Window 级独立渲染，不依赖 Scaffold 宿主，点击不闪退）
+                // 外观：跟随系统 / 浅色 / 深色（页内 Overlay 气泡，Scaffold 默认宿主托管，KSU 下不闪退；
+                // WindowSpinnerPreference 另开独立 window 在 KSU 环境弹不出/闪退，已弃用）
                 val themeOptions = listOf("跟随系统", "浅色", "深色")
                 val themeValues = listOf("system", "light", "dark")
                 val themeIndex = themeValues.indexOf(state.themeMode).coerceAtLeast(0)
-                WindowSpinnerPreference(
+                OverlaySpinnerPreference(
                     title = "外观",
                     items = themeOptions.mapIndexed { i, label ->
                         DropdownItem(
