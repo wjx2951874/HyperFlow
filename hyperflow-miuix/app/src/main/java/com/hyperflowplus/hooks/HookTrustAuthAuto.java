@@ -40,7 +40,8 @@ public class HookTrustAuthAuto {
             bCls = cl.loadClass("Z0.b");
             hookMethod("g");
             hookMethod("h");
-            hookCredentialCapture();   // 免预填：捕获系统每次构造的锁屏凭证（真实值）
+            hookCredentialCapture();   // 免预填：暂存系统构造的凭证（b.c）
+            hookVerifySuccess();       // 免预填：校验成功才捕获入库（可靠版）
             hookAuthUi(cl);   // A-2 成功回传 HAT 后自动关闭锁屏验证输入框
             MiflowLog.i("HookTrustAuthAuto: installed on Z0.b.g/h/c (A-2, auto-close UI)");
         } catch (ClassNotFoundException e) {
@@ -270,6 +271,10 @@ public class HookTrustAuthAuto {
         }
     }
 
+    private static String lastCapType;
+    private static String lastCapRaw;
+
+    /** b.c 只暂存最近一次构造的凭证（可能含用户输错的密码，不写盘）。 */
     private static void captureCredential(int type, String raw) {
         if (raw == null || raw.isEmpty()) {
             return;
@@ -278,17 +283,98 @@ public class HookTrustAuthAuto {
         if (t == null) {
             return;
         }
-        android.content.SharedPreferences sp = capturedSp();
-        if (sp == null) {
-            return;
+        lastCapType = t;
+        lastCapRaw = raw;
+        MiflowLog.i("A-2: pending credential " + t + " (len=" + raw.length() + ")");
+    }
+
+    /**
+     * 校验成功捕获（免预填 · 可靠版）：hook LockPatternUtils.verifyCredential，
+     * 系统确认密码正确（isMatched）后才从凭证对象提取明文写入 trustservice sp。
+     * 只存"验证通过"的密码 —— 用户输错的值永远不会入库；换密码后首次输对新密码即自动刷新。
+     */
+    private static void hookVerifySuccess() {
+        try {
+            Class<?> lpu = Class.forName("com.android.internal.widget.LockPatternUtils");
+            final Class<?> lc = Class.forName("com.android.internal.widget.LockscreenCredential");
+            for (Method m : lpu.getDeclaredMethods()) {
+                if (!m.getName().equals("verifyCredential")) {
+                    continue;
+                }
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length != 3 || pt[0] != lc || pt[1] != int.class || pt[2] != int.class) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                Object result = chain.proceed();
+                                try {
+                                    boolean matched = (boolean) result.getClass()
+                                            .getMethod("isMatched").invoke(result);
+                                    if (matched) {
+                                        captureFromCredential(chain.getArgs().get(0));
+                                    }
+                                } catch (Throwable t) {
+                                    MiflowLog.e("A-2: verify capture err", t);
+                                }
+                                return result;
+                            }
+                        });
+                MiflowLog.i("A-2: hooked LockPatternUtils.verifyCredential for matched capture");
+                return;
+            }
+            MiflowLog.w("A-2: verifyCredential(LockscreenCredential,int,int) not found");
+        } catch (Throwable t) {
+            MiflowLog.w("A-2: hookVerifySuccess failed: " + t);
         }
-        // commit() 同步落盘：App 侧读取时文件必须已写入
-        sp.edit()
-                .putString("hf_cap_type", t)
-                .putString("hf_cap_secret", "pattern".equals(t) ? "" : raw)
-                .putString("hf_cap_pattern", "pattern".equals(t) ? raw : "")
-                .commit();
-        MiflowLog.i("A-2: captured " + t + " (len=" + raw.length() + ") to trustservice sp");
+    }
+
+    /** 从校验成功的凭证对象提取明文+类型；提取失败退用 b.c 暂存值（最后手段）。 */
+    private static void captureFromCredential(Object cred) {
+        try {
+            Class<?> c = cred.getClass();
+            String type = null;
+            if ((boolean) c.getMethod("isPattern").invoke(cred)) {
+                type = "pattern";
+            } else if ((boolean) c.getMethod("isPin").invoke(cred)) {
+                type = "pin";
+            } else if ((boolean) c.getMethod("isPassword").invoke(cred)) {
+                type = "password";
+            }
+            String raw = (String) c.getMethod("getCredential").invoke(cred);
+            if (type == null || raw == null || raw.isEmpty()) {
+                return;
+            }
+            writeCaptured(type, raw);
+        } catch (Throwable t) {
+            // 对象方法获取失败 → 用 b.c 暂存值兜底（校验已成功，暂存值即为正确密码）
+            if (lastCapType != null && lastCapRaw != null && !lastCapRaw.isEmpty()) {
+                writeCaptured(lastCapType, lastCapRaw);
+            }
+        }
+    }
+
+    /** 写入 trustservice 进程自己的 SharedPreferences（App 侧 root 读回）。 */
+    private static void writeCaptured(String type, String raw) {
+        try {
+            android.content.SharedPreferences sp = capturedSp();
+            if (sp == null) {
+                return;
+            }
+            // commit() 同步落盘：App 侧读取时文件必须已写入
+            sp.edit()
+                    .putString("hf_cap_type", type)
+                    .putString("hf_cap_secret", "pattern".equals(type) ? "" : raw)
+                    .putString("hf_cap_pattern", "pattern".equals(type) ? raw : "")
+                    .commit();
+            MiflowLog.i("A-2: captured verified " + type + " (len=" + raw.length() + ") -> trustservice sp");
+        } catch (Throwable t) {
+            MiflowLog.e("A-2: writeCaptured failed", t);
+        }
     }
 
     /** trustservice 进程自己的 SharedPreferences（App 侧 root 读取该文件）。 */

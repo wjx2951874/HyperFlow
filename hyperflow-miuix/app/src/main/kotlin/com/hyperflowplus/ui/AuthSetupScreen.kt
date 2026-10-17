@@ -329,14 +329,12 @@ private fun qualityToType(v: Int): String? = when {
 }
 
 /**
- * 免预填：模块（HookTrustAuthAuto）在 trustservice 进程捕获到真实锁屏凭证后写入其
+ * 免预填：模块（HookTrustAuthAuto）在 trustservice 进程"校验成功"后把真实锁屏凭证写入其
  * SharedPreferences（hyperflow_captured.xml），这里用 root 读回该文件，加密入库。
- * 前提：用户曾通过授权盘输入过一次（或 A-2 注入触发过 Z0.b.c），此后永久免手动录入。
- * 已有预存凭证时不覆盖（用户手动管理优先）。
+ * 始终用最新捕获值覆盖（含换密码场景：新密码验证成功即刷新）；无捕获值时不动现有预存。
  */
 private fun syncCapturedAuth(state: HFState) {
     try {
-        if (state.hasAuth) return
         val xml = RootExec.su(
             "cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
             ?: return
@@ -345,8 +343,10 @@ private fun syncCapturedAuth(state: HFState) {
         if (type.isEmpty()) return
         val secret = Regex("hf_cap_secret\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
         val pattern = Regex("hf_cap_pattern\">([^<]*)<").find(xml)?.groupValues?.get(1).orEmpty()
+        // 始终覆盖：捕获值=最近一次验证成功的真实密码，换密码后自动跟随
         state.saveAuth(type, secret, pattern)
-        android.util.Log.i("HyperFlowPlus", "captured auth synced: type=$type len=${secret.length + pattern.length}")
+        android.util.Log.i("HyperFlowPlus",
+            "captured auth synced (overwrite): type=$type len=${secret.length + pattern.length}")
     } catch (t: Throwable) {
         android.util.Log.d("HyperFlowPlus", "syncCapturedAuth failed: $t")
     }
