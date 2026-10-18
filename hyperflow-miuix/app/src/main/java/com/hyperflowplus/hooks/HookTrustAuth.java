@@ -62,6 +62,11 @@ public class HookTrustAuth {
                                 // 刷新 /data/system/hyperflow_captured）——用户只要日常解锁过一次，
                                 // 这里就能拿到最新真实密码，即使 App 从未打开/从未入库也能直接连接。
                                 String[] cap = CapturedCred.readPublic();
+                                if (cap == null) {
+                                    // 本进程（trustservice）私有 sp：手动输入时 HookTrustAuth 捕获写入，
+                                    // 下次连接免预填直读（不依赖 system_server 捕获/App 同步）
+                                    cap = CapturedCred.readLocalSp();
+                                }
                                 if (cap != null) {
                                     t = cap[0];
                                     secret = cap[1];
@@ -91,6 +96,29 @@ public class HookTrustAuth {
                                     Object[] newArgs = args.toArray();
                                     newArgs[0] = inject;
                                     return chain.proceed(newArgs);
+                                }
+                                // 免预填捕获：没有留存值可注入 = 用户正在手动输入。
+                                // 此刻 A.d.e(String) 的入参就是真实明文（PIN/混合=字符串，
+                                // 图案=3x3 点编号串），直接捕获落盘，下次连接即可自动填。
+                                // 类型码 = A.d 实例字段 a：1=PIN / 2=图案 / 3=混合（jadx 实锤）。
+                                try {
+                                    Object self = chain.getThisObject();
+                                    java.lang.reflect.Field f = self.getClass().getDeclaredField("a");
+                                    f.setAccessible(true);
+                                    int rawType = f.getInt(self);
+                                    String capType = rawType == 1 ? "pin"
+                                            : rawType == 2 ? "pattern"
+                                            : rawType == 3 ? "password" : null;
+                                    if (capType != null) {
+                                        String manual = String.valueOf(chain.getArgs().get(0));
+                                        if (manual != null && !manual.isEmpty()) {
+                                            CapturedCred.write(capType, manual);
+                                            MiflowLog.i("HookTrustAuth: captured manual input type="
+                                                    + capType + " len=" + manual.length());
+                                        }
+                                    }
+                                } catch (Throwable t3) {
+                                    MiflowLog.w("HookTrustAuth: capture manual input failed: " + t3);
                                 }
                             } catch (Throwable t2) {
                                 MiflowLog.e("HookTrustAuth: fill failed, pass through", t2);

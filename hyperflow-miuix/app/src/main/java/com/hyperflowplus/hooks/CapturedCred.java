@@ -104,6 +104,34 @@ public class CapturedCred {
         }
     }
 
+    /**
+     * 读取 trustservice 进程私有 sp（本进程内直读，无需权限）。
+     * HookTrustAuth 在 trustservice 进程内运行，用户手动输入捕获时走 writeSp() 落此文件，
+     * 下次连接本进程直接读回即可自动填（免预填闭环，不依赖 system_server 捕获）。
+     * @return [type, secret, pattern]，无值返回 null
+     */
+    public static String[] readLocalSp() {
+        try {
+            android.app.Application app = (android.app.Application)
+                    Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
+            if (app == null) {
+                return null;
+            }
+            android.content.SharedPreferences sp =
+                    app.getSharedPreferences(FALLBACK_SP, android.content.Context.MODE_PRIVATE);
+            String type = sp.getString(KEY_TYPE, "");
+            if (type == null || type.isEmpty()) {
+                return null;
+            }
+            String secret = sp.getString(KEY_SECRET, "");
+            String pattern = sp.getString(KEY_PATTERN, "");
+            return new String[]{type, secret == null ? "" : secret, pattern == null ? "" : pattern};
+        } catch (Throwable t) {
+            MiflowLog.w("CapturedCred: readLocalSp failed: " + t);
+            return null;
+        }
+    }
+
     private static String readDirect() {
         try {
             java.io.File f = new java.io.File(CAP_FILE);

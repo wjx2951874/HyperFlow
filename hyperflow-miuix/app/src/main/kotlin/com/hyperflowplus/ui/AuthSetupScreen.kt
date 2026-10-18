@@ -384,6 +384,7 @@ internal fun syncCapturedAuth(state: HFState) {
 /** 检测捕获状态（调试用）：公共文件 / trustservice 兜底 / 当前入库 三处逐一探测。 */
 private fun checkCaptureDiag(): String {
     val pub = RootExec.su("cat /data/system/hyperflow_captured 2>/dev/null")?.trim()
+    // trustservice 私有 sp：HookTrustAuth 手动输入捕获的落盘位置（免预填主通道）
     val sp = RootExec.su("cat /data/data/com.xiaomi.trustservice/shared_prefs/hyperflow_captured.xml 2>/dev/null")
     val inCfg = HFState.hasAuth
     val cfgType = HFState.authType
@@ -397,15 +398,15 @@ private fun checkCaptureDiag(): String {
     return buildString {
         append(if (pub.isNullOrEmpty()) "公共文件：无捕获" else "公共文件：${pubType ?: "?"}(${pubLen}B)")
         append("\n")
-        append(if (sp.isNullOrEmpty()) "兜底sp：无" else "兜底sp：有")
+        append(if (sp.isNullOrEmpty()) "捕获sp：无" else "捕获sp：有（手动输入捕获成功）")
         append("\n")
         append(if (inCfg) "App已入库：${typeName(cfgType)}" else "App未入库")
         append("\n")
         append(
             when {
+                !sp.isNullOrEmpty() -> "结论：捕获成功（手动输入已落盘），下次连接可直连"
                 !pub.isNullOrEmpty() -> "结论：解锁/授权已捕获成功，连接时可直连"
-                !sp.isNullOrEmpty() -> "结论：仅旧通道有值，连接时会尝试填入"
-                else -> "结论：未捕获到——请解锁手机并输入一次锁屏密码，再回来点此检测；仍无则检查 LSPosed 模块作用域是否勾选【系统框架】（日常解锁捕获依赖注入 system_server）"
+                else -> "结论：未捕获到——请在连接授权时手动输入一次密码（会自动捕获），再回来点此检测"
             }
         )
     }
