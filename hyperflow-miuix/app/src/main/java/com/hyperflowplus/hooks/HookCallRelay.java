@@ -78,12 +78,18 @@ public class HookCallRelay {
                 }
             }
             m.setAccessible(true);
+            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
             com.hyperflowplus.XposedEntry.get().hook(m)
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
                             if (enabled && Config.isForceTransferEnabled()) {
+                                // 首次实际调用打一次日志：证明该进程真的走了这个判定点（milink / incallui 通用）
+                                if (firstCall.compareAndSet(false, true)) {
+                                    MiflowLog.i("HookCallRelay: " + clsName + "." + methodName
+                                            + " CALLED -> returning " + lockValue + " (gated by force_transfer)");
+                                }
                                 return Boolean.valueOf(lockValue);
                             }
                             return chain.proceed();
@@ -102,12 +108,16 @@ public class HookCallRelay {
             Class<?> dCls = Class.forName("android.view.Display", false, cl);
             Method m = dCls.getDeclaredMethod("getState");
             m.setAccessible(true);
+            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
             com.hyperflowplus.XposedEntry.get().hook(m)
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
                             if (enabled && Config.isForceTransferEnabled()) {
+                                if (firstCall.compareAndSet(false, true)) {
+                                    MiflowLog.i("HookCallRelay: Display.getState CALLED -> STATE_OFF (gated)");
+                                }
                                 return Integer.valueOf(Display.STATE_OFF);
                             }
                             return chain.proceed();
@@ -125,12 +135,16 @@ public class HookCallRelay {
             Class<?> dCls = Class.forName("android.view.Display", false, cl);
             Method m = dCls.getDeclaredMethod("isOn");
             m.setAccessible(true);
+            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
             com.hyperflowplus.XposedEntry.get().hook(m)
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
                             if (enabled && Config.isForceTransferEnabled()) {
+                                if (firstCall.compareAndSet(false, true)) {
+                                    MiflowLog.i("HookCallRelay: Display.isOn CALLED -> false (gated)");
+                                }
                                 return Boolean.FALSE;
                             }
                             return chain.proceed();

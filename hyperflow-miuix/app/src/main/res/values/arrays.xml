@@ -7,6 +7,7 @@
         <item>com.milink.service</item>
         <item>com.xiaomi.trustservice</item>
         <item>com.xiaomi.mirror</item>
+        <item>com.android.incallui</item>
         <item>android</item>
         <item>system</item>
     </string-array>

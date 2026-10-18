@@ -3,6 +3,7 @@ package com.hyperflowplus;
 import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCallVoip;
+import com.hyperflowplus.hooks.HookCallVoipNotify;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookKeyguardCapture;
@@ -101,6 +102,25 @@ public class XposedEntry extends XposedModule {
                 });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry mirror init failed", t);
+            }
+            return;
+        }
+        if ("com.android.incallui".equals(pkgName)) {
+            // 电话（InCallUI）：亮屏来电时向 milink 补发 ON_CALL_VOIP 流转广播。
+            // 根因（hf_lock/hf_call3 双日志实锤）：锁屏来电 InCallUI 状态机 INCOMING →
+            // StatusBarNotifier.resendNotification → 发 ON_CALL_VOIP 广播给 milink → 流转成功；
+            // 亮屏来电 Telecom 不绑定 InCallUI（状态机不启动），InCallUI 只发前台通知、
+            // 不发 ON_CALL_VOIP 广播 → milink 收不到 → 流转链在源头断掉。
+            // HookCallVoipNotify 在亮屏来电时（notifyNotification 被调用，日志实锤）按原生
+            // 广播格式补发 ON_CALL_VOIP，milink NotifTransReceiver 收到即走完整流转链。
+            // 零 UI 干预：不模拟锁屏、不启动全屏，亮屏来电横幅仍由 SystemUI 原生显示。
+            try {
+                MiflowLog.i("=== HyperFlow loaded in com.android.incallui (voip relay for screen-on call) ===");
+                installSafely("HookCallVoipNotify", new Runnable() {
+                    @Override public void run() { HookCallVoipNotify.install(cl); }
+                });
+            } catch (Throwable t) {
+                MiflowLog.e("XposedEntry incallui init failed", t);
             }
             return;
         }
