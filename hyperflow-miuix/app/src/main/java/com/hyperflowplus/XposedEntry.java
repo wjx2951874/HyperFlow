@@ -13,6 +13,7 @@ import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
 import com.hyperflowplus.hooks.HookTrustAuth;
 import com.hyperflowplus.hooks.HookTrustAuthAuto;
+import com.hyperflowplus.hooks.HookTrustAuthAutoFill;
 import com.hyperflowplus.hooks.HookTrustAuthUiClose;
 
 import io.github.libxposed.api.XposedModule;
@@ -83,6 +84,10 @@ public class XposedEntry extends XposedModule {
                 // A方案-1：观测会话建立点 g/h，dump 单例字段（只读，不抢流程），为 A-2 HAT 回传定位
                 installSafely("HookTrustAuthAuto", new Runnable() {
                     @Override public void run() { HookTrustAuthAuto.install(cl); }
+                });
+                // 免预填自动填：授权盘显示时（setAuthInputCompleteListener 注入 A.d 实例）直接提交留存凭证
+                installSafely("HookTrustAuthAutoFill", new Runnable() {
+                    @Override public void run() { HookTrustAuthAutoFill.install(cl); }
                 });
                 // 验证成功后自动关闭授权盘 UI（netbus.h.n(int) 结果码 0 → finish）
                 installSafely("HookTrustAuthUiClose", new Runnable() {
