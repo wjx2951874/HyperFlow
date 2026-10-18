@@ -12,6 +12,7 @@ import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
 import com.hyperflowplus.hooks.HookTrustAuth;
 import com.hyperflowplus.hooks.HookTrustAuthAuto;
+import com.hyperflowplus.hooks.HookTrustAuthUiClose;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
@@ -81,6 +82,10 @@ public class XposedEntry extends XposedModule {
                 // A方案-1：观测会话建立点 g/h，dump 单例字段（只读，不抢流程），为 A-2 HAT 回传定位
                 installSafely("HookTrustAuthAuto", new Runnable() {
                     @Override public void run() { HookTrustAuthAuto.install(cl); }
+                });
+                // 验证成功后自动关闭授权盘 UI（netbus.h.n(int) 结果码 0 → finish）
+                installSafely("HookTrustAuthUiClose", new Runnable() {
+                    @Override public void run() { HookTrustAuthUiClose.install(cl); }
                 });
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry trustservice init failed", t);
