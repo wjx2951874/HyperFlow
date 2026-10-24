@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- LSPosed 预勾选作用域：小米互联服务（通知流转 6 个 hook）+ 系统框架（点击分身通知打开 999，HookRemoteOpen）。
+    <!-- LSPosed 预勾选作用域（遗留模块机制，兼容经典 LSPosed；新版 Vector 读 META-INF/xposed/scope.list，见 resources 目录）。
          系统框架双标识：android=经典 LSPosed / system=新版 Vector（JingMatrix 分支），两个都写保证两边都认。
-         电话相关 4 进程全列（com.android.incallui 有 HookCallVoipNotify，其余 3 个为保险冗余勾选，XposedEntry 无分支时静默跳过）。
+         电话仅 com.android.incallui（HookCallVoipNotify 所在进程），其余电话进程无 hook 不列入。
          本 App（com.hyperflowplus）自身进程无需被 hook，不再列入推荐作用域（LSPosed 中勾不了也属正常）。 -->
     <string-array name="xposedscope">
         <item>com.milink.service</item>
         <item>com.xiaomi.trustservice</item>
         <item>com.xiaomi.mirror</item>
         <item>com.android.incallui</item>
-        <item>com.android.server.telecom</item>
-        <item>com.android.phone</item>
-        <item>com.android.providers.telephony</item>
         <item>android</item>
         <item>system</item>
     </string-array>
