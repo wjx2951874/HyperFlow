@@ -1,11 +1,11 @@
-# HyperFlow 交接文档（换工具前快照，2026-10-17，beta33/161）
+# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta35 构建中）
 
 > 用途：本文件供下一个接手的人/AI 快速续上。所有事实以本仓库代码 + `docs/trustservice-auth-chain.md` 为准；本快照之后的改动以 git 历史为准。
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。
-- 已发最新测试版 beta32/160（CI 成功、用户已装）；本快照把一批 UI 小改 + A-2 主动校验代码写好、本地 Kotlin+Java 编译通过，**尚未 commit/push/出包**（见第 7 节待办动作）。
-- 两条主线：① UI 小改收尾；② **A 方案：纯后台静默自动校验锁屏密码、拿真 HAT 回传对端**（不模拟点击、不伪造成功、不碰 UI）。
+- 已交付 beta34/162（commit 1ad167f，用户已装）；当前 **beta35 构建中**（commit 813df01：亮屏来电流转根因修复 HookCallFilterPass + iPhone voip 强制放行 HookCallVoipForce，CI 出包后交付实测）。
+- 两条主线：① **电话流转化**（亮屏来电流转，根因已实锤并修复，待实机联调）；② A 方案纯后台静默校验（beta34 已并入交付，遗留补参/图案实测）。
 
 ## 1. 项目是什么
 小米澎湃 OS 互联增强：Xposed 模块（通知/短信流转、分身双开标识）+ miuix 原生 UI App。被控端 root（Note12 Turbo），发起端小米15（无 root 走 Shizuku），另有 iPhone。
@@ -80,20 +80,60 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 - **弹窗闪退（beta31 根治，commit 15ba6e0）**：miuix 菜单 `NavigationBackHandler` 需 `LocalNavigationEventDispatcherOwner`，菜单提层后读不到 null 即 `IllegalStateException: No NavigationEventDispatcher was provided`。根治 = `AppNavigation` 最外层 `CompositionLocalProvider` 提供兜底空 `NavigationEventDispatcher()`。已全局不再复发。
 - **消息排序菜单拆分（beta32）**：旧菜单把"依据(发送人/时间)"和"方向(正/倒序)"混在一个单选，出现双勾。已拆两组互斥单选，存储格式不变（name_asc/name_desc/time_asc/time_desc）。会话详情本就是干净两项。
 
-## 6. 本轮未提交的 UI 小改（已编译通过）
+## 6. 电话流转化主线（2026-10-24，当前最前线）
+
+### 6.1 现象与根因（hf_light2.log 实锤 + 反编译交叉验证）
+- 现象：锁屏来电 → 流转正常 ✓；亮屏来电 → 对方收不到 ✗（Note12 Turbo 为被控来电机，小米15 + iPhone X 为订阅接收端）。
+- 时间线（13:42，milink pid 9468）：
+  ```
+  13:42:15.196  NotifTransListenerService: onNotificationPosted   ← 来电通知即时到达（无"15秒延迟"）
+  13:42:15.197  AppNotificationFilter: calling type : 1           ← 来电 INCOMING
+  13:42:15.197  AppNotificationFilter: calling from broadcast : false ← 非广播来源
+  13:42:15.197  VoipTransHelper: supportiOS metaData = true
+  13:42:15.197  NotificationHandler: notification is invalid, skip transfer ← 被 filterCall 过滤
+  ```
+- **根因**：milink `AppNotificationFilter.filterCall`（反编译）：
+  ```java
+  return !fromBroadcast && mVoipTransHelper.isLocalVoipSupported();
+  // fromBroadcast=NOTIFICATION_FROM_BROADCAST；isLocalVoipSupported=com.android.phone 声明 supportiOS=true（恒真）
+  ```
+  亮屏通知走**监听路径**到达（fromBroadcast=false）→ 被过滤；锁屏走**广播路径**（ON_CALL_VOIP 广播通知自带 NOTIFICATION_FROM_BROADCAST=true）→ 放行。这解释"锁屏通、亮屏不通"。
+- 订阅链数据齐全（小米15=90266701、iPhone X=ECD92C64 deviceType=11 均订阅 com.android.incallui），只卡在 filterCall。
+
+### 6.2 已交付修复（两 commit，本地编译通过、CI 构建中）
+1. **HookCallFilterPass**（commit d0647de，新文件）：milink hook `AppNotificationFilter.filterCall(StatusBarNotification)`，仅当被过滤且 callType==1（来电）返回 false 放行；去电 callType==2、非 call 保持原过滤。门控功能① `force_transfer`。放行后走监听路径即时流转，**不依赖补发广播**（beta33.9 的 HookCallVoipNotify 补发方案本轮证明未触发，勿再依赖）。
+2. **HookCallVoipForce**（commit 813df01，新文件）：milink hook `VoipTransHelper.isRemoteVoipSupported(String,int)`，仅 deviceType==11（iPhone）强制返回 true（新 Config 键 `force_iphone_voip`，默认开）；deviceType==1（小米手机）保持原判定不动（接收端 OS 版本不足则无接听能力，不强改）。作用：让 milink 把给 iPhone 的消息标记为 "voip" 类型（NotificationBuilder.buildPlainMessage:78 仅在 `NOTIFICATION_FROM_BROADCAST=true && isVoipSupported` 时标 voip，锁屏广播路径会生效；亮屏监听路径无广播标志仍为 "msg"，**勿手动打 broadcast 标志**——beta25 教训错乱卡）。
+
+### 6.3 官方能力边界（联网查证，2026-10-24）
+- 澎湃 OS 3 最新升级**今日起推送**：新增"小米手机来电同步到 iPhone 后在 iPhone 端接听"（双向）。条件：iPhone 装最新版"小米互联服务"App、同账号、两台设备连互联网。
+- iPhone X 无公开排除：CallKit 需 iOS10+（iPhone X 支持，Apple 官方安全文档列名）、App 要求 iOS14+（iPhone X 最高 16.7.12 满足）。唯一不确定性：功能内可能有未披露的更高 iOS 要求 → 实测定论。
+- 跨设备通话官方接收端此前仅平板/电脑（ab0013），iOS 端接听为最新新增。
+
+### 6.4 验证方法（用户装 beta35 后）
+- MiflowLog 只进 **LSPosed 日志页**（TAG=`HyperFlowPlus`），logcat 看不到模块日志；logcat 里 milink tag=`dist:crossdeviceservice`、InCallUI tag=`InCall`。
+- 预期日志（LSPosed 页搜 HyperFlowPlus）：`HookCallFilterPass ... filter released`、`HookCallVoipForce: deviceType=11 (iPhone) voip forced true`、`HookCallRelay ... CALLED`（isDeviceSupported 放行靠它模拟锁屏）。
+- 风险交底：HookCallRelay 模拟锁屏**从未实机验证**（前提风险，不生效则日志会打 `device is not locked and screen is on`）；锁屏双流转风险；亮屏双端响铃属预期，可后续加本机静音。
+- 抓日志命令（root Termux，先启动后复现，别先贴停止命令）：
+  ```bash
+  su; logcat -c; nohup logcat -v threadtime > /sdcard/hf_light2.log 2>&1 &
+  # 复现亮屏来电后：
+  pkill -f "logcat -v threadtime"
+  ```
+
+## 7. 本轮已提交的 UI 小改（beta33→34 已随包交付）
 - 底部导航第 2 tab「流转」→「功能」（label + 顶部 title 同步），页内"通知流转"分组名保留。
 - 设置页「版本」标题 FontWeight.Medium（原 Regular 偏细）。
 - 双开前缀条目 summary 改「现在为【内容】，点击可修改」。
 - 前缀编辑弹窗：`HyperDialog` 新增 `centered` 参数（true=屏幕居中、不套 bottomInset；false=原底部，默认不变，其他 20+ 调用方不受影响）；前缀弹窗 centered=true + 说明"标题前自动包进【】，留空用默认「双开」"，删 imeBottom 随键盘飘移。
 - 外观"跟随系统"**不需要实时切换**（用户撤销，勿再加回）。
 
-## 7. 提交前待办动作（下一棒直接做）
-1. 本地已编译通过；核对 `changelog-latest.md` 头部改为 beta33 并写清 A-2 + UI 小改。
-2. `git add` 改动（MainActivity.kt / FlowScreen.kt / HyperDialog.kt / SettingsScreen.kt / HookTrustAuthAuto.java / build.gradle.kts / ksu-module/module.prop / docs）。
-3. commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` 交付。
+## 8. 提交前待办动作（下一棒直接做）
+1. 本地已编译通过；核对 `changelog-latest.md` 头部改为 beta35 并写清电话修复 + iPhone voip 强制放行。
+2. `git add` 改动（HookCallFilterPass.java / HookCallVoipForce.java / Config.java / XposedEntry.java / docs）。
+3. commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` 交付用户。
 4. 注意 CI 必须 Java+Kotlin 都编过（漏 import 会 cannot find symbol）。
 
-## 8. 抓日志命令（root Termux，先启动后复现，别先贴停止命令）
+## 9. 抓日志命令（root Termux，先启动后复现，别先贴停止命令）
 ```bash
 su
 logcat -c
@@ -104,13 +144,15 @@ grep -E "HyperFlowPlus|A-1|A-2|MiTrustService|gatekeeper|verifyCredential" /sdca
 ```
 日志走 LSPosed 管理器日志页（TAG=`HyperFlowPlus`），回退 android.util.Log。
 
-## 9. 遗留登记（未开始，勿丢）
+## 10. 遗留登记（未开始/未完成，勿丢）
+- **电话线（beta35 待实机联调）**：装包后测①亮屏来电流转是否通（LSPosed 页搜 HookCallFilterPass/HookCallRelay/ON_CALL_VOIP relayed）；②锁屏是否仍正常（防双流转）；③iPhone 端是否弹 CallKit 接听（日志搜 HookCallVoipForce forced true + voip supported=）。不通则按 6.4 定位。
+- iPhone 接听：官方 10-24 已开通，iOS 端小米互联服务需最新版并注册 com.ios.phone relayCall 服务；我们已强制发送端判定，接收端 iOS App 行为实测定论。
 - 消息页三点级联菜单改 HyperIsland 样式（miuix 自带 OverlayIconCascadingDropdownMenu，无需加依赖）。
-- 电话流转：锁屏可、亮屏不行（待抓日志）。
 - 乙方案分身 hook 跳过搬 u0 主微信 task；1.2.0 双向对等对控；隐私合规 A4/A3；工程质量 B1-B3；消息页改造 M14-M19。
+- A 线：Bind_A→k.l(p0c,hat) 两参未自动；图案实机验证；错密码罚时观察。
 - 已知噪音：HookSmsPersist install failed（用户未提，不动）。
 
-## 10. 关键陷阱
+## 11. 关键陷阱
 - jadx 混淆字段/方法名运行时不保留，**反射一律按类型匹配或用方法名+参数类型**，不硬编码占位名。
 - 本地只编 Kotlin 会漏 Java 符号；assembleRelease 本地 OOM，只能 CI。
 - `update.json` / main 正式通道测试期不动。
