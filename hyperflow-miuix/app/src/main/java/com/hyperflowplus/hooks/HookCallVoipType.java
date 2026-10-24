@@ -32,11 +32,16 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  * 只改消息 type 字段：不谎报 NOTIFICATION_FROM_BROADCAST 标志、不碰 filterCall、
  * 不干预 handleNotificationTrans（beta25 教训：谎报标志导致错乱卡，勿再犯）。
  *
- * 设备区分（beta38）：**只对小米设备（deviceType==1）**改 voip；**iPhone（deviceType=11）
- * 保持 msg**。用户实测：iOS 端"小米互联服务"App 只认 msg 通知、不处理 voip 消息，
- * beta36 对 iPhone 也改 voip 后 iPhone 连通知都不显示；beta37 改用原生 isVoipSupported
- * 判定后实测对小米设备也不通过（亮屏降回通知）。beta38 恢复 beta36 验证过的
- * "deviceType==1 → voip"（小米15 亮屏全屏接听），iPhone 保持 msg 恢复来电通知。
+ * 设备区分（beta38）：**不硬编码任何设备类型，复用原生 VoipTransHelper.isVoipSupported
+ * 判定**（反编译确认）：来电 + 呼叫转移开关 + 本机支持 voip + 远端设备 relayCall flags
+ * 达标 → voip；任一不满足 → 保持 msg 降级通知。
+ * - 小米15：原生判定通过 → 亮屏也标 voip 全屏接听（与锁屏广播路径的原生判定完全一致）
+ * - 新款 iPhone（支持 voip）：原生判定通过 → 亮屏也收 voip 来电（用户实测新款 iPhone 认 voip）
+ * - iPhone X 等原生不支持的：自动保持 msg 通知，不强标
+ * 锁屏（广播来源）消息类型完全走原生 buildPlainMessage 判定，本 hook 不干预（锁屏原逻辑）。
+ *
+ * beta37 教训：deviceType 必须从 buildPlainMessage 真实参数（args[4]）取，不能反射
+ * DeviceSubInfo.getDeviceType()（该方法不存在，拿到 -1 → 原生判定恒 false → 亮屏全降级通知）。
  *
  * 门控：功能① force_transfer。
  */
@@ -88,23 +93,41 @@ public class HookCallVoipType {
                                 if (callType != CALL_INCOMING) {
                                     return result; // 只处理来电
                                 }
-                                String deviceId = chain.getArgs().get(3) != null
+                                String deviceId = chain.getArgs().size() > 3
+                                        && chain.getArgs().get(3) != null
                                         ? chain.getArgs().get(3).toString() : null;
+                                // deviceType 必须取 buildPlainMessage 真实参数（args[4]），
+                                // 不能反射 DeviceSubInfo（beta37 教训：反射拿 -1 → 原生判定恒 false）
                                 int deviceType = -1;
-                                try {
-                                    Method gt = arg1.getClass().getMethod("getDeviceType");
-                                    deviceType = ((Integer) gt.invoke(arg1)).intValue();
-                                } catch (Throwable ignored) {
+                                if (chain.getArgs().size() > 4
+                                        && chain.getArgs().get(4) instanceof Integer) {
+                                    deviceType = ((Integer) chain.getArgs().get(4)).intValue();
                                 }
                                 String oldType = typeField.get(result).toString();
-                                if (deviceType == 1) {
+                                // 复用原生 isVoipSupported 判定：支持 voip 才改 voip，不支持保持 msg 降级通知
+                                boolean voipSupported = false;
+                                try {
+                                    Object builderThis = chain.getThisObject();
+                                    Field helperField = cls.getDeclaredField("mVoipTransHelper");
+                                    helperField.setAccessible(true);
+                                    Object helper = helperField.get(builderThis);
+                                    Method isVoipM = helper.getClass().getMethod("isVoipSupported",
+                                            StatusBarNotification.class, String.class, int.class);
+                                    voipSupported = ((Boolean) isVoipM.invoke(helper,
+                                            arg0, deviceId, Integer.valueOf(deviceType))).booleanValue();
+                                } catch (Throwable t) {
+                                    MiflowLog.e("HookCallVoipType: native isVoipSupported call failed, keep msg", t);
+                                }
+                                if (voipSupported) {
                                     typeField.set(result, "voip");
-                                    MiflowLog.i("HookCallVoipType: incoming call type msg->voip, deviceType=" + deviceType
-                                            + ", oldType=" + oldType + ", fromBroadcast=" + fromBroadcast);
+                                    MiflowLog.i("HookCallVoipType: incoming call type msg->voip (native isVoipSupported=true)"
+                                            + ", deviceType=" + deviceType + ", oldType=" + oldType
+                                            + ", fromBroadcast=" + fromBroadcast);
                                 } else {
-                                    // iPhone 等非小米设备：保持 msg（iOS App 只认 msg，改 voip 会连通知都不显示）
+                                    // 原生判定不支持 voip（如 iPhone X）：保持 msg，对端降级为通知
                                     MiflowLog.i("HookCallVoipType: deviceType=" + deviceType
-                                            + " not xiaomi, keep msg (oldType=" + oldType + "), iOS app only shows msg");
+                                            + " keep msg (native isVoipSupported=false, degrade to notification)"
+                                            + ", oldType=" + oldType);
                                 }
                             } catch (Throwable t) {
                                 MiflowLog.e("HookCallVoipType: intercept failed, pass through", t);
