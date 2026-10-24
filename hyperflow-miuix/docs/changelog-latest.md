@@ -1,4 +1,31 @@
-# HyperFlow 1.1.0-beta33 更新日志
+# HyperFlow 1.1.0-beta35 更新日志
+
+## 修复
+
+### 1. 亮屏来电跨设备流转（电话流转化 · 根因修复）
+- **问题**：锁屏来电流转正常；**亮屏来电对方收不到**（Note12 Turbo 为来电机，小米15 / iPhone X 为接收端）。
+- **根因（hf_light2.log 实锤 + 反编译交叉验证）**：来电通知经监听路径即时到达 milink，但被 `AppNotificationFilter.filterCall` 静默过滤——
+  - 通知**非广播来源**（`NOTIFICATION_FROM_BROADCAST=false`），且本机 `com.android.phone` 声明 `supportiOS=true` → 判定"本机自己会接，别转走" → `notification is invalid, skip transfer`；
+  - 锁屏走**广播路径**（ON_CALL_VOIP 广播通知自带广播标志）→ 放行。这就是"锁屏通、亮屏不通"的原因。
+- **修复**：milink 进程新增 `HookCallFilterPass`，对**来电（callType=1）强制放行过滤**，通知监听路径即走完整流转链，不再依赖补发广播。去电（callType=2）与非电话通知保持原过滤。受「功能① 亮屏强制流转」开关控制。
+
+### 2. iPhone voip 直接接听强制放行（配合官方 2026-10-24 新功能）
+- **背景**：小米官方澎湃 OS 3 最新升级（10-24 起推送）新增"小米手机来电同步到 iPhone 后可在 iPhone 端接听"（双向）；但 iOS 端"小米互联服务"App 尚未注册 relayCall 服务，milink 判定 iPhone（deviceType=11）不支持 voip → 只推通知卡片。
+- **修复**：新增 `HookCallVoipForce`，仅对 iPhone（deviceType=11）强制 `isRemoteVoipSupported=true`，让转发消息标记为 voip 类型，由 iOS 端 App 决定是否弹 CallKit 接听（实测定论）。小米手机接收端保持原判定不动。受「force_iphone_voip」开关控制（默认开）。
+
+### 3.（回顾）弹窗闪退 beta31 根治 / 排序菜单拆分 / UI 小改（beta33-34 已交付）
+- 弹窗闪退（消息排序/显示模式/外观/会话排序）已在 beta31 根治：`AppNavigation` 最外层 provide 兜底 `NavigationEventDispatcherOwner`，不再复发。
+- 消息排序菜单拆「依据（发送人/时间）× 方向（正/倒序）」两组互斥单选（beta32）。
+- 底部导航第 2 tab「流转」→「功能」；设置页「版本」加粗；双开前缀提示改「现在为【内容】，点击可修改」+ 弹窗屏幕居中（beta33）。
+
+## 进展（开发埋点，不影响现有行为）
+
+### A 方案 · 主动后台静默校验（beta33-34 已并入，遗留补参/实测）
+- `HookTrustAuthAuto` 挂会话建立点，PIN/混合密码/图案三型凭证构造复用系统构造器，`verifyCredential → getGatekeeperPasswordHandle → getGatekeeperHAT → 按分支回传`；失败计数 3 次封顶回退手动；`Bind_A→k.l` 两参未自动、图案实机验证未做。
+
+---
+
+# 历史（beta33 及之前）
 
 ## 修复
 
@@ -32,7 +59,7 @@
 - **问题**：`.github/workflows/build.yml` 的 setup-java 仍为 17，而项目要求 Java 21，CI 直接跑必然 `invalid source release: 21` 失败（此前包是本地 JDK21 环境编的，CI 配置未同步）。
 - **修复**：java-version 17 → 21，与项目 `sourceCompatibility=21` 对齐，CI 恢复可出包。
 
-## 进展（开发埋点，不影响现有行为）
+## 进展（beta33 时点）
 
 ### A 方案 · 主动后台静默校验 A-1（只读观测）
 - 新增 `HookTrustAuthAuto`，挂在 `com.xiaomi.trustservice` 的会话建立点 `Z0.b.g()/h()`。
@@ -49,7 +76,7 @@
 ## 已知问题
 
 - A-2 已编码，待实机联调确认自动过；Bind_A/图案分支待补。
-- 电话流转：锁屏可流转，亮屏不行。
+- 电话流转：锁屏可流转，亮屏不行 —— **已修复（beta35：HookCallFilterPass 放行亮屏来电），待实机联调确认**。
 
 ### 6. A-2 成功后自动关闭锁屏验证输入框（beta33 追加）
 - **问题**：A-2 后台真实校验 + 回传真 HAT 后系统侧已解锁（再次连接可直连、取消输入框即进入系统），但信任服务的锁屏验证输入框（LockScreenUIActivity）仍挂着等输入，甚至被流转到对端显示，体验上"验证成功却卡在弹窗"。
