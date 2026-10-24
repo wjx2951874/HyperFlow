@@ -4,6 +4,7 @@ import com.hyperflowplus.hooks.HookAutoUnlock;
 import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCallVoip;
 import com.hyperflowplus.hooks.HookCallVoipNotify;
+import com.hyperflowplus.hooks.HookCallFilterPass;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookKeyguardCapture;
@@ -157,6 +158,9 @@ public class XposedEntry extends XposedModule {
             });
             installSafely("HookCallVoip", new Runnable() {
                 @Override public void run() { HookCallVoip.install(cl); }
+            });
+            installSafely("HookCallFilterPass", new Runnable() {
+                @Override public void run() { HookCallFilterPass.install(cl); }
             });
         } catch (Throwable t) {
             MiflowLog.e("XposedEntry init failed", t);
