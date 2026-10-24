@@ -100,9 +100,17 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
   亮屏通知走**监听路径**到达（fromBroadcast=false）→ 被过滤；锁屏走**广播路径**（ON_CALL_VOIP 广播通知自带 NOTIFICATION_FROM_BROADCAST=true）→ 放行。这解释"锁屏通、亮屏不通"。
 - 订阅链数据齐全（小米15=90266701、iPhone X=ECD92C64 deviceType=11 均订阅 com.android.incallui），只卡在 filterCall。
 
-### 6.2 已交付修复（两 commit，本地编译通过、CI 构建中）
+### 6.2 已交付修复（三 commit）
 1. **HookCallFilterPass**（commit d0647de，新文件）：milink hook `AppNotificationFilter.filterCall(StatusBarNotification)`，仅当被过滤且 callType==1（来电）返回 false 放行；去电 callType==2、非 call 保持原过滤。门控功能① `force_transfer`。放行后走监听路径即时流转，**不依赖补发广播**（beta33.9 的 HookCallVoipNotify 补发方案本轮证明未触发，勿再依赖）。
-2. **HookCallVoipForce**（commit 813df01，新文件）：milink hook `VoipTransHelper.isRemoteVoipSupported(String,int)`，仅 deviceType==11（iPhone）强制返回 true（新 Config 键 `force_iphone_voip`，默认开）；deviceType==1（小米手机）保持原判定不动（接收端 OS 版本不足则无接听能力，不强改）。作用：让 milink 把给 iPhone 的消息标记为 "voip" 类型（NotificationBuilder.buildPlainMessage:78 仅在 `NOTIFICATION_FROM_BROADCAST=true && isVoipSupported` 时标 voip，锁屏广播路径会生效；亮屏监听路径无广播标志仍为 "msg"，**勿手动打 broadcast 标志**——beta25 教训错乱卡）。
+2. **HookCallVoipForce**（commit 813df01，新文件）：milink hook `VoipTransHelper.isRemoteVoipSupported(String,int)`，仅 deviceType==11（iPhone）强制返回 true（新 Config 键 `force_iphone_voip`，默认开）；deviceType==1（小米手机）保持原判定不动（接收端 OS 版本不足则无接听能力，不强改）。
+3. **HookCallVoipType**（commit f9f69e9，beta36，新文件）：milink hook `NotificationBuilder.buildPlainMessage` 返回值，对**非广播来源 + callType==1** 的来电消息反射把 `PlainMessage.messageType` 改 "voip"——修复"亮屏收通知而非 voip"（根因：`buildPlainMessage` 判定 `extras.getBoolean(NOTIFICATION_FROM_BROADCAST,false) && isVoipSupported` 短路，监听路径恒 msg）。只改 type 字段，不谎报广播标志/不碰 filterCall（beta25 教训）。
+
+### 6.5 实机联调证据（beta35，LSPosed 日志 2026-10-24 14:15 注入 / 14:17 来电）
+- `HookCallFilterPass: callType=1 (incoming) filter released, allow transfer` ✓（两次来电均放行）
+- `HookCallRelay: android.app.KeyguardManager.isKeyguardLocked CALLED -> returning true` ✓（模拟锁屏生效，isDeviceSupported 放行）
+- **HookCallVoipForce 从未被调用**：亮屏路径 `NOTIFICATION_FROM_BROADCAST=false` 短路 → isVoipSupported 不执行 → 亮屏消息恒 msg（用户实测"亮屏发通知"与此一致）。锁屏路径（NotifTransReceiver 打广播标志 → 同一 handleNotificationTrans → buildPlainMessage）isVoipSupported 才会执行——**beta35 日志里无锁屏来电测试记录**，HookCallVoipForce 的 iPhone 判定尚未实测，需 beta36 锁屏测一次。
+- 用户此前"iPhone 依旧通知"结论大概率来自 beta34（无 HookCallVoipForce）。
+- 待 beta36 验证：①亮屏 Xiaomi 15 是否 voip 全屏接听（`HookCallVoipType: incoming call type msg->voip`）；②锁屏 iPhone 是否出 `HookCallVoipForce: deviceType=11 forced true`；若出且 iPhone 仍通知 → iOS 端小米互联服务 App 不处理 voip 消息（官方灰度/版本），无解等官方全量。
 
 ### 6.3 官方能力边界（联网查证，2026-10-24）
 - 澎湃 OS 3 最新升级**今日起推送**：新增"小米手机来电同步到 iPhone 后在 iPhone 端接听"（双向）。条件：iPhone 装最新版"小米互联服务"App、同账号、两台设备连互联网。
