@@ -56,28 +56,29 @@ public class HookCallFilterPass {
     private static final java.util.Map<String, Long> releasedOnce =
             new java.util.concurrent.ConcurrentHashMap<>(16);
 
-    /** 真实屏幕状态（beta45）：进程内 API（beta38 起 HookCallRelay 不再模拟全局屏幕状态，
-     *  进程内 PowerManager/KeyguardManager 为真实值）。查询失败 fallback 亮屏（放行），
+    /** 真实屏幕状态（beta48 修正顺序）：KeyguardManager 锁屏判定**优先**，PowerManager 其次。
+     *  beta45/46 原实现先查 pm.isInteractive()——来电会点亮屏幕，锁屏界面亮着时
+     *  isInteractive()=true 直接判"亮屏"→ 锁屏来电被误判亮屏 → 放行监听路径 → 通知+voip 双份
+     *  （用户实测 beta46 锁屏依旧双份）。修正：isKeyguardLocked()==true 即锁屏（即使屏幕亮），
+     *  保持原生过滤（广播路径独享 voip）；亮屏非锁屏才放行。查询失败 fallback 亮屏（放行），
      *  宁可偶发双份也不全灭（beta37 教训）。 */
     private static boolean isScreenOn() {
         try {
             android.content.Context ctx = (android.content.Context)
                     Class.forName("android.app.ActivityThread")
                             .getMethod("currentApplication").invoke(null);
-            if (ctx == null) {
-                return true;
+            if (ctx != null) {
+                android.app.KeyguardManager kg = (android.app.KeyguardManager) ctx
+                        .getSystemService(android.content.Context.KEYGUARD_SERVICE);
+                if (kg != null && kg.isKeyguardLocked()) {
+                    return false; // 锁屏（含锁屏界面亮着）→ 保持原生过滤，广播路径独享
+                }
+                android.os.PowerManager pm = (android.os.PowerManager) ctx
+                        .getSystemService(android.content.Context.POWER_SERVICE);
+                if (pm != null) {
+                    return pm.isInteractive();
+                }
             }
-            android.os.PowerManager pm = (android.os.PowerManager) ctx
-                    .getSystemService(android.content.Context.POWER_SERVICE);
-            if (pm != null && pm.isInteractive()) {
-                return true;
-            }
-            android.app.KeyguardManager kg = (android.app.KeyguardManager) ctx
-                    .getSystemService(android.content.Context.KEYGUARD_SERVICE);
-            if (kg != null && kg.isKeyguardLocked()) {
-                return false;
-            }
-            return pm != null && pm.isInteractive();
         } catch (Throwable t) {
             MiflowLog.e("HookCallFilterPass: screen state check failed, treat as screen-on", t);
         }
