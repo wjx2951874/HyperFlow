@@ -1,11 +1,12 @@
 package com.hyperflowplus.hooks;
 
-import android.app.KeyguardManager;
-import android.os.PowerManager;
-import android.view.Display;
+import android.app.Notification;
+import android.os.Bundle;
+import android.service.notification.StatusBarNotification;
 
 import com.hyperflowplus.Config;
 import com.hyperflowplus.MiflowLog;
+import com.hyperflowplus.XposedEntry;
 
 import java.lang.reflect.Method;
 
@@ -14,145 +15,72 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能① 解锁时流转：在亮屏（解锁）状态下，向 milink 完整模拟"锁屏"状态，
- * 让它走与真实锁屏完全相同的流转逻辑（来电跨设备接听等）。
+ * 功能① 亮屏来电流转 · 精准放行（milink 进程，beta37 重构）。
  *
- * 反编译确认 milink 的锁屏判定链（NotificationHandler.isDeviceSupported）：
+ * 反编译确认 milink 流转判定链（NotificationHandler.isDeviceSupported）：
  *   if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return true;
  *   return false;   // ← 亮屏拒绝流转
  *
- * "模拟锁屏所有操作" = 把 milink 进程内能查到的锁屏/屏幕状态 API 全部按"锁屏态"返回：
- *   KeyguardManager  : isKeyguardLocked / isKeyguardSecure / inKeyguardRestrictedInputMode / isDeviceLocked
- *   PowerManager     : isInteractive / isScreenOn
- *   Display          : getState（→ OFF）/ isOn（→ false）
- *   WindowManager    : isKeyguardLocked（旧版 API，兼容老调用方）
+ * v0.6.10 教训：全局模拟锁屏会误伤正常通话流程。beta36 之前本模块采用"把 milink 进程内
+ * KeyguardManager/PowerManager/Display 全 hook 成锁屏态"的方案——实测发现副作用：
+ * 小米15 亮屏接听时，milink 处理 voip 会话建立会查 PowerManager.isInteractive()（被模拟成
+ * false）→ 认为设备息屏 → 中断会话 → 小米15 弹"当前连接已断开，请回到原设备接听电话"，
+ * 电话被直接挂断（间歇性，时序竞争）。
  *
- * 全部受功能①开关（force_transfer）门控：关闭 = 零干预，保持小米原生（仅真实锁屏流转）；
- * 开启 = 亮屏也按锁屏全套逻辑流转。
+ * beta37 重构：**收起全局状态模拟**，只精准 hook `NotificationHandler.isDeviceSupported`：
+ * 仅对**来电（callType==1）且原判定为拒绝**时返回 true（放行流转）；
+ * 短信/其他通知走原判定，不动；voip 会话建立不再受屏幕状态模拟干扰（恢复真实值）。
+ * 锁屏双流转由 HookCallFilterPass 的真实锁屏判定防护（锁屏不放行监听路径）。
  *
- * 历史教训（v0.6.10）：在 system_server 全局模拟锁屏会误伤正常通话流程
- * （isKeyguardLocked/isInteractive 被系统正常来电流程大量调用），已删除。
- * 本模块只 hook milink 进程（XposedEntry 注入点），影响范围仅 milink 自己的判断，不碰系统。
+ * 门控：功能① force_transfer。
  */
 public class HookCallRelay {
 
+    private static final String CALL_TYPE = "android.callType";
+    private static final int CALL_INCOMING = 1;
+
     public static void install(ClassLoader cl) {
-        boolean enabled = Config.isForceTransferEnabled();
-
-        // ---------- KeyguardManager 锁屏判定四件套 ----------
-        hookBool(cl, "android.app.KeyguardManager", "isKeyguardLocked", true, enabled);
-        hookBool(cl, "android.app.KeyguardManager", "isKeyguardSecure", true, enabled);
-        hookBool(cl, "android.app.KeyguardManager", "inKeyguardRestrictedInputMode", true, enabled);
-        hookBool(cl, "android.app.KeyguardManager", "isDeviceLocked", true, enabled);
-
-        // ---------- PowerManager 亮屏判定两件套 ----------
-        hookBool(cl, "android.os.PowerManager", "isInteractive", false, enabled);
-        hookBool(cl, "android.os.PowerManager", "isScreenOn", false, enabled);
-
-        // ---------- Display 状态：模拟屏幕关闭 ----------
-        hookDisplayState(cl, enabled);
-        hookDisplayIsOn(cl, enabled);
-
-        // ---------- WindowManager 旧版锁屏 API（deprecated，兼容老调用方） ----------
-        hookBool(cl, "android.view.WindowManager", "isKeyguardLocked", true, enabled);
-        hookBool(cl, "android.view.WindowManager", "isKeyguardSecure", true, enabled);
-    }
-
-    /**
-     * 通用布尔 hook：switch 开时强制返回 lockValue（Keyguard 类为 true / PowerManager 类为 false）。
-     * 类或方法不存在时静默跳过（不同 Android 版本 API 差异）。
-     */
-    private static void hookBool(ClassLoader cl, String clsName, String methodName,
-                                 boolean lockValue, boolean enabled) {
-        try {
-            Class<?> cls = Class.forName(clsName, false, cl);
-            Method m;
-            try {
-                m = cls.getDeclaredMethod(methodName);
-            } catch (NoSuchMethodException e) {
-                try {
-                    m = cls.getMethod(methodName);
-                } catch (NoSuchMethodException e2) {
-                    MiflowLog.i("HookCallRelay: skip " + clsName + "." + methodName + " (not found)");
-                    return;
-                }
-            }
-            m.setAccessible(true);
-            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
-            com.hyperflowplus.XposedEntry.get().hook(m)
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept(new Hooker() {
-                        @Override
-                        public Object intercept(Chain chain) throws Throwable {
-                            if (enabled && Config.isForceTransferEnabled()) {
-                                // 首次实际调用打一次日志：证明该进程真的走了这个判定点（milink / incallui 通用）
-                                if (firstCall.compareAndSet(false, true)) {
-                                    MiflowLog.i("HookCallRelay: " + clsName + "." + methodName
-                                            + " CALLED -> returning " + lockValue + " (gated by force_transfer)");
-                                }
-                                return Boolean.valueOf(lockValue);
-                            }
-                            return chain.proceed();
-                        }
-                    });
-            MiflowLog.i("HookCallRelay: " + clsName + "." + methodName
-                    + " -> " + lockValue + " (gated by force_transfer)");
-        } catch (Throwable t) {
-            MiflowLog.e("HookCallRelay: " + clsName + "." + methodName + " hook failed", t);
+        if (!Config.isForceTransferEnabled()) {
+            MiflowLog.i("HookCallRelay: force_transfer off, skip");
+            return;
         }
-    }
-
-    /** Display.getState() → Display.STATE_OFF（模拟屏幕关闭，milink 屏幕状态判定）。 */
-    private static void hookDisplayState(ClassLoader cl, boolean enabled) {
         try {
-            Class<?> dCls = Class.forName("android.view.Display", false, cl);
-            Method m = dCls.getDeclaredMethod("getState");
+            Class<?> cls = cl.loadClass("com.xiaomi.dist.notification.listener.handle.NotificationHandler");
+            Class<?> dsiCls = cl.loadClass("com.xiaomi.dist.notification.common.data.DeviceSubInfo");
+            Method m = cls.getDeclaredMethod("isDeviceSupported", StatusBarNotification.class, dsiCls);
             m.setAccessible(true);
-            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
-            com.hyperflowplus.XposedEntry.get().hook(m)
+            XposedEntry.get().hook(m)
                     .setExceptionMode(ExceptionMode.PROTECTIVE)
                     .intercept(new Hooker() {
                         @Override
                         public Object intercept(Chain chain) throws Throwable {
-                            if (enabled && Config.isForceTransferEnabled()) {
-                                if (firstCall.compareAndSet(false, true)) {
-                                    MiflowLog.i("HookCallRelay: Display.getState CALLED -> STATE_OFF (gated)");
+                            Object result = chain.proceed();
+                            try {
+                                // 原判定已放行 → 不动
+                                if (result instanceof Boolean && ((Boolean) result).booleanValue()) {
+                                    return result;
                                 }
-                                return Integer.valueOf(Display.STATE_OFF);
+                                Object arg0 = chain.getArgs().get(0);
+                                if (arg0 instanceof StatusBarNotification) {
+                                    Notification n = ((StatusBarNotification) arg0).getNotification();
+                                    Bundle ex = n != null ? n.extras : null;
+                                    int callType = ex != null ? ex.getInt(CALL_TYPE, -1) : -1;
+                                    if (callType == CALL_INCOMING) {
+                                        MiflowLog.i("HookCallRelay: incoming call isDeviceSupported false->true, allow transfer");
+                                        return Boolean.TRUE;
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                MiflowLog.e("HookCallRelay: intercept failed, pass through", t);
                             }
-                            return chain.proceed();
+                            return result;
                         }
                     });
-            MiflowLog.i("HookCallRelay: Display.getState -> STATE_OFF (gated)");
+            MiflowLog.i("HookCallRelay: installed on NotificationHandler.isDeviceSupported (precise, no global screen simulation)");
+        } catch (ClassNotFoundException e) {
+            MiflowLog.w("HookCallRelay: NotificationHandler not found (version mismatch?), skip");
         } catch (Throwable t) {
-            MiflowLog.e("HookCallRelay: Display.getState hook failed", t);
-        }
-    }
-
-    /** Display.isOn() → false（同屏幕关闭语义）。 */
-    private static void hookDisplayIsOn(ClassLoader cl, boolean enabled) {
-        try {
-            Class<?> dCls = Class.forName("android.view.Display", false, cl);
-            Method m = dCls.getDeclaredMethod("isOn");
-            m.setAccessible(true);
-            final java.util.concurrent.atomic.AtomicBoolean firstCall = new java.util.concurrent.atomic.AtomicBoolean(false);
-            com.hyperflowplus.XposedEntry.get().hook(m)
-                    .setExceptionMode(ExceptionMode.PROTECTIVE)
-                    .intercept(new Hooker() {
-                        @Override
-                        public Object intercept(Chain chain) throws Throwable {
-                            if (enabled && Config.isForceTransferEnabled()) {
-                                if (firstCall.compareAndSet(false, true)) {
-                                    MiflowLog.i("HookCallRelay: Display.isOn CALLED -> false (gated)");
-                                }
-                                return Boolean.FALSE;
-                            }
-                            return chain.proceed();
-                        }
-                    });
-            MiflowLog.i("HookCallRelay: Display.isOn -> false (gated)");
-        } catch (Throwable t) {
-            MiflowLog.e("HookCallRelay: Display.isOn hook failed", t);
+            MiflowLog.e("HookCallRelay: install failed", t);
         }
     }
 }

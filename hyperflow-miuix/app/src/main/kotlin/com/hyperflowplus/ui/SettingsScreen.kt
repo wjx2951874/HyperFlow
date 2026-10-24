@@ -97,6 +97,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 val themeIndex = themeValues.indexOf(state.themeMode).coerceAtLeast(0)
                 OverlaySpinnerPreference(
                     title = "外观",
+                    summary = "切换后立即生效，无需重启",
                     items = themeOptions.mapIndexed { i, label ->
                         DropdownItem(
                             text = label,
@@ -116,6 +117,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 val barIndex = barValues.indexOf(state.bottomBarStyle).coerceAtLeast(0)
                 OverlaySpinnerPreference(
                     title = "底栏形态",
+                    summary = "悬浮导航栏为胶囊样式，液态玻璃带模糊背景",
                     items = barOptions.mapIndexed { i, label ->
                         DropdownItem(
                             text = label,

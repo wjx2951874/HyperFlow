@@ -1,11 +1,11 @@
-# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta35 构建中）
+# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta37 构建中）
 
 > 用途：本文件供下一个接手的人/AI 快速续上。所有事实以本仓库代码 + `docs/trustservice-auth-chain.md` 为准；本快照之后的改动以 git 历史为准。
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。
-- 已交付 beta34/162（commit 1ad167f，用户已装）；当前 **beta35 构建中**（commit 813df01：亮屏来电流转根因修复 HookCallFilterPass + iPhone voip 强制放行 HookCallVoipForce，CI 出包后交付实测）。
-- 两条主线：① **电话流转化**（亮屏来电流转，根因已实锤并修复，待实机联调）；② A 方案纯后台静默校验（beta34 已并入交付，遗留补参/图案实测）。
+- 当前 **beta37 构建中**（未 commit，本地编译通过）：间歇性"连接已断开/电话被挂断"三根因全部修复（重复流转去重 + 锁屏双流转防护 + HookCallRelay 精准化）+ iPhone X 恢复通知（VoipType 复用原生 isVoipSupported）+ 设置页外观/底栏形态提示小字。
+- 两条主线：① **电话流转化**（亮屏来电流转已通，beta37 根治间歇断联）；② A 方案纯后台静默校验（beta34 已并入交付，遗留补参/图案实测）。
 
 ## 1. 项目是什么
 小米澎湃 OS 互联增强：Xposed 模块（通知/短信流转、分身双开标识）+ miuix 原生 UI App。被控端 root（Note12 Turbo），发起端小米15（无 root 走 Shizuku），另有 iPhone。
@@ -112,6 +112,20 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 - 用户此前"iPhone 依旧通知"结论大概率来自 beta34（无 HookCallVoipForce）。
 - 待 beta36 验证：①亮屏 Xiaomi 15 是否 voip 全屏接听（`HookCallVoipType: incoming call type msg->voip`）；②锁屏 iPhone 是否出 `HookCallVoipForce: deviceType=11 forced true`；若出且 iPhone 仍通知 → iOS 端小米互联服务 App 不处理 voip 消息（官方灰度/版本），无解等官方全量。
 
+### 6.6 beta36 实测 + beta37 间歇断联三根因（2026-10-24 15:48 LSPosed 日志实锤）
+- **beta36 交付（commit f9f69e9 + 191498d）**：HookCallVoipType 对所有设备非广播来电硬编码 msg→voip。用户实测：亮屏流转通了（小米15 收 voip）；但出现**间歇性"当前连接已断开，请回到原设备接听电话"**（小米15 弹窗，电话被直接挂断）——有时亮屏、有时锁屏、有时连续。
+- **LSPosed 日志（2026-10-24 15:48 导出）实锤**：
+  - 每通来电 `HookCallFilterPass released` 出现 **2 轮**（同一通知被 onNotificationPosted 触发多次，每轮完整流转）→ **每台设备收同一来电 2 份 voip 消息** → 小米15 多份会话冲突 → 挂断。例：`15:37:22.764 released → 22.784 voip(11) → 22.830 voip(1) → 22.833 released → 22.840 voip(11) → 22.849 voip(1)`。
+  - 锁屏更糟：广播路径 1 份 + 监听路径 2 份 = 3 份。
+  - iPhone 侧（deviceType=11）：beta36 硬编码也改了 voip → **iPhone X 连通知都没有**（iOS 端"小米互联服务"App 不处理 voip 消息，直接丢弃）。
+- **beta37 三根因修复（未 commit，本地编译通过）**：
+  1. **HookCallFilterPass**：①同通知去重（`sbn.getKey()` + 3 秒窗口，只放行一次，亮屏每设备 1 份）；②跨进程真实锁屏判定（`WindowManagerGlobal.getWindowManagerService().isKeyguardLocked()` Binder 到 system_server，绕开进程内模拟；查不到保守 true=按锁屏不放行）——真实锁屏不放行监听路径，广播路径独享 1 份。
+  2. **HookCallRelay**：**重写为精准版**——删除 KeyguardManager/PowerManager/Display/WindowManager 全局模拟（副作用：小米15 接听时 milink 查 `isInteractive=false` 误判息屏中断会话），只 hook `NotificationHandler.isDeviceSupported`，对来电且原判定拒绝返回 true；短信/其他通知与 voip 会话建立全部恢复真实状态。
+  3. **HookCallVoipType**：不再硬编码，**复用原生 `VoipTransHelper.isVoipSupported(sbn, deviceId, deviceType)`**（反编译确认判定链：来电 + isCallRelaySwitchOn + isLocalVoipSupported + isRemoteVoipSupported(远端 flags)）——小米15 → voip 全屏接听；iPhone X（flags 不足）→ 自动降级 msg 通知。对齐原生"支持 voip 推送 voip、不支持降级通知"。
+- **UI（beta37 附带）**：设置页「外观」提示"切换后立即生效，无需重启"；「底栏形态」提示"悬浮导航栏为胶囊样式，液态玻璃带模糊背景"。
+- **beta37 待验证清单**：①亮屏来电小米15 只收 1 份 voip 且不挂断（连测 5 次）；②锁屏来电同样稳定（连测 5 次）；③iPhone X 恢复来电通知（msg）；④LSPosed 日志应见 `dup notification key=... keep filtered`（去重命中）、`real keyguard locked, keep native filter`（锁屏拦截）、`native isVoipSupported=false, degrade to notification`（iPhone 降级）。
+- **抓日志要点（已踩坑）**：Note12 Termux `su -c 'nohup logcat ... &'`（**必须 nohup**，否则 su 退出即杀）；小米15 aShell You（Shizuku）**不要加 & 后台**（执行器不保留后台任务，抓不到），用前台跑着等复现；模块日志只在 **LSPosed 日志页**导出 zip（logcat 看不到）。用户实测确认：logcat 双端抓取失败率高，**LSPosed zip 优先**。
+
 ### 6.3 官方能力边界（联网查证，2026-10-24）
 - 澎湃 OS 3 最新升级**今日起推送**：新增"小米手机来电同步到 iPhone 后在 iPhone 端接听"（双向）。条件：iPhone 装最新版"小米互联服务"App、同账号、两台设备连互联网。
 - iPhone X 无公开排除：CallKit 需 iOS10+（iPhone X 支持，Apple 官方安全文档列名）、App 要求 iOS14+（iPhone X 最高 16.7.12 满足）。唯一不确定性：功能内可能有未披露的更高 iOS 要求 → 实测定论。
@@ -136,10 +150,11 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 - 外观"跟随系统"**不需要实时切换**（用户撤销，勿再加回）。
 
 ## 8. 提交前待办动作（下一棒直接做）
-1. 本地已编译通过；核对 `changelog-latest.md` 头部改为 beta35 并写清电话修复 + iPhone voip 强制放行。
-2. `git add` 改动（HookCallFilterPass.java / HookCallVoipForce.java / Config.java / XposedEntry.java / docs）。
-3. commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` 交付用户。
+1. 本地已编译通过（HookCallFilterPass 去重+锁屏判定 / HookCallRelay 精准化 / HookCallVoipType 原生判定 / SettingsScreen 提示小字）；版本已 bump 165 / 1.1.0-beta37（app/build.gradle.kts + ksu-module/module.prop 两处同步）。
+2. 确认 `changelog-latest.md` 头部为 beta37（已写三根因+iPhone 恢复+UI 提示）与 `HANDOFF-next.md` §6.6（已写）。
+3. `git add` 改动（3 个 hooks + SettingsScreen.kt + build.gradle.kts + module.prop + 两个 docs）→ commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` 交付用户。
 4. 注意 CI 必须 Java+Kotlin 都编过（漏 import 会 cannot find symbol）。
+5. 交付后引导用户装包重启，按 §6.6 beta37 待验证清单连测（亮屏×5 + 锁屏×5 + iPhone 通知），并导出 LSPosed zip 回传核对去重/锁屏拦截/降级三条日志。
 
 ## 9. 抓日志命令（root Termux，先启动后复现，别先贴停止命令）
 ```bash
