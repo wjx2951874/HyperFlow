@@ -5,7 +5,6 @@ import com.hyperflowplus.hooks.HookCallRelay;
 import com.hyperflowplus.hooks.HookCallVoip;
 import com.hyperflowplus.hooks.HookCallVoipNotify;
 import com.hyperflowplus.hooks.HookCallFilterPass;
-import com.hyperflowplus.hooks.HookCallVoipForce;
 import com.hyperflowplus.hooks.HookCallVoipType;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
@@ -164,9 +163,8 @@ public class XposedEntry extends XposedModule {
             installSafely("HookCallFilterPass", new Runnable() {
                 @Override public void run() { HookCallFilterPass.install(cl); }
             });
-            installSafely("HookCallVoipForce", new Runnable() {
-                @Override public void run() { HookCallVoipForce.install(cl); }
-            });
+            // beta45：移除 HookCallVoipForce（强制 iPhone voip）——用户拍板用原生 isVoipSupported
+            // 判定：支持 voip 的设备（新款 iPhone/小米15）亮屏也标 voip；不支持（iPhone X）降级通知。
             installSafely("HookCallVoipType", new Runnable() {
                 @Override public void run() { HookCallVoipType.install(cl); }
             });

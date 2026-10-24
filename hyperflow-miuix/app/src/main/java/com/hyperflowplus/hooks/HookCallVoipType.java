@@ -96,27 +96,54 @@ public class HookCallVoipType {
                                 String deviceId = chain.getArgs().size() > 3
                                         && chain.getArgs().get(3) != null
                                         ? chain.getArgs().get(3).toString() : null;
-                                // deviceType 必须取 buildPlainMessage 真实参数（args[4]），
-                                // 不能反射 DeviceSubInfo（beta37 教训：反射拿 -1 → 原生判定恒 false）
+                                // deviceType 获取（beta45 重写）：args[4] 曾是 deviceType（beta36 实测
+                                // 11/1 正常），但 milink 更新后该参数漂移成无意义大数（148748/195737 等）
+                                // → 原生 isVoipSupported 恒 false → 亮屏全降级 msg（用户实测"只有手机号通知"）。
+                                // 兜底：反射 DeviceSubInfo（args[1]）内部字段找合法小整数 deviceType；
+                                // args[4] 若仍是合法小值则优先采用。
                                 int deviceType = -1;
                                 if (chain.getArgs().size() > 4
                                         && chain.getArgs().get(4) instanceof Integer) {
-                                    deviceType = ((Integer) chain.getArgs().get(4)).intValue();
+                                    int v = ((Integer) chain.getArgs().get(4)).intValue();
+                                    if (v > 0 && v <= 1000) {
+                                        deviceType = v; // 合法 deviceType 值域（1=手机 4=平板 11=iPhone…）
+                                    }
+                                }
+                                if (deviceType == -1) {
+                                    deviceType = findDeviceTypeFromSubInfo(chain.getArgs().get(1));
                                 }
                                 String oldType = typeField.get(result).toString();
-                                // 复用原生 isVoipSupported 判定：支持 voip 才改 voip，不支持保持 msg 降级通知
+                                // beta45 规则（用户拍板"用原生的那个逻辑"）：
+                                //   去掉 HookCallVoipForce 后，完全走原生 isVoipSupported 判定——
+                                //   - 原生判定支持 voip（新款 iPhone / 小米15 / 其他 Android）→ 标 voip 全屏接听
+                                //   - 原生判定不支持 voip（iPhone X 等）→ 保持 msg 降级通知
+                                //   - 判定失败（deviceType 拿不到 / 反射异常 / 原生调用抛错）→
+                                //     拦截本次流转（return null 不发通知）——voip 发不出来就别发通知，
+                                //     避免"本来该 voip 的设备收到一条只有手机号的降级通知"。
+                                // 注意：不能再用 deviceType 硬编码（11=iPhone 一律降级会误伤新款
+                                // iPhone——新款也 deviceType=11 但原生判定支持 voip）。
                                 boolean voipSupported = false;
-                                try {
-                                    Object builderThis = chain.getThisObject();
-                                    Field helperField = cls.getDeclaredField("mVoipTransHelper");
-                                    helperField.setAccessible(true);
-                                    Object helper = helperField.get(builderThis);
-                                    Method isVoipM = helper.getClass().getMethod("isVoipSupported",
-                                            StatusBarNotification.class, String.class, int.class);
-                                    voipSupported = ((Boolean) isVoipM.invoke(helper,
-                                            arg0, deviceId, Integer.valueOf(deviceType))).booleanValue();
-                                } catch (Throwable t) {
-                                    MiflowLog.e("HookCallVoipType: native isVoipSupported call failed, keep msg", t);
+                                boolean verdictOk = false;
+                                if (deviceType > 0) {
+                                    try {
+                                        Object builderThis = chain.getThisObject();
+                                        Field helperField = cls.getDeclaredField("mVoipTransHelper");
+                                        helperField.setAccessible(true);
+                                        Object helper = helperField.get(builderThis);
+                                        Method isVoipM = helper.getClass().getMethod("isVoipSupported",
+                                                StatusBarNotification.class, String.class, int.class);
+                                        voipSupported = ((Boolean) isVoipM.invoke(helper,
+                                                arg0, deviceId, Integer.valueOf(deviceType))).booleanValue();
+                                        verdictOk = true;
+                                    } catch (Throwable t) {
+                                        MiflowLog.e("HookCallVoipType: native isVoipSupported call failed, drop transfer", t);
+                                    }
+                                }
+                                if (!verdictOk) {
+                                    // 判定失败：voip 发不出来就不发（用户要求），拦截本次流转
+                                    MiflowLog.w("HookCallVoipType: voip verdict failed (deviceType=" + deviceType
+                                            + "), drop transfer (no degraded notification for voip-capable device)");
+                                    return null;
                                 }
                                 if (voipSupported) {
                                     typeField.set(result, "voip");
@@ -124,7 +151,7 @@ public class HookCallVoipType {
                                             + ", deviceType=" + deviceType + ", oldType=" + oldType
                                             + ", fromBroadcast=" + fromBroadcast);
                                 } else {
-                                    // 原生判定不支持 voip（如 iPhone X）：保持 msg，对端降级为通知
+                                    // 原生判定明确不支持 voip（如 iPhone X）：保持 msg，对端降级为通知
                                     MiflowLog.i("HookCallVoipType: deviceType=" + deviceType
                                             + " keep msg (native isVoipSupported=false, degrade to notification)"
                                             + ", oldType=" + oldType);
@@ -141,5 +168,30 @@ public class HookCallVoipType {
         } catch (Throwable t) {
             MiflowLog.e("HookCallVoipType: install failed", t);
         }
+    }
+
+    /** 反射 DeviceSubInfo（args[1]）内部字段找合法 deviceType：
+     *  遍历实例字段，取 int 且值在 1..1000（合法 deviceType：1=手机 4=平板 11=iPhone…）。
+     *  不硬编码混淆字段名（jadx 字段名运行时不保留）；找不到返回 -1。 */
+    private static int findDeviceTypeFromSubInfo(Object dsi) {
+        if (dsi == null) {
+            return -1;
+        }
+        try {
+            for (Field f : dsi.getClass().getDeclaredFields()) {
+                if (f.getType() != int.class) {
+                    continue;
+                }
+                f.setAccessible(true);
+                int v = f.getInt(dsi);
+                if (v > 0 && v <= 1000) {
+                    MiflowLog.i("HookCallVoipType: deviceType=" + v + " from DeviceSubInfo field " + f.getName());
+                    return v;
+                }
+            }
+        } catch (Throwable t) {
+            MiflowLog.e("HookCallVoipType: findDeviceTypeFromSubInfo failed", t);
+        }
+        return -1;
     }
 }

@@ -1,21 +1,29 @@
-# HyperFlow 1.1.0-beta42 更新日志
+# HyperFlow 1.1.0-beta45 更新日志
 
-## 修复
+## 来电流转（按用户拍板重做）
 
-### 1. 弹窗定位：确认弹窗贴底覆盖悬浮导航栏（系统 Dialog 同款）
-- 解锁时流转 / 双开 / 妙享直通等确认弹窗统一**底部对齐屏幕底**（bottomInset=0），Popup 独立窗口盖住包括悬浮导航栏在内的一切——和系统弹出框一致，不再悬空在胶囊上方。
+### 1. 移除强制 iPhone voip（用原生判定）
+- 删除 `HookCallVoipForce`（强制 deviceType=11 判定支持 voip）及对应配置开关，**完全走原生 `isVoipSupported` 判定**：
+  - 新款 iPhone / 小米15 / 其他 Android：原生判定支持 voip → 亮屏来电标 voip 全屏接听
+  - iPhone X 等原生不支持的：自动保持 msg 降级通知
+- 锁屏（广播来源）继续走原生 buildPlainMessage 判定，不干预（锁屏原逻辑）。
 
-### 2. 双开标识前缀弹窗不再"飞上面"
-- **根因**：MainActivity 未设 `windowSoftInputMode`（默认 adjustPan），键盘弹出时整个窗口被顶上去，弹窗随之飘到屏幕上部。
-- **修复**：Manifest 显式 `adjustResize` + 前缀弹窗 `bottomInset=0.dp`，键盘弹出时弹窗贴输入法正上方平滑跟随，不再乱飘。
+### 2. 修复亮屏来电"只有手机号通知"（deviceType 参数漂移）
+- **根因**（beta44 LSPosed 日志实锤）：milink 更新后 `buildPlainMessage` 的 args[4] 不再是 deviceType，拿到 148748/195737 等无意义大数 → 原生 `isVoipSupported(sbn, deviceId, 乱值)` 恒 false → 亮屏全部降级成 msg 通知。
+- **修复**：deviceType 改为多级获取——args[4] 合法小值优先；否则**反射 DeviceSubInfo 内部字段**遍历找合法小整数 deviceType（1=手机 4=平板 11=iPhone），不硬编码混淆字段名。
 
-### 3. 免预填调试入口隐藏（彩蛋机关）
-- 「免预填调试 · 检测捕获状态」**默认不再显示**；仅当点击「锁屏密码预设置」大标题 10 次（2 秒窗口内连点）才显示，与设备协同标题机关同款交互。
+### 3. 锁屏不再双份（通知+voip 一起来）
+- **根因**：beta38"来电一律放行"后，锁屏来电**广播路径**（原生 voip）和**监听路径**（被放行的原始通知）同时流转 → 用户实测"锁屏通知和 voip 一起来"。
+- **修复**：`HookCallFilterPass` 加**真实屏幕状态判定**——锁屏时保持原生过滤（监听路径不流转，广播路径独享一份 voip）；真实亮屏才放行监听路径。
+- 锁屏判定用进程内 PowerManager/KeyguardManager（beta38 起 HookCallRelay 不再模拟全局屏幕状态，进程内 API 为真实值）；查询失败 fallback 亮屏（放行），宁可偶发双份也不全灭（beta37 教训）。
 
-## 进展（beta39/40/41 并入）
-- A 方案免明文 HAT：日常解锁缓存 gatekeeper handle，授权时直接换 HAT 回传，不碰密码明文。
-- 功能页「妙享直通」下新增「锁屏密码预设置」显式入口（原彩蛋机关保留）。
-- 设置页主题「外观」→「界面外观」，小字"可单独设置App的界面外观"。
+### 4. voip 判定失败时拦截流转（不发降级通知）
+- 按用户要求：亮屏来电若 voip 判定失败（deviceType 拿不到 / 原生调用抛错），**拦截本次流转（不发通知）**，避免"本来该 voip 的设备收到一条只有手机号的降级通知"。降级通知仅保留给原生判定明确不支持 voip 的设备（iPhone X）。
+
+## 历史（beta42/43/44 并入）
+- beta44：普通通知亮屏流转修复（HookCallRelay 对所有通知放行，来电/非来电同待遇，不模拟屏幕状态）。
+- beta43：锁屏密码预设置页卡死修复（RootExec.su 加 8 秒超时，超时自动落手动选择）。
+- beta42：确认弹窗贴底 + 前缀弹窗键盘适配 + 免预填调试彩蛋机关（点标题 10 次显示）。
 
 ---
 

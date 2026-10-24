@@ -28,14 +28,20 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  *      → isLocalVoipSupported()=true → 返回 true（过滤）→ "notification is invalid, skip transfer"
  *      → 不流转。
  *
- * 修复：hook filterCall，对**来电（callType==1，INCOMING）**一律强制放行（返回 false，
+ * 修复：hook filterCall，对**来电（callType==1，INCOMING）且真实亮屏**强制放行（返回 false，
  * 不过滤），通知监听路径即走完整流转链，不再依赖补发广播。
  * 去电（callType==2）与 category 非 call 保持原过滤，避免误流转。
  *
- * beta37 曾加入"真实锁屏时不放行监听路径 + 同通知 3s 去重"，实测翻车：
- * ①锁屏时其实没有独立的广播路径兜底（拦截监听路径后锁屏来电直接全灭）；
- * beta38 恢复为：**来电一律放行、不做锁屏区分**（锁屏/亮屏都走监听路径流转），
- * 且**同一来电通知 3 秒内只放行第一次**（系统会把同一通知回调多次，只让 milink
+ * 锁屏双流转防护（beta45 重建，用户拍板"锁屏用原逻辑、只加亮屏的"）：
+ *   锁屏来电 incallui 走 ON_CALL_VOIP 广播路径（通知自带 NOTIFICATION_FROM_BROADCAST=true，
+ *   filterCall 原生放行、原生 buildPlainMessage 判定 voip）→ 广播路径独享一份 voip。
+ *   若同时放行监听路径（fromBroadcast=false）的原始通知，则锁屏会多一份降级通知/voip
+ *   —— 用户实测"锁屏通知和 voip 一起来"（beta44）。因此：**真实锁屏时不放行监听路径**，
+ *   **真实亮屏才放行**。
+ *   锁屏判定用进程内 PowerManager/KeyguardManager（beta38 起 HookCallRelay 不再模拟全局
+ *   屏幕状态，进程内 API 为真实值）；查询失败 fallback 为亮屏（放行），宁可偶发双份
+ *   也不全灭（beta37 教训：跨进程 Binder 失败 fallback 成锁屏不放行 → 来电全灭）。
+ * 重复流转去重：同一来电通知 3 秒内只放行第一次（系统会把同一通知回调多次，只让 milink
  * 处理一次 → 每台接收设备永远只收 1 份，消除"多份会话冲突挂断"）。
  *
  * 门控：功能① force_transfer（与 HookCallRelay 同开关）。
@@ -49,6 +55,34 @@ public class HookCallFilterPass {
     private static final long DUP_WINDOW_MS = 3000L;
     private static final java.util.Map<String, Long> releasedOnce =
             new java.util.concurrent.ConcurrentHashMap<>(16);
+
+    /** 真实屏幕状态（beta45）：进程内 API（beta38 起 HookCallRelay 不再模拟全局屏幕状态，
+     *  进程内 PowerManager/KeyguardManager 为真实值）。查询失败 fallback 亮屏（放行），
+     *  宁可偶发双份也不全灭（beta37 教训）。 */
+    private static boolean isScreenOn() {
+        try {
+            android.content.Context ctx = (android.content.Context)
+                    Class.forName("android.app.ActivityThread")
+                            .getMethod("currentApplication").invoke(null);
+            if (ctx == null) {
+                return true;
+            }
+            android.os.PowerManager pm = (android.os.PowerManager) ctx
+                    .getSystemService(android.content.Context.POWER_SERVICE);
+            if (pm != null && pm.isInteractive()) {
+                return true;
+            }
+            android.app.KeyguardManager kg = (android.app.KeyguardManager) ctx
+                    .getSystemService(android.content.Context.KEYGUARD_SERVICE);
+            if (kg != null && kg.isKeyguardLocked()) {
+                return false;
+            }
+            return pm != null && pm.isInteractive();
+        } catch (Throwable t) {
+            MiflowLog.e("HookCallFilterPass: screen state check failed, treat as screen-on", t);
+        }
+        return true; // fallback：亮屏放行
+    }
 
     public static void install(ClassLoader cl) {
         if (!Config.isForceTransferEnabled()) {
@@ -74,6 +108,13 @@ public class HookCallFilterPass {
                                         Bundle ex = n != null ? n.extras : null;
                                         int callType = ex != null ? ex.getInt(CALL_TYPE, -1) : -1;
                                         if (callType == CALL_INCOMING) {
+                                            // beta45：锁屏来电走原生广播路径（一份 voip），监听路径保持
+                                            // 原生过滤（防锁屏双份）；真实亮屏才放行监听路径。
+                                            if (!isScreenOn()) {
+                                                MiflowLog.i("HookCallFilterPass: incoming while keyguard locked, keep native filter"
+                                                        + " (broadcast path exclusive, avoid duplicate voip+notification)");
+                                                return result;
+                                            }
                                             String key = ((StatusBarNotification) arg0).getKey();
                                             long now = android.os.SystemClock.elapsedRealtime();
                                             Long last = releasedOnce.get(key);
@@ -83,7 +124,7 @@ public class HookCallFilterPass {
                                             } else {
                                                 releasedOnce.put(key, Long.valueOf(now));
                                                 MiflowLog.i("HookCallFilterPass: callType=" + callType
-                                                        + " (incoming) filter released once, allow transfer");
+                                                        + " (incoming) filter released once (screen-on), allow transfer");
                                                 return Boolean.FALSE;
                                             }
                                         } else {
