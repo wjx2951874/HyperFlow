@@ -1,7 +1,17 @@
-# HyperFlow 1.1.0-beta45 更新日志
+# HyperFlow 1.1.0-beta46 更新日志
 
-## 来电流转（按用户拍板重做）
+## 一、系统框架作用域修复（分身点击/自动捕获密码的根因）
+- **根因**（用户 LSPosed 作用域截图 + beta44 日志实锤）：用户勾选了「Android系统(android)」，但 framework 是 Vector/JingMatrix 分支，system_server 注入时 `pkgName` 传的是 **`"system"`**（作用域里「系统框架 system」与「Android系统 android」是两个不同条目），而 XposedEntry 只匹配 `"android"` → **system_server 里 HookRemoteOpen / HookKeyguardCapture 根本没装上**：
+  - 分身微信点击拉镜像 → 无人改写 userId → 主微信被打开（分身同开）
+  - 自动捕获密码 → 缓存 handle 路径完全没跑 → 结果为空
+- **修复**：system_server 分支改为 `"android" || "system"` 双匹配，日志带 pkgName 可确认。
 
+## 二、弹窗细节修复
+- 确认弹窗（开启/关闭功能时的弹窗）太贴底：beta42 曾改 bottomInset=0，用户实测太靠下 → 默认 **16dp**（Popup 独立窗口仍盖住悬浮导航栏，抬 16dp 不露栏）。
+- 双开标识前缀输入框被悬浮胶囊盖住：前缀弹窗原在 FlowScreen 内渲染（悬浮胶囊在其后绘制 → 盖住输入框）。**提升到 MainActivity 根层渲染**（Scaffold 之后绘制，在悬浮胶囊之上；inApp 保留键盘跟随，贴键盘顶）。
+
+## 历史（beta45 并入）
+### beta45 来电流转（按用户拍板重做）
 ### 1. 移除强制 iPhone voip（用原生判定）
 - 删除 `HookCallVoipForce`（强制 deviceType=11 判定支持 voip）及对应配置开关，**完全走原生 `isVoipSupported` 判定**：
   - 新款 iPhone / 小米15 / 其他 Android：原生判定支持 voip → 亮屏来电标 voip 全屏接听

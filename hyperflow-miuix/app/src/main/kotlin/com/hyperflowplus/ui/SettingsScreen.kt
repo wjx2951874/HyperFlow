@@ -341,4 +341,8 @@ object MainHolder {
     // V0.6.16.6：KSU 同款全屏搜索 —— 状态机（折叠/展开/收起）+ 搜索结果（跨组件共享）
     // 1.1.0 M8：底栏角标 —— 新消息到达且不在消息页时点亮（开启"显示导航角标"时生效）
     var newMsgBadge by androidx.compose.runtime.mutableStateOf(false)
+    // beta46：双开标识前缀编辑弹窗 —— 提升到 MainActivity 根层渲染（Scaffold 之后，
+    // 绘制顺序在悬浮胶囊之后 → 弹窗盖住胶囊；inApp 保留键盘跟随）。FlowScreen 只设状态。
+    var prefixEditOpen by androidx.compose.runtime.mutableStateOf(false)
+    var prefixDraft by androidx.compose.runtime.mutableStateOf("")
 }

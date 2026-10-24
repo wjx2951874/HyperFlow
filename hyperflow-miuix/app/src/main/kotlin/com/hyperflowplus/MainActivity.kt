@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.unit.sp
@@ -72,6 +73,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import top.yukonga.miuix.kmp.basic.Scaffold
 import android.widget.Toast
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Surface
@@ -749,6 +751,48 @@ fun HyperFlowApp() {
                         ) {
                             Text("去 KSU 检测")
                         }
+                    }
+                }
+            }
+
+            // 双开标识前缀编辑弹窗（beta46：提升到根层渲染 —— Scaffold 之后绘制，
+            // 悬浮胶囊在内容 Box 之后、本弹窗之前 → 弹窗盖住胶囊；inApp 保留键盘跟随，
+            // bottomInset=0 贴键盘顶）。状态由 MainHolder 承载，FlowScreen 只负责唤起。
+            if (MainHolder.prefixEditOpen) {
+                HyperDialog(
+                    show = true,
+                    title = "双开标识前缀",
+                    summary = "标题前自动包进【】，留空则用默认「双开」",
+                    centered = false,
+                    inApp = true,
+                    bottomInset = 0.dp,
+                    onDismiss = { MainHolder.prefixEditOpen = false }
+                ) {
+                    TextField(
+                        value = MainHolder.prefixDraft,
+                        onValueChange = { MainHolder.prefixDraft = it },
+                        label = "标识文字",
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { MainHolder.prefixEditOpen = false },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("取消") }
+                        Button(
+                            colors = ButtonDefaults.buttonColorsPrimary(),
+                            onClick = {
+                                val v = MainHolder.prefixDraft.trim()
+                                state.setString(Config.KEY_CLONE_PREFIX, v.ifEmpty { "双开" })
+                                MainHolder.prefixEditOpen = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("保存") }
                     }
                 }
             }

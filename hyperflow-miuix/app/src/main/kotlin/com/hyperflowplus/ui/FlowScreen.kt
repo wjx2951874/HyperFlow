@@ -39,9 +39,7 @@ import androidx.compose.foundation.layout.Arrangement
 @Composable
 fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     var pendingToggle by remember { mutableStateOf<String?>(null) }
-    // 双开标识前缀自定义编辑
-    var showPrefixEdit by remember { mutableStateOf(false) }
-    var prefixDraft by remember { mutableStateOf("") }
+    // beta46：双开标识前缀编辑弹窗状态已移入 MainHolder（MainActivity 根层渲染，悬浮胶囊之上）
     // 彩蛋机关：妙享直通开启时连点标题 10 次 → 打开隐藏的锁屏密码预设置页
     var authTitleTaps by remember { mutableStateOf(0) }
     var authTapTime by remember { mutableStateOf(0L) }
@@ -87,8 +85,9 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                         title = "双开标识前缀",
                         summary = "现在为【${state.clonePrefix}】，点击可修改",
                         onClick = {
-                            prefixDraft = state.clonePrefix
-                            showPrefixEdit = true
+                            // beta46：弹窗提升到 MainActivity 根层渲染（悬浮胶囊之上），这里只设状态
+                            MainHolder.prefixDraft = state.clonePrefix
+                            MainHolder.prefixEditOpen = true
                         }
                     )
                 }
@@ -242,45 +241,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
         )
     }
 
-    // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
-    // 底部弹出 + HyperDialog imePadding：点击输入后弹窗整体上移到输入法正上方
-    // bottomInset=0：键盘弹出时卡片贴键盘顶，不悬空（配合 MainActivity adjustResize）
-    if (showPrefixEdit) {
-        HyperDialog(
-            show = true,
-            title = "双开标识前缀",
-            summary = "标题前自动包进【】，留空则用默认「双开」",
-            centered = false,
-            inApp = true,
-            bottomInset = 0.dp,
-            onDismiss = { showPrefixEdit = false }
-        ) {
-            TextField(
-                value = prefixDraft,
-                onValueChange = { prefixDraft = it },
-                label = "标识文字",
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            )
-            Spacer(Modifier.height(20.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = { showPrefixEdit = false },
-                    modifier = Modifier.weight(1f)
-                ) { Text("取消") }
-                Button(
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    onClick = {
-                        val v = prefixDraft.trim()
-                        state.setString(Config.KEY_CLONE_PREFIX, v.ifEmpty { "双开" })
-                        showPrefixEdit = false
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text("保存") }
-            }
-        }
+        // beta46：双开标识前缀编辑弹窗已提升到 MainActivity 根层渲染（Scaffold 之后，
+        // 绘制顺序在悬浮胶囊之后 → 弹窗盖住胶囊；inApp 保留键盘跟随）。此处不再渲染。
     }
 }

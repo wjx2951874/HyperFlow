@@ -52,8 +52,9 @@ fun ConfirmDialog(
     singleConfirmText: String? = null,
     // v0.5.13：删除类确认按钮用 MIUI 危险红（error 色），其余保持 HyperOS 蓝
     confirmDanger: Boolean = false,
-    // 确认弹窗统一贴底（0 = 底部对齐屏幕底，Popup 独立窗口盖住包括悬浮导航栏在内的一切，系统 Dialog 同款）
-    bottomInset: Dp = 0.dp,
+    // 确认弹窗底部间距：beta46 起默认 16dp（beta42 曾为 0 贴底，用户实测太贴底，微抬 16dp；
+    // Popup 独立窗口仍盖住悬浮导航栏，抬 16dp 不会露出悬浮栏）
+    bottomInset: Dp = 16.dp,
     onConfirm: () -> Unit = {},
     onDismiss: () -> Unit,
     onCancel: () -> Unit = onDismiss,

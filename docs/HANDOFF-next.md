@@ -1,19 +1,18 @@
-# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta45）
+# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta46 构建中）
 
 > 用途：本文件供下一个接手的人/AI 快速续上。所有事实以本仓库代码 + `docs/trustservice-auth-chain.md` 为准；本快照之后的改动以 git 历史为准。
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。remote URL 内嵌 PAT token，用 `git remote get-url origin` 提取（禁止明文打印）；**持续用同一把 PAT 不轮换**。
-- 当前 **beta45（versionCode 173）**，来电流转按用户拍板重做，CI 构建中：
-  1. **删除 `HookCallVoipForce` 及配置开关**（不再强制 iPhone voip），**完全走原生 `isVoipSupported` 判定**：新款 iPhone/小米15 亮屏标 voip 全屏接听；iPhone X 原生判定不支持 → 自动 msg 降级通知。锁屏（广播来源）走原生判定不干预。
-  2. **修复亮屏来电"只有手机号通知"**：beta44 日志实锤 `buildPlainMessage` 的 args[4] 已漂移成无意义大数（148748/195737/34469）→ 原生 `isVoipSupported(sbn, deviceId, 乱值)` 恒 false → 全降级 msg。修复 = deviceType 多级获取：args[4] 合法小值优先，否则**反射 DeviceSubInfo 内部字段**遍历找合法小整数 deviceType（1=手机 4=平板 11=iPhone）。
-  3. **锁屏不再双份**：beta44"来电一律放行"导致锁屏广播路径（原生 voip）+ 监听路径（放行的通知）同时流转 → 用户实测"通知和 voip 一起来"。修复 = FilterPass 加**进程内真实屏幕状态判定**（PowerManager.isInteractive / KeyguardManager.isKeyguardLocked，beta38 起 Relay 不再模拟全局屏幕状态，进程内 API 为真实值）：锁屏保持原生过滤（广播路径独享）、亮屏才放行。查询失败 fallback 亮屏放行（宁可偶发双份也不全灭——beta37 跨进程 Binder fallback 成锁屏不放行导致来电全灭）。
-  4. **voip 判定失败拦截流转**：亮屏来电若 deviceType 拿不到/原生调用抛错 → `return null` 拦截本次流转（不发降级通知）；降级通知仅保留给原生判定明确不支持 voip 的设备（iPhone X）。
+- 当前 **beta46 构建中**（versionCode 174）：
+  1. **系统框架作用域双兼容**（分身点击/自动捕获密码的根因修复）：用户 LSPosed 勾了「Android系统(android)」但 framework 是 Vector/JingMatrix 分支，system_server 注入 pkgName 传 `"system"`（作用域里「系统框架 system」与「Android系统 android」是两个条目），XposedEntry 只匹配 `"android"` → **HookRemoteOpen / HookKeyguardCapture 在 system_server 根本没装上**（beta44 日志无 system_server 加载记录）。修复 = 双匹配 `"android" || "system"`。
+  2. **确认弹窗上移 16dp**（beta42 曾 bottomInset=0 贴底，用户实测太靠下）。
+  3. **前缀输入弹窗提升 MainActivity 根层**（原在 FlowScreen 内渲染被悬浮胶囊盖住；提升后 Scaffold 之后绘制 → 盖住胶囊，inApp 保留键盘跟随）。
 - 已交付主线状态：
   - **电话流转化**：beta45 重做后待实测（详见 §6）。
-  - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。
+  - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。**注意：依赖 HookKeyguardCapture（system_server），beta46 起作用域修复后才能真正生效**。
   - **预设置入口**（beta40）：功能页「妙享直通」开关下新增显式「锁屏密码预设置」入口（原彩蛋机关保留）。
-- 两条主线：① 电话流转化（beta45 等用户装包实测）；② A 方案静默校验（免明文 HAT 已实现，待实测）。
+- 两条主线：① 电话流转化（beta45 等用户装包实测）；② A 方案静默校验（作用域修复后待实测）。
 
 ## 1. 项目是什么
 小米澎湃 OS 互联增强：Xposed 模块（通知/短信流转、分身双开标识、电话流转化）+ miuix 原生 UI App。被控端 root（Note12 Turbo），发起端小米15（无 root 走 Shizuku），另有 iPhone X（deviceType=11，iOS 端仅认 msg 通知）。
@@ -109,13 +108,13 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 - beta37：主题「外观」+「底栏形态」加提示小字（"切换后立即生效，无需重启" / "悬浮导航栏为胶囊样式，液态玻璃带模糊背景"）。
 - 历史：tab「流转」→「功能」；「版本」标题 FontWeight.Medium；双开前缀提示+居中弹窗。
 
-## 8. 当前提交前待办（beta45，直接做）
-1. 本地未编译（环境 gradle/JDK 版本混乱，直接走 CI）；版本已 bump **173 / 1.1.0-beta45**（build.gradle.kts + ksu-module/module.prop 两处已同步，version 与 versionCode 两行都要改）。
-2. `changelog-latest.md` 头部已改 beta45；`HANDOFF-next.md` §0/§6/§7/§8/§10/§11 已同步。
-3. `git add`（4 个代码文件含删 HookCallVoipForce.java + 2 个 docs + 2 个版本文件，**勿 add `hyperflow-miuix/.kotlin/` 临时目录**）→ commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` → 校验 module.prop version=1.1.0-beta45/versionCode=173 → present_files 交付。
-4. CI 必须 Java+Kotlin 都编过（漏 import 会 cannot find symbol）。
-5. 交付后引导用户装包重启，重点验证：①亮屏来电小米15 收到带名字的 voip 全屏（不再只有手机号通知）；②锁屏来电只收 1 份 voip（不再"通知+voip 一起来"）；③iPhone X 锁屏/亮屏都收 msg 降级通知（不再被强制 voip）。
-6. 后续待办延续：电话 §6.4 连测、A 方案 §4.5 实测。
+## 8. 当前提交前待办（beta46，直接做）
+1. 本地未编译（环境 gradle/JDK 版本混乱，直接走 CI）；版本已 bump **174 / 1.1.0-beta46**（build.gradle.kts + ksu-module/module.prop 两处已同步，version 与 versionCode 两行都要改）。
+2. `changelog-latest.md` 头部已改 beta46；`HANDOFF-next.md` §0/§7/§8/§10/§11 已同步。
+3. `git add`（**XposedEntry.java、ConfirmDialog.kt、FlowScreen.kt、MainActivity.kt、SettingsScreen.kt** + 2 个 docs + 2 个版本文件，**勿 add `hyperflow-miuix/.kotlin/` 临时目录**）→ commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` → 校验 module.prop version=1.1.0-beta46/versionCode=174 → present_files 交付。
+4. CI 必须 Java+Kotlin 都编过（MainActivity 新 import Arrangement/TextField、FlowScreen 删弹窗后多余 import 只是 warning）。
+5. 交付后引导用户装包重启，重点验证：①**LSPosed 日志出现 `HyperFlow loaded in system_server (pkgName=system)`**（作用域修复生效标志）；②分身微信点击不再同时开主微信；③自动捕获密码不再为空（/data/system/hyperflow_handle 有内容）；④确认弹窗不再贴底；⑤前缀输入框在悬浮胶囊上层。
+6. 后续待办延续：电话 §6.4 连测（beta45 已交付待实测）、A 方案 §4.5 实测。
 
 ## 9. 抓日志命令（root Termux，先启动后复现，别先贴停止命令）
 ```bash
@@ -128,10 +127,10 @@ grep -E "HyperFlowPlus|A-1|A-2|MiTrustService|gatekeeper|verifyCredential" /sdca
 
 ## 10. 遗留登记（未开始/未完成，勿丢）
 - **电话线**：beta45 已重做未实测——按 §6.4 连测并导 LSPosed zip 回传核对日志，重点：亮屏 voip 带名字、锁屏单份、iPhone 降级、DeviceSubInfo 反射拿到的 deviceType 是否正确。
-- **分身微信点击拉镜像主微信仍同时打开**（历史未决）：HookRemoteOpen/HookCloneBypass 已实现（999 空间 + hf_is_clone 标记 + ALLOWED_CALLERS），但用户实测分身微信点击仍同时拉起主微信（有时覆盖分身）。mirror 进程观测：PendingIntent.send rc=0 displayId=2 走 relay（SystemOsHelper.h→relay.s0.E0→relay.s0.C→relay.d0.a），说明远端 PendingIntent 可能是双份（u0 主 + u999 分身）或未带 hf_is_clone。需继续定位。
-- **锁屏验证 UI 不自动消失**（历史未决，有线索）：流转到其他设备能完成验证（HAT 校验成功），但本机 trustservice 授权盘 UI 不自动关闭。beta44 日志：`A-2: LockScreenUIActivity.onResume not found`（HookTrustAuthAuto.hookAuthUi 的 onResume 兜底未 hook 上），只剩 HookTrustAuthUiClose(netbus.h.n) 单路径；若收尾走的不是 h.n 或 f1753J 字段名漂移，UI 残留。
-- **自动捕获密码结果为空**：HookKeyguardCapture 的 getCredential 提不出明文（用户实测），已不依赖明文路径；handle 缓存链（/data/system/hyperflow_handle）为当前首选，需实测。
-- **A 线**：免明文 handle 实测（§4.5 步骤 1-2）；Bind_A→k.l(p0c,hat) 两参未自动；图案分支实机验证；错密码罚时观察。
+- **分身微信点击拉镜像主微信仍同时打开**：**根因已实锤 = system_server 作用域标识不匹配**（用户勾 android 但 JingMatrix 传 system，HookRemoteOpen 没装上）。beta46 已修双匹配，装包后验证；若仍同开再看 mirror 进程 PendingIntent 双发（rc=-1 后 rc=0）是否为双份。
+- **自动捕获密码结果为空**：**同一根因**（HookKeyguardCapture 在 system_server 没装上）。beta46 起作用域修复后应能缓存 handle；若还空再查 HookKeyguardCapture 的 gatekeeper handle 缓存链。
+- **锁屏验证 UI 不自动消失**（有结论）：trustservice 已装。反编译确认：①`LockScreenUIActivity.onResume` **不存在**（A-2 兜底必然 not found）；②原生成功路径 `Q0.d.run(i2==0)` 确实不 finish（只取消超时+通知上层回传+起线程）；③HookTrustAuthUiClose（netbus.h.n code==0 → 补 finish）已装上，理论能关。装包实测确认；若仍不关，需 hook 正确的成功回调（onStop 的 isDeviceLocked 检查 / Q0.a.j 链路）。
+- **A 线**：免明文 handle 实测（依赖 system_server 作用域，beta46 后验证）；Bind_A→k.l(p0c,hat) 两参未自动；图案分支实机验证；错密码罚时观察。
 - iPhone 接听：iOS 端小米互联服务需最新版并注册 com.ios.phone relayCall 服务，iPhone X 实测定论。
 - 消息页三点级联菜单改 HyperIsland 样式（miuix 自带 OverlayIconCascadingDropdownMenu）。
 - 乙方案分身 hook 跳过搬 u0 主微信 task；1.2.0 双向对等对控；隐私合规 A4/A3；工程质量 B1-B3；消息页改造 M14-M19。
@@ -142,6 +141,7 @@ grep -E "HyperFlowPlus|A-1|A-2|MiTrustService|gatekeeper|verifyCredential" /sdca
 - 本地只编 Kotlin 会漏 Java 符号；assembleRelease 本地 OOM，只能 CI。
 - `update.json` / main 正式通道测试期不动。
 - 密码类错了会被系统罚时，自动校验只提交一次、失败计数封顶 3，不循环。
+- **system_server 作用域标识双兼容**：经典 LSPosed 传 pkgName=`android`，Vector/JingMatrix 分支传 `system`（用户作用域截图里「系统框架 system」与「Android系统 android」是两条，勾 android 不生效）。XposedEntry 必须同时匹配两者；用户框架版本变化时先查 LSPosed 日志有没有 `HyperFlow loaded in system_server`。
 - 电话 hook 的 deviceType：**args[4] 已漂移不可信（beta44 拿到 148748 等乱值）**，必须用反射 DeviceSubInfo 字段兜底（见 §6.2 第 3 条）；但仍**禁止**反射 DeviceSubInfo.getDeviceType() 方法（不存在，拿 -1）。
 - 锁屏"原逻辑"= 锁屏时 FilterPass **保持原生过滤**（监听路径不流转，广播路径独享原生 voip 一份）——beta45 已按用户拍板实现，不再是 beta37"锁屏不放行导致全灭"（beta37 是跨进程 Binder 判定失败 fallback 错，且当时 Relay 还在模拟全局屏幕状态；现在用进程内真实 API + fallback 亮屏放行）。
 - beta37 曾实测"锁屏拦监听路径全灭"——根因是跨进程锁屏判定失败 fallback 成"锁屏不放行"；beta45 改为进程内 API + fallback"亮屏放行"，若实测锁屏又出现"通知+voip 双份"，是 isScreenOn 误判锁屏（KeyguardManager 在 milink 进程可能拿不到真实状态），需改用跨进程但**失败时放行**。

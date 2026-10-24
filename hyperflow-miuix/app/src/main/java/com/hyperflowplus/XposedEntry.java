@@ -60,11 +60,14 @@ public class XposedEntry extends XposedModule {
         markLoaded();
         String pkgName = param.getPackageName();
         ClassLoader cl = param.getDefaultClassLoader();
-        if ("android".equals(pkgName)) {
+        if ("android".equals(pkgName) || "system".equals(pkgName)) {
             // system_server：拦截"远程打开应用"请求，把分身通知的点击改为打开 999 空间
-            // 微信/QQ（需要作用域勾选 android）；并捕获日常锁屏解锁的凭证（免预填）
+            // 微信/QQ（需要作用域勾选 android）；并捕获日常锁屏解锁的凭证（免预填）。
+            // pkgName 双兼容：经典 LSPosed 传 "android"，Vector/JingMatrix 分支传 "system"
+            //（用户实测勾了 android 但 system_server 没加载 —— JingMatrix 作用域里
+            //  "系统框架 system" 与 "Android系统 android" 是两个条目，注入用 system）。
             try {
-                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect + keyguard capture) ===");
+                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect + keyguard capture, pkgName=" + pkgName + ") ===");
                 installSafely("HookRemoteOpen[system]", new Runnable() {
                     @Override public void run() { HookRemoteOpen.installSystem(cl); }
                 });
