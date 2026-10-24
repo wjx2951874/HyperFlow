@@ -55,6 +55,7 @@ public final class Config {
 
     // 功能开关（全局配置 key）
     public static final String KEY_FORCE_TRANSFER = "force_transfer";       // 功能① 亮屏强制流转
+    public static final String KEY_FORCE_IPHONE_VOIP = "force_iphone_voip"; // 功能① 强制 iPhone(deviceType=11) 判定支持 voip 接听（官方 iOS 端服务未注册前强制放行，实测用）
     public static final String KEY_CLONE_TRANSFER = "clone_transfer";       // 功能② 双开通知流转
     public static final String KEY_CLONE_PREFIX = "clone_prefix";           // 功能② 双开标题标识前缀文字（默认"双开"，实际包成【双开】）
     public static final String KEY_SMS_PERSIST = "sms_persist";             // 功能③ 短信持久化
@@ -190,6 +191,11 @@ public final class Config {
 
     public static boolean isForceTransferEnabled() {
         return getBool(KEY_FORCE_TRANSFER, false);
+    }
+
+    /** 强制 iPhone(deviceType=11) voip 接听判定为 true。默认开（用户实测要求），可随时关。 */
+    public static boolean isForceIphoneVoipEnabled() {
+        return getBool(KEY_FORCE_IPHONE_VOIP, true);
     }
 
     public static boolean isCloneTransferEnabled() {
