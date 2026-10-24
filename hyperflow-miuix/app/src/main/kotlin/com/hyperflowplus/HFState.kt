@@ -242,6 +242,19 @@ object HFState {
         saveCfgLater()
     }
 
+    /**
+     * 底栏形态三选一（standard/floating/liquid），设置页「底栏形态」勾选式入口。
+     * 写入枚举的同时同步旧布尔键（nav_float / glass_effect），保证老配置与 MainActivity 读取兼容。
+     */
+    fun setBottomBarStyle(style: String) {
+        val s = if (style == "floating" || style == "liquid") style else "standard"
+        cfg = JSONObject(cfg.toString())
+            .put("bottom_bar_style", s)
+            .put(Config.KEY_NAV_FLOAT, s != "standard")
+            .put(Config.KEY_GLASS, s == "liquid")
+        saveCfgLater()
+    }
+
     fun setString(key: String, value: String) {
         cfg = JSONObject(cfg.toString()).put(key, value)
         saveCfgLater()

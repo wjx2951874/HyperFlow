@@ -110,23 +110,24 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     }
                 )
 
-                // 悬浮导航栏
-                SwitchPreference(
-                    title = "悬浮导航栏",
-                    summary = "以悬浮胶囊替代系统导航栏",
-                    checked = state.navFloat,
-                    onCheckedChange = { state.set(Config.KEY_NAV_FLOAT, it) }
+                // 底栏形态：默认 / 悬浮 / 液态玻璃（外观同款 OverlaySpinnerPreference 勾选式）
+                val barOptions = listOf("默认", "悬浮", "液态玻璃")
+                val barValues = listOf("standard", "floating", "liquid")
+                val barIndex = barValues.indexOf(state.bottomBarStyle).coerceAtLeast(0)
+                OverlaySpinnerPreference(
+                    title = "底栏形态",
+                    items = barOptions.mapIndexed { i, label ->
+                        DropdownItem(
+                            text = label,
+                            selected = i == barIndex,
+                            onClick = { state.setBottomBarStyle(barValues[i]) }
+                        )
+                    },
+                    selectedIndex = barIndex,
+                    onSelectedIndexChange = { i ->
+                        state.setBottomBarStyle(barValues[i])
+                    }
                 )
-
-                // 液态玻璃（仅悬浮开启时显示）
-                if (state.navFloat) {
-                    SwitchPreference(
-                        title = "液态玻璃",
-                        summary = "为悬浮胶囊开启系统级液态玻璃",
-                        checked = state.glassEffect,
-                        onCheckedChange = { state.set(Config.KEY_GLASS, it) }
-                    )
-                }
             }
         }
 
