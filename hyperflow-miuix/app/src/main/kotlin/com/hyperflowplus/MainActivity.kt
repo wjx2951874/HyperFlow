@@ -757,7 +757,7 @@ fun HyperFlowApp() {
 
             // 双开标识前缀编辑弹窗（beta46：提升到根层渲染 —— Scaffold 之后绘制，
             // 悬浮胶囊在内容 Box 之后、本弹窗之前 → 弹窗盖住胶囊；inApp 保留键盘跟随，
-            // bottomInset=0 贴键盘顶）。状态由 MainHolder 承载，FlowScreen 只负责唤起。
+            // bottomInset=16dp 与"解锁时流转"等确认弹窗对齐（beta46 曾 0dp 贴底，用户要求上移））
             if (MainHolder.prefixEditOpen) {
                 HyperDialog(
                     show = true,
@@ -765,7 +765,7 @@ fun HyperFlowApp() {
                     summary = "标题前自动包进【】，留空则用默认「双开」",
                     centered = false,
                     inApp = true,
-                    bottomInset = 0.dp,
+                    bottomInset = 16.dp,
                     onDismiss = { MainHolder.prefixEditOpen = false }
                 ) {
                     TextField(

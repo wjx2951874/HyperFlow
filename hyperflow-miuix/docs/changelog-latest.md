@@ -1,4 +1,12 @@
-# HyperFlow 1.1.0-beta46 更新日志
+# HyperFlow 1.1.0-beta47 更新日志
+
+## 一、图标放大（桌面占满）
+- 原图标白色环形图形仅占容器 ~60%，四周蓝底留白偏大，桌面观感"没占满"。中心裁剪 75% 后放大回 2048：图形占比提升至 ~80%，蓝色容器占满画布边缘（图标 mask 裁圆角不受影响）。108px / xxxhdpi 432px 两份已同步更新。
+
+## 二、双开标识前缀弹窗上移
+- 前缀输入弹窗（点"双开标识前缀"后出现的输入框）原 bottomInset=0 贴底，用户要求上移 → **16dp**，与"解锁时流转"等确认弹窗（ConfirmDialog 默认 16dp）一致。弹窗仍盖住悬浮胶囊、保留键盘跟随。
+
+## 历史（beta46 并入）
 
 ## 一、系统框架作用域修复（分身点击/自动捕获密码的根因）
 - **根因**（用户 LSPosed 作用域截图 + beta44 日志实锤）：用户勾选了「Android系统(android)」，但 framework 是 Vector/JingMatrix 分支，system_server 注入时 `pkgName` 传的是 **`"system"`**（作用域里「系统框架 system」与「Android系统 android」是两个不同条目），而 XposedEntry 只匹配 `"android"` → **system_server 里 HookRemoteOpen / HookKeyguardCapture 根本没装上**：
