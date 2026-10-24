@@ -19,6 +19,59 @@ public class CapturedCred {
     /** 公共文件：system uid 进程可写，App root 可读；普通进程不可读。 */
     public static final String CAP_FILE = "/data/system/hyperflow_captured";
 
+    /** 解锁句柄缓存文件（免明文 HAT 通道）：日常解锁时缓存 gatekeeper handle，
+     *  trustservice 授权时用 handle+challenge 直接换 HAT，不碰密码明文。 */
+    public static final String HANDLE_FILE = "/data/system/hyperflow_handle";
+
+    /**
+     * 缓存解锁句柄（gatekeeper handle）：system_server 日常解锁成功后写入，
+     * 带时间戳；trustservice 进程读取后用于"免明文"换 HAT。
+     */
+    public static void writeHandle(long handle) {
+        try {
+            long ts = System.currentTimeMillis();
+            String json = "{\"handle\":" + handle + ",\"ts\":" + ts + "}\n";
+            String cmd = "echo '" + json.replace("'", "'\\''") + "' > " + HANDLE_FILE
+                    + " && chmod 644 " + HANDLE_FILE;
+            Process p = new ProcessBuilder("/system/bin/sh", "-c", cmd)
+                    .redirectErrorStream(true).start();
+            p.waitFor();
+            MiflowLog.i("CapturedCred: handle cached (" + handle + ") @ ts=" + ts);
+        } catch (Throwable t) {
+            MiflowLog.w("CapturedCred: writeHandle failed: " + t);
+        }
+    }
+
+    /** 读回解锁句柄：[handle, ts]；文件不存在或解析失败返回 null。 */
+    public static long[] readHandle() {
+        try {
+            java.io.File f = new java.io.File(HANDLE_FILE);
+            if (!f.exists() || f.length() <= 0) {
+                return null;
+            }
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
+            String raw;
+            try {
+                raw = br.readLine();
+            } finally {
+                br.close();
+            }
+            if (raw == null || raw.trim().isEmpty()) {
+                return null;
+            }
+            String h = regex(raw, "\"handle\":([0-9]+)");
+            String t = regex(raw, "\"ts\":([0-9]+)");
+            if (h == null || t == null) {
+                return null;
+            }
+            return new long[]{Long.parseLong(h), Long.parseLong(t)};
+        } catch (Throwable t) {
+            MiflowLog.w("CapturedCred: readHandle failed: " + t);
+            return null;
+        }
+    }
+
     /** 回退位置：trustservice 进程私有 sp（旧版通道，兼容读取）。 */
     public static final String FALLBACK_SP = "hyperflow_captured";
     public static final String KEY_TYPE = "hf_cap_type";

@@ -392,15 +392,6 @@ public class HookTrustAuthAuto {
     }
 
     private static void autoVerify(Object proxy, byte[] challenge, String branch) throws Throwable {
-        String type = Config.getAuthType();
-        String secret = Config.getAuthSecret();
-        String pattern = Config.getAuthPattern();
-        boolean has = ("pin".equals(type) || "password".equals(type)) && secret != null && !secret.isEmpty()
-                || "pattern".equals(type) && pattern != null && !pattern.isEmpty();
-        if (!has) {
-            MiflowLog.i("A-2: no saved credential(type=" + type + "), pass through");
-            return;
-        }
         Object inst = readSingleton();
         if (inst == null) {
             MiflowLog.w("A-2: singleton null, pass through");
@@ -408,6 +399,50 @@ public class HookTrustAuthAuto {
         }
         if (challenge == null) {
             MiflowLog.w("A-2: challenge null, pass through");
+            return;
+        }
+
+        // ===== 免明文优先：日常解锁缓存的 gatekeeper handle 直接换 HAT（不碰密码明文）=====
+        long[] cached = CapturedCred.readHandle();
+        if (cached != null) {
+            Object lpw = findInstanceFieldBySimpleName(inst, "LockPatternUtils");
+            if (lpw != null) {
+                try {
+                    long ch = le8(challenge);
+                    Method vgh = lpw.getClass().getMethod(
+                            "verifyGatekeeperPasswordHandle", long.class, long.class, int.class);
+                    Object hatResp = vgh.invoke(lpw, cached[0], ch, 0);
+                    byte[] hat = (byte[]) hatResp.getClass()
+                            .getDeclaredMethod("getGatekeeperHAT").invoke(hatResp);
+                    if (hat != null && hat.length > 0) {
+                        String methodName = "Risk_B".equals(branch) ? "x"
+                                : "Bind_B".equals(branch) ? "j" : null;
+                        if (methodName != null) {
+                            Method back = proxy.getClass().getMethod(methodName, byte[].class);
+                            back.invoke(proxy, (Object) hat);
+                            failCount.set(0);
+                            authOk = true;
+                            finishAuthUi();
+                            MiflowLog.i("A-2: HAT via cached handle (no plaintext), branch="
+                                    + branch + ", auto ok, closing UI");
+                            return;
+                        }
+                    }
+                    MiflowLog.w("A-2: cached-handle HAT empty/no branch, fallback to credential path");
+                } catch (Throwable t) {
+                    MiflowLog.w("A-2: cached-handle path failed, fallback: " + t);
+                }
+            }
+        }
+
+        // ===== 回退：预设置凭证路径（需明文密码构造凭证）=====
+        String type = Config.getAuthType();
+        String secret = Config.getAuthSecret();
+        String pattern = Config.getAuthPattern();
+        boolean has = ("pin".equals(type) || "password".equals(type)) && secret != null && !secret.isEmpty()
+                || "pattern".equals(type) && pattern != null && !pattern.isEmpty();
+        if (!has) {
+            MiflowLog.i("A-2: no saved credential(type=" + type + "), pass through");
             return;
         }
 

@@ -46,6 +46,17 @@ public class HookKeyguardCapture {
                                             .getMethod("isMatched").invoke(result);
                                     if (matched) {
                                         capture(chain.getArgs().get(0));
+                                        // 免明文 HAT 通道：缓存解锁句柄（gatekeeper handle），
+                                        // trustservice 授权时用 handle+challenge 直接换 HAT，不碰明文密码
+                                        try {
+                                            Long handle = (Long) result.getClass()
+                                                    .getMethod("getGatekeeperPasswordHandle").invoke(result);
+                                            if (handle != null && handle.longValue() != 0L) {
+                                                CapturedCred.writeHandle(handle.longValue());
+                                            }
+                                        } catch (Throwable t) {
+                                            MiflowLog.w("KeyguardCapture: handle cache failed: " + t);
+                                        }
                                     }
                                 } catch (Throwable t) {
                                     MiflowLog.e("KeyguardCapture: hook err", t);
