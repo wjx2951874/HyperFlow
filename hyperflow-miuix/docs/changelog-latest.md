@@ -1,4 +1,16 @@
-# HyperFlow 1.1.0-beta38 更新日志
+# HyperFlow 1.1.0-beta41 更新日志
+
+## 修复
+### 设置页文案
+- 主题「外观」→「界面外观」；小字改为"可单独设置App的界面外观"。
+
+## 进展（beta39/40 并入）
+- A 方案免明文 HAT：日常解锁缓存 gatekeeper handle，授权时直接换 HAT 回传，不碰密码明文。
+- 功能页「妙享直通」下新增「锁屏密码预设置」显式入口（原彩蛋机关保留）。
+
+---
+
+# 历史（beta40 及之前）
 
 ## 修复
 
@@ -9,12 +21,14 @@
   - `HookCallVoipType`：**不硬编码任何设备**，复用原生 `isVoipSupported` 判定——**只给原生判定支持 voip 的设备在亮屏标 voip**（小米15 全屏接听、新款 iPhone 亮屏也收 voip 来电）；原生不支持的（iPhone X）自动保持 msg 通知。deviceType 改为从 buildPlainMessage 真实参数（args[4]）取。锁屏（广播来源）消息类型完全走原生判定（锁屏原逻辑，不干预）。
   - `HookCallRelay`：保持精准化（不模拟屏幕状态，voip 会话建立不受干扰）。
 
-## 进展（开发埋点，不影响现有行为）
+### 2. A 方案免明文 HAT（beta39）
+- 日常解锁（system_server）时缓存 gatekeeper handle 到 /data/system/hyperflow_handle；授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。
 
-### A 方案 · 主动后台静默校验（beta33-34 已并入，遗留补参/实测）
-- `HookTrustAuthAuto` 挂会话建立点，PIN/混合密码/图案三型凭证构造复用系统构造器，`verifyCredential → getGatekeeperPasswordHandle → getGatekeeperHAT → 按分支回传`；失败计数 3 次封顶回退手动；`Bind_A→k.l` 两参未自动、图案实机验证未做。
+### 3. 预设置入口显示（beta40）
+- 功能页「妙享直通」开关下新增「锁屏密码预设置」ArrowPreference 显式入口。
 
----
+### 4. 设置页提示小字（beta37）
+- 主题「外观」+「底栏形态」加提示小字。
 
 # 历史（beta37 及之前）
 

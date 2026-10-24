@@ -96,8 +96,8 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                 val themeValues = listOf("system", "light", "dark")
                 val themeIndex = themeValues.indexOf(state.themeMode).coerceAtLeast(0)
                 OverlaySpinnerPreference(
-                    title = "外观",
-                    summary = "切换后立即生效，无需重启",
+                    title = "界面外观",
+                    summary = "可单独设置App的界面外观",
                     items = themeOptions.mapIndexed { i, label ->
                         DropdownItem(
                             text = label,
