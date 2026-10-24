@@ -1,161 +1,148 @@
-# HyperFlow 接手引导（给下一个 AI 工具 / 开发者）
+# HyperFlow 交接文档（HANDOFF）
 
-> 本文档是"接手指令"。如果你是接手 HyperFlow 项目的下一个 AI 工具或开发者，**先完整读完本文，再动手**。
-> 注意：仓库为**公开仓库**，本文档不含任何密码、PAT、密钥（凭据获取见文末"敏感信息获取"）。
-
----
-
-## 0. 一句话项目定位
-
-HyperFlow = **小米澎湃 OS（HyperOS）互联通知流转增强模块**，形态是 KernelSU 模块 + LSPosed（libxposed API 102）插件 + Miuix(Compose) 管理 App。作者酷安@翰德姆。
-通过 Xposed hook 小米互联服务（`com.milink.service`）、信任服务（`com.xiaomi.trustservice`）、电话（`com.android.incallui`）、system_server 等进程，实现**亮屏也流转（电话跨设备接听）**、**免预填（自动填授权盘密码）**、分身（999 空间）通知流转、短信持久化、妙享直通等能力。
-
-- 公开仓库：`https://github.com/wjx2951874/HyperFlow`
-- **工作分支：`beta`**（所有最新迭代都在这；`main` 是 v0.5.3 稳定线，暂不动）
-- 当前版本：**1.1.0-beta33（versionCode=161，versionName="1.1.0-beta33"）**，包后缀 .1/.2/.3… 仅区分交付轮次，版本号不变
-- **版本单一事实源**：`app/build.gradle.kts`（versionCode/versionName）+ `ksu-module/module.prop`
-- 最近提交（beta）：`82ccabe`（免预填自动填修复）、`3646643`（亮屏电话流转补发 ON_CALL_VOIP）
+> 更新：2026-10-24，beta34 后、推荐作用域修正（99ea896）后
+> 交接原因：任务移交新 AI 工具继续开发
 
 ---
 
-## 1. 接手第一步：按顺序读这些文档
+## 0. 一句话现状
 
-| 顺序 | 文件 | 你能获得什么 |
-|---|---|---|
-| 1 | `README.md` | 项目是什么、功能总览、安装、文档索引、版本状态 |
-| 2 | `docs/ARCHITECTURE.md` | 三层结构（App / milink / system_server）、进程注入、数据流 |
-| 3 | `docs/FEATURES.md` | 每个功能的原理 → 代码位置 → 为什么这么写 → 已知限制 |
-| 4 | `docs/DEVELOPMENT.md` | 构建、发版 bump 清单、8 条目 zip、发布验证、调试 |
-| 5 | `docs/ROADMAP.md` | ✅ 已实现 / ⏳ 待验证 / 🔲 规划中 / 已放弃方案（别再走回头路） |
-| 6 | `HANDOFF.md`（本文） | **当前最前线（电话流转/免预填）的根因、修复、待验证项、设备拓扑** |
+**发送端电话流转链路已验证 100% 打通**（补发广播 → milink → 云端 200），锁屏来电流转正常；**亮屏来电仍不流转**，最新日志分析把根因范围收窄到 InCallUI 广播发出的"15 秒延迟 + milink 冷启动窗口"，见 §2。推荐作用域机制已查实为 `META-INF/xposed/scope.list`（新版 Vector）并修正，**未出包**。远期"自定义应用流转"（其他应用流转）需求方案已定，见 §6。
 
 ---
 
-## 2. 当前最前线（务必先看）
+## 1. 仓库与构建
 
-### 主线① 电话流转（亮屏跨设备接听）—— 修复已交付，**待用户实测**
+- 公开仓库：`wjx2951874/HyperFlow`，工作分支 `beta`（main 是 v0.5.3 旧线）
+- 本地根目录：`/home/user/Doubao/chats/38444811295021314/hyperflow-miuix/hyperflow-miuix`
+- 版本事实源：`app/build.gradle.kts`（当前 versionCode=162 / versionName="1.1.0-beta34"）+ `ksu-module/module.prop`
+- 编译命令（禁 assembleRelease，会 OOM）：
+  ```bash
+  cd .../hyperflow-miuix && JAVA_HOME=/home/user/tools/jdk-21.0.12.1+1 ANDROID_HOME=/home/user/Android/Sdk /home/user/tools/gradle-9.7.1/bin/gradle :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --no-daemon --console=plain
+  ```
+- CI：GitHub Actions `build.yml`，出 `HyperFlow-flashable` artifact
+  - 触发：`POST /actions/workflows/build.yml/dispatches -d '{"ref":"beta"}'`（PAT 由原交接方单独提供，勿写入文档/仓库）
+  - 下载：`/actions/runs?branch=beta&per_page=1` → artifact → 解出 zip 放 `packages/` 命名 `HyperFlow-1.1.0-beta34.<N>-flashable.zip`
+- 交付轮次：beta33.6=fc8e96a（手动输入即捕获）、.7=3646643（电话流转首版）、.8=82ccabe（免预填自动填）、.9=05616c5（电话三hook+底栏三选一）、beta34=e3b9ae7（versionCode 162）、99ea896（scope 修正，未出包）
 
-**用户语义**：「解锁时流转」开关（`force_transfer`）开 = 亮屏也要模拟锁屏流转（跨设备接听）；关 = 零干预回原生（仅真实锁屏可接）。
+## 2. 电话流转主线（当前最前线，务必先读）
 
-**根因（hf_lock.log / hf_call3.log 双日志实锤，已完成）**：
-- **锁屏来电流转链**：Telecom 绑定 InCallUI（InCallServiceImpl）→ InCallPresenter 状态机 `NO_CALLS→INCOMING` → `StatusBarNotifier.resendNotification` → **InCallUI 自己直接向 `com.milink.service` 发 `ON_CALL_VOIP` 广播**（带完整 Notification）→ milink `NotifTransReceiver` 收到 → `buildSbnFromIntent` → `NotificationHandler.handleNotificationTrans` → 流转成功（Code 200）
-- **亮屏来电失败链**：Telecom **不绑定 InCallUI**（InCallController `isRequestedtype:false`，只绑蓝牙 InCallService）→ InCallUI 进程只有后台服务跑 `TelecomAdapter.startForegroundNotification`（来自 `notifyNotification` 的 enableCallStyle 分支），**状态机不启动、不发 ON_CALL_VOIP 广播** → milink 收不到 → 链条从源头断
-- 之前"hook milink 模拟锁屏全家桶（KeyguardManager/PowerManager）"方向是**错的**：亮屏时 milink 根本没收到来电事件，那些判定点永远不会被调用（日志 0 条 CALLED 实锤）
+### 2.1 用户实测现状（beta34）
+- **锁屏来电 → 流转正常 ✓**（beta33.9 修复生效）
+- **亮屏（解锁）来电 → 对方收不到 ✗**；用户锁 12T 后对方才收到，解锁后流转持续
 
-**修复（beta33.7，commit `3646643`，已交付待实测）**：
-- 新增 `HookCallVoipNotify`：hook `StatusBarNotifier.notifyNotification(Context, NotificationManager, Notification)`（静态，亮屏来电时必被调用），在 `force_transfer` 开启 + 非锁屏（`KeyguardManager.isKeyguardLocked()==false`）时，**按原生广播格式补发 ON_CALL_VOIP**（复用同一 Notification 对象，7 个键名逐一比对 `NotifTransReceiver.buildSbnFromIntent`：pkg/id/tag/uid/initialPid/userHandle/notification）
-- **零 UI 干预**：不模拟锁屏、不启动全屏，亮屏来电横幅仍由 SystemUI 原生显示（上半部分）——用户明确要求
-- 锁屏时原生已发，hook 跳过（isKeyguardLocked==true），不重复流转；3 秒去重窗口
-- XposedEntry 的 incallui 分支**只装 HookCallVoipNotify**（不再装 HookCallRelay/HookForceTransfer——会改掉 isKeyguardLocked 导致跳过判断失效）
-- 作用域 arrays.xml 已加 `com.android.incallui`
-
-**用户当前唯一担忧（已通过方案规避）**：亮屏来电**必须保持上半部分横幅，不得全屏显示**。
-
-### 主线② 免预填/自动捕获密码 —— 修复已交付，**待用户实测**
-
-**用户语义**：妙享直通开启后，跨设备连接要求输入密码验证时，**自动填**本地已捕获的密码完成验证，免手动输入。
-
-**链路**：
-1. **捕获**：用户手动输入一次（授权盘）→ `A.d.e(String)` 被调 → `HookTrustAuth` 拦截到无留存值（=用户手输）→ 反射 `A.d` 实例字段 `a` 取类型码（1=PIN/2=图案/3=混合）→ 经 `CapturedCred.writeSp` 落 trustservice 私有 sp（`hyperflow_captured.xml`，键 hf_cap_type/hf_cap_secret/hf_cap_pattern）
-2. **自动填**：下次连接 → 授权盘出现 → 自动注入
-
-**根因（trustservice 反编译实锤，已修复）**：`A.d.e(String)` 是"输满自动提交"入口（`T0/b.java` case 0：键盘点击收集、**输入长度达到要求才调用**）——只 hook A.d.e 无法实现自动填（用户不输入时它不被调用）。**修复（beta33.8，commit `82ccabe`）**：新增 `HookTrustAuthAutoFill`，hook 三个输入视图（`NumericKeypadView`/`AlphanumericKeypadView`/`GestureDrawingView`）的 `setAuthInputCompleteListener(Q0.b)`——授权盘**一显示**就拿到 A.d 实例，延迟 500ms 后直接调 `A.d.e(留存凭证)`（等效替用户瞬间输满提交，走系统 gatekeeper 真实校验拿真 HAT）。凭证三级回退：`CapturedCred.readLocalSp()` → `readPublic()` → `Config` 预存。
-
-**相关已完成**：`HookTrustAuthUiClose`（验证成功后自动关授权盘 UI——hook `netbus.h.n(int)` 结果码 0 → 反射 `LockScreenUIActivity.f1753J` → finish；用户实测"手动输入会关"✓）。
-
-**已答复用户的问题**：system_server 日常解锁捕获（`HookKeyguardCapture` hook `LockPatternUtils.verifyCredential`）为什么 0 条——三可能：① 作用域勾完未重启 system_server 未重注入；② 指纹/面部解锁不走 verifyCredential；③ HyperOS4 三参签名可能已变→静默跳过。**该链已被手动输入捕获（sp 通道）替代，不阻塞。**
-
-### 主线③ 双开标识输入框（inApp 覆盖层）—— 已交付（beta33.4），用户后续又报过 bug
-
-- 用户要求：输入框**贴底贴输入法、点击不蹦**（"要死啊/狗屎"式催修过）
-- 三次修法：Popup 内 imePadding（无效，Popup 窗口读不到真实 IME inset）→ Popup 外手动 IME 高度 padding（更糟，ADJUST_PAN 整体上移+双重位移）→ **最终 b4387a7 = inApp 覆盖层**：`HyperDialog` 新增 inApp 参数，inApp=true 时直接 App 内 Box 覆盖层 + `Modifier.imePadding()`（MainActivity 内容树内真实响应键盘），Popup 分支恢复纯 bottomInset
-- **注意**：用户 beta33.8 前后又提过"双开前缀输入框不贴底、点框上下蹦"——**inApp 方案是否真正修好需要复测确认**（若仍蹦，查 MainActivity 是否对 Box 覆盖层正确应用 imePadding、有无多个 inset 叠加）
-
-### 主线④ 分身 999 概率双开 —— 已修（ab5d9e1）未实测
-
-- `HookCloneBypass.markCloneTitle` 给分身通知反射打 `hf_is_clone` 标记，`HookRemoteOpen` 见标即改 999（userId==0 setUserId 999；无参签名 relaunchAsClone 反射 11 参兜底）
-- 用户反馈过"有时拉到 999、有时两个都拉起覆盖主微信"——**概率性问题未完全解决**，PendingIntent.getIntent() 拿到的是复制品，putExtra 是否生效有不确定性；待实测/进一步加固
-
----
-
-## 3. 构建与出包（新工具必读）
-
-```bash
-# 本地编译验证（禁止 assembleRelease 会 OOM）
-cd hyperflow-miuix  # 仓库根
-JAVA_HOME=/home/user/tools/jdk-21.0.12.1+1 ANDROID_HOME=/home/user/Android/Sdk \
-  /home/user/tools/gradle-9.7.1/bin/gradle :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --no-daemon --console=plain
+### 2.2 hf_light.log（2026-10-24 亮屏来电全量日志）关键时间线
+```
+12:44:57.254  milink(9468) onCreate —— 进程重启（装包后重启），订阅表未加载
+12:44:57.553  InCallUI(24503) onBind —— 来电，InCallUI 状态机启动！
+12:44:57.570  StatusBarNotifier - resendNotification true false
+12:44:57.741  buildAndSendNotification isOnlyUpdateAction
+12:44:57.747  isNeedFullScreenIntent...true（设了全屏 intent）
+12:44:57.833  milink onNotificationPosted incallui（通知监听收到来电通知）
+12:45:12.950  milink NotifTransReceiver: Broadcast received: ON_CALL_VOIP（广播此时才到！）
+12:45:12.952  PreferencesManager 订阅解析完成
+12:45:12.953  NotificationHandler: isSubscribed true（Xiaomi 15 / iPhone X 订阅了 incallui）
+12:45:13.026  VoipTransHelper: voip supported=true, target=Xiaomi 15
+12:45:13.033  加密推送云端 → 12:45:13.282 HTTP 200
+（之后无第二条 ON_CALL_VOIP 广播、无第二条推送）
 ```
 
-```bash
-# CI 出包（GitHub Actions，workflow: build.yml，ref: beta）
-curl -X POST -H "Authorization: Bearer <PAT>" -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/wjx2951874/HyperFlow/actions/workflows/build.yml/dispatches -d '{"ref":"beta"}'
-# 查 run
-curl -H "Authorization: Bearer <PAT>" "https://api.github.com/repos/wjx2951874/HyperFlow/actions/runs?branch=beta&per_page=1"
-# 下载 artifact（名 HyperFlow-flashable，解出 HyperFlow-flashable.zip）
-# 交付包命名：packages/HyperFlow-1.1.0-beta33.<N>-flashable.zip（<N> 递增，仅区分轮次）
-```
+### 2.3 结论与未定论
+- **推翻旧假设**："亮屏来电 Telecom 不绑定 InCallUI、状态机不启动" —— **日志实锤亮屏时状态机也启动了**（INCOMING、resendNotification、buildAndSendNotification 全跑）
+- 反编译确认：`sendNotificationBroadcast(Call)`（StatusBarNotifier.java:878，实例私有）：
+  - 内部 `RelayUtils.getPhoneRelayCall(call)` 为真则跳过；否则 `FixedThreadPool.getInstance().execute(new l(3, this, call))` **异步发广播**
+  - 触发点：`onStateChange`（1199-1211）：`RelayUtils.isSupportRelayToIphone() && inCallState2==INCOMING && 新来电 && !iPhoneCall && !RelayUtils.getRelayCall()` → sendNotificationBroadcast
+  - 另 `buildAndSendNotification` 6 参重载（1368）dump 缺失，内部是否也调广播未确认
+- **未定论（下一步要查的）**：
+  1. 12:44:57 的原生广播（resendNotification 链）为何 15 秒后才到 milink？可能：milink 冷启动（12:44:57.254）窗口广播丢失 / FixedThreadPool 排队 / 广播系统延迟
+  2. 12:45:12.950 那条广播是"原生迟到的"还是"我们补发的"？**区分方法：看 LSPosed 日志页**（MiflowLog 走框架日志不写 logcat！）——搜索 HyperFlowPlus，看有没有 `ON_CALL_VOIP relayed`（补发执行标志）和 `HookCallRelay: PowerManager.isInteractive CALLED`（milink 判定点 hook 生效标志）
+  3. 亮屏 vs 锁屏：锁屏流转成功走的是哪条链（onStateChange 广播？resendNotification 链？通知监听路径 onNotificationPosted？）
 
-**交付包索引**（本机 `/home/user/Doubao/chats/38444811295021314/packages/`）：
-- beta33.6 `fc8e96a`：手动输入即捕获（HookTrustAuth 捕获落 sp）
-- beta33.7 `3646643`：**电话流转修复**（HookCallVoipNotify 补发 ON_CALL_VOIP）← 待实测
-- beta33.8 `82ccabe`：**免预填自动填修复**（HookTrustAuthAutoFill）← 待实测
+### 2.4 现有相关代码
+- `app/src/main/java/com/hyperflowplus/hooks/HookCallVoipNotify.java`（incallui 进程，beta33.9 三 hook）：
+  - ① hook `StatusBarNotifier.sendNotificationBroadcast(Call)` 打"原生已发"时间戳
+  - ② hook `RelayUtils.getPhoneRelayCall(Call)`（public static）记录 relay 判定
+  - ③ hook `StatusBarNotifier.notifyNotification(Context, NotificationManager, Notification)`（public static，814）延迟 500ms 补发 ON_CALL_VOIP（键名：pkg/id/tag/uid/initialPid/userHandle/notification，复用同一 Notification）
+- `app/src/main/java/com/hyperflowplus/hooks/HookCallRelay.java`（milink 进程）：模拟锁屏——hook KeyguardManager.isKeyguardLocked/isKeyguardSecure/inKeyguardRestrictedInputMode/isDeviceLocked → true，PowerManager.isInteractive/isScreenOn → false，Display.getState→OFF/isOn→false，WindowManager.isKeyguardLocked/Secure→true，全部 force_transfer 门控
+- `HookForceTransfer.java`：**当前 no-op**（beta33.1 起，注释"放行判定由 HookCallRelay 模拟锁屏完成"）
+- **注意**：`RelayUtils.getIPhoneCall` / `isSupportRelayToIphone` / `getRelayCall` 在 onStateChange 里决定是否发广播（1211）——**锁屏 vs 亮屏广播差异可能在这**，建议下一步反编译确认这几个方法
 
----
+### 2.5 下一步建议（给接手者）
+1. 让用户装最新包（含 scope 修正）后，**LSPosed 日志页搜 HyperFlowPlus**，亮屏来电看：`ON_CALL_VOIP relayed` 有无、`HookCallRelay ... CALLED` 有无 → 判定补发是否执行、milink 判定点是否生效
+2. 若补发没执行（notifyNotification 亮屏没被调）→ 换挂点：hook `onStateChange`（INCOMING 转移时直接补发广播）或 hook `sendNotificationBroadcast` 的调用路径
+3. 若补发执行了但 milink 没收到 → 检查广播构造（可能缺 category="call" / fullScreenIntent 导致接收端不显示，用户实测"锁屏才显示"可能与此有关）
+4. 接收端 Xiaomi 15 未 root（有 ADB），如需接收端日志：`adb logcat -v time > /sdcard/x15.log` 抓小米 15 收到 voip 推送后的处理
 
-## 4. 关键反编译产物与证据（本机路径）
+## 3. 推荐作用域机制（2026-10-24 查实修正）
 
-- InCallUI：`/home/user/Doubao/chats/38444811295021314/reverse/incallui_out/sources`（APK 附件：电话_40.01.58.apk，/product/priv-app/InCallUI/InCallUI.apk，build 2026-10-10 f8580b0c4）
-  - `StatusBarNotifier.java`：updateInCallNotification（z4 发布判定，**不含 isKeyguardLocked**）/ notifyNotification（808 行，enableCallStyle→startForeground）/ sendNotificationBroadcast（ON_CALL_VOIP 广播）/ NOTIFICATION_TAG="incall"
-  - `InCallPresenter.java`：startOrFinishUi（931 行，INCOMING→"Start Full Screen in call UI"）/ 1035 行组合判定 / 2239 行 forceProcessIncoming
-  - `TelecomAdapter.java`：startForegroundNotification（244 行）
-- MiTrustService：`/home/user/Doubao/chats/38444811295021314/reverse/trust_out/sources`（APK：MiTrustService.apk）
-  - `A/d.java`：A.d.e(String)=提交入口（281 行未反编译）；实例字段 a=类型码（1=PIN/2=图案/3=混合）；f4c=AuthInputView
-  - `T0/b.java`：case 0 数字键盘点击→输满调 `((A.d) listener).e(f2)`
-  - `Q0/c.java`：抽象类，三个实现类 NumericKeypadView/AlphanumericKeypadView/GestureDrawingView；listener 字段：Numeric=f1665m、Alphanumeric=h、Gesture=h
-  - `com/xiaomi/trustservice/remoteservice/locksettings/LockScreenUIActivity.java`：f1753J=静态当前 Activity；onCreate 调 `f1756B.a(4, timeout, h(7,this))`
-- milink：`/home/user/Doubao/chats/38444811295021314/reverse/out3/sources`
-  - `com/xiaomi/dist/notification/listener/NotifTransReceiver.java`：onReceive → buildSbnFromIntent（键名 pkg/id/tag/uid/initialPid/userHandle/notification）→ handleNotificationTrans
-- **关键日志证据**（附件）：`hf_lock.log`（锁屏来电全链 6579→ON_CALL_VOIP→200）、`hf_call3.log`（亮屏来电 0 条 HyperFlowPlus、InCallUI 无状态机）、`hf_full2.log`（唯一来电在模块加载前）、`hf_cap.log`/`hf_call.log`/`hf_call2.log`（-c 清启动行的抓法问题，判断注入**必须用 LSPosed App 日志页截图**）
+- **新版 Vector（JingMatrix，LSPosed 继承者 v2.0）对现代模块（libxposed API 100+）的推荐作用域 = APK 内 `META-INF/xposed/scope.list`（一行一个包名）**，**不读** manifest 的 `xposedscope` meta-data（那是遗留模块 xposedminversion 机制）
+- 我们模块是 libxposed API 102 → **scope.list 是唯一生效的推荐作用域**（`app/src/main/resources/META-INF/xposed/scope.list`）
+- 已修正（99ea896）：scope.list 补 `com.android.incallui`；arrays.xml 清掉 3 个无 hook 冗余（只留 incallui），保留仅为兼容经典 LSPosed
+- **未出包**：scope.list 修正 + arrays.xml 清理需要出 beta34.1 或并入下个包
+- 反编译参考：Vector `manager-ui/.../ModuleDetection.kt`（SCOPE_ENTRY="META-INF/xposed/scope.list"，modern 路径不 swap legacy 名称；module.prop 里 minApiVersion/targetApiVersion/staticScope）
 
----
+## 4. 底栏形态三选一（beta33.9 已交付）
 
-## 5. hook 清单（16 个）
+- 设置页「主题」卡片：原「悬浮导航栏」「液态玻璃」两个开关 → `OverlaySpinnerPreference`（外观同款气泡选择）选项：默认/悬浮/液态玻璃（值 standard/floating/liquid）
+- `HFState.kt` 新增 `setBottomBarStyle(style)` 同时写 `bottom_bar_style` 枚举 + 旧布尔键 nav_float/glass_effect（MainActivity 只读 bottomBarStyle 渲染不动）
 
-CapturedCred（工具）、HookAutoUnlock、HookCallRelay（milink 模拟锁屏——**电话流转已弃用此路线，但保留**）、HookCallVoip（no-op）、**HookCallVoipNotify（电话流转新）**、HookCloneBypass、HookForceTransfer（no-op）、HookKeyguardCapture、HookMirrorObserve、HookRemoteOpen、HookSmsPersist、HookSmsSenderEnrich、**HookTrustAuthAutoFill（自动填新）**、HookTrustAuth、HookTrustAuthAuto、HookTrustAuthUiClose。
+## 5. 设备拓扑与硬偏好（违反会被骂）
 
-注入点（XposedEntry.java）：system_server（HookRemoteOpen[system]/HookKeyguardCapture）、com.xiaomi.trustservice（HookTrustAuth/Auto/AutoFill/UiClose）、com.android.incallui（**HookCallVoipNotify**）、com.milink*（其余）。
+- 被控端（来电机）：Redmi Note 12 Turbo，root（KernelSU）+ LSPosed/Vector，当前模块版本 beta34
+- 发起端（接收端）：Xiaomi 15，HyperOS 4，**未 root**（有 ADB 权限）；iPhone X 也订阅了电话流转
+- 用户硬偏好：零自绘 UI（设置项统一 Miuix 原生组件）；机关=连点「设备协同」标题 10 次 2 秒窗口进 AuthSetup（不弹提示无涟漪）；双开输入框贴底贴输入法点击不蹦；电话流转零人工干预且亮屏保持上半横幅不全屏；状态卡拦截被否（"也交给 mlink"）；验证注入用 **LSPosed 日志页截图**（MiflowLog 走框架日志，logcat 看不到！）；电话里"妙享直通"开关名在 HyperOS 4 上叫 Hyper Flow Beta（用户备注）；每次完成一步汇报
+- 免预填相关已完成（beta33.8）：HookTrustAuthAutoFill（授权盘显示延迟 500ms 调 A.d.e 提交留存凭证）、HookTrustAuthUiClose（netbus.h.n 结果 0 → finish）、CapturedCred sp 通道（trustservice 私有 sp hyperflow_captured.xml）、HookKeyguardCapture 日常解锁捕获 0 条问题未解（已被手动捕获替代）
 
----
+## 6. 自定义应用流转（其他应用流转）——远期主线，需求方案已定
 
-## 6. 设备拓扑与用户硬偏好
+### 6.1 用户需求演变
+1. 最初："双开流转仅流转双开应用通知（主应用不流转）"
+2. 扩展："自定义应用流转：小米互联清单外应用也能流转；分身精确控制"
+3. 提过能否 100% 复刻系统应用锁页面（答：UI 可复刻，像素级没必要）
+4. 曾暂缓（"先保留"），现用户点名交接文档必须包含
 
-- 被控端：Redmi Note 12 Turbo（root、装模块、LSPosed；deviceId 7528A0D1/ACD0FAFC 双 ID）；对端 Xiaomi 15=90266701（主）、REDMI K90=E539144A
-- 环境：HyperOS 4.0.2.0.XPCCNXM.D01；milink 网络进程 pid 9327（lyra）、通知监听/跨设备服务 pid 9045；模块注入目标 `com.milink.service:provider`
-- **用户硬偏好（违反会被骂）**：
-  - **零自绘**：任意自绘 Switch 均弃用
-  - **机关**：连点「设备协同」标题 10 次（2 秒窗口）直接进预设置，**不弹开启提示、无涟漪**
-  - 双开输入框必须贴底贴输入法、点击不蹦
-  - 电话流转零人工干预、亮屏来电保持上半部分横幅、**不得全屏**
-  - 状态卡拦截被否（"也交给 mlink"）
-  - 每次完成一步汇报；在意速度与迭代次数
-  - 验证注入**用 LSPosed App 日志页截图**，不用 logcat -c 后的抓包
+### 6.2 已拍板设计要点（必守）
+1. 流转页「通知流转」分组下加「自定义应用流转」开关（默认关），开启后显示"自定义应用流转设置"条目进二级页（学现有二级页：TopAppBar+卡片+横滑返回，如 AuthSetupScreen）
+2. 二级页含：**"其他全部应用"勾选**（=小米互联清单外全部）+ 逐个应用勾选（**主应用与分身分开显示**）
+3. 现有"应用双开流转"开关合并进二级页、流转页移除 → 加"全部分身应用"统一按钮/开关（交互形态用户未最终确认，曾建议开关、或关系）
+4. "双开标识前缀"设置搬进二级页
+5. 小米互联清单内 7 个应用（AppPkgId.getMiPackageList：com.android.incallui/com.android.mms/com.tencent.mm/com.tencent.mobileqq/com.ss.android.lark/com.alibaba.android.rimet/com.tencent.wework）**不放进列表、不受我们控制**——但它们的**分身**要显示可勾
+6. hook 点：
+   - `isDeviceSupported`（milink NotificationHandler.java:99）：跳过包名订阅 anyMatch 检查（保留 deviceSwitch + 锁屏/息屏判定）
+   - `isNotificationValid`（:133）：分身放行条件从"主应用已订阅碰巧放行"改为"独立按勾选名单"
+7. 分身识别：小米双开 = user 999（XSpace 多用户，milink CLONE_APP_USERID=999 实锤）。**普通三方 App 无 root 无法 getInstalledApplicationsAsUser(999)**（需要 INTERACT_ACROSS_USERS 系统权限）；系统应用锁靠 com.miui.securitycore 签名权限。我们的路线：有 root 走 RootExec `pm list packages --user 999`，无 root 有 Shizuku 走同命令，都没有则隐藏分身区+提示
+8. 新版可能路线（未验证）：Android 13+ 官方 Clone Profile 机制——若小米新版双开迁到官方 clone profile，普通 App 可 `UserManager.getUserProfiles()` + `getInstalledApplicationsAsUser` 枚举。验证方法：`su -c "pm list users"` 看 999 注册类型。**用户说"分身过一会再说"，暂不动作**
 
----
+### 6.3 二级页实现骨架参考
+- 现有二级页：AuthSetupScreen（TopAppBar + Card + BackHandler）
+- 路由：Routes.kt 添加 `@Serializable data object` 导航目标
+- 应用列表数据源：PackageManager 主用户枚举 + root/Shizuku 999 枚举
 
-## 7. 未完成项（按优先级）
+## 7. 反编译产物与关键文件索引
 
-1. **用户实测验收**：beta33.7（亮屏电话流转）+ beta33.8（授权盘自动填）——等用户实测反馈后处理
-2. **分身 999 概率双开**（主线④）：待实测/加固（PendingIntent 复制品 putExtra 不确定性）
-3. **双开输入框**：inApp 方案是否真修好需复测（用户最新反馈过仍蹦）
-4. **1.1 正式版发布**（用户等电话流转做好后执行）：去 beta 后缀（versionName 1.1.0、module.prop）、update.json zipUrl 更新、GitHub Release 发布
-5. 早期已完结：密码类型选择页纯文字、OS/Android 版本拆分、HyperOS 4.0.x 全称、应用版本免"模块"字样、妙享直通文案逐字稿、机关移位去涟漪、LSP 作用域按开关检测（f2a27e9）、设备信息 root 兼容
+- 反编译根：`/home/user/Doubao/chats/38444811295021314/reverse/`（工具 `reverse/tools/bin/jadx`）
+- InCallUI：`reverse/incallui_out/sources`（APK：/product/priv-app/InCallUI/InCallUI.apk）
+  - StatusBarNotifier.java：notifyNotification:814（hook 点）、sendNotificationBroadcast:878（实例私有，FixedThreadPool 异步）、onStateChange:1199-1211（广播触发条件）、buildAndSendNotification:381/1368、NOTIFICATION_TAG="incall"
+  - RelayUtils.getPhoneRelayCall:116（public static，hook 点）
+  - TelecomAdapter.startForegroundNotification:244（唯一调用方=notifyNotification:816）
+- milink：`reverse/out3/sources`
+  - NotificationHandler.java：isDeviceSupported:99（keyguard 判定在 126，`keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()`）、isNotificationValid:133（999 分身拒绝）、lambda$handleNotificationTrans$0（流转主循环）
+  - DeviceSubInfo：`com.xiaomi.dist.notification.common.data.DeviceSubInfo`（getDeviceSwitch/getSubscriptionAppInfoList/SubscriptionAppInfo.getPackageName）
+  - NotifTransReceiver / NotifTransListenerService（onNotificationPosted:101）/ NotificationBuilder / VoipTransHelper（relay call 能力判定）
+- 信任服务：`reverse/trust_out/sources`（免预填 hook 参考）
 
----
+## 8. 未完成项（按优先级）
 
-## 8. 敏感信息获取
+1. **电话亮屏流转**（当前最前线）：按 §2.5 定位 15 秒延迟 / 补发是否执行 / 亮屏 vs 锁屏广播差异；目标：亮屏来电对方也能收到（且亮屏保持上半横幅不全屏）
+2. **推荐作用域修正出包**：scope.list + arrays.xml 修正（99ea896）已推送未出包
+3. **自定义应用流转二级页**（§6）：用户重新提起时按已定方案开工
+4. 1.1 正式版发布流程（Release + update.json + 版本号流程，未细化）
+5. 分身 999 枚举路线实测（root pm list users / pm list packages --user 999）
+6. HookKeyguardCapture 日常解锁捕获 0 条问题（已被手动捕获替代，不阻塞）
 
-- GitHub PAT：**在会话历史中**（ghp_ 开头，用户确认可用，dispatch 返回 204）。公开仓库禁止写入任何凭据。
-- 飞书文档（早期实操细节/发版防错）：`https://my.feishu.cn/docx/MIVXdD99OoxsXdxNzFLc92mP6Bc`
-- 反编译工具：`/home/user/Doubao/chats/38444811295021314/tools/bin/jadx`（用法：`jadx -d reverse/<out> --no-res <apk>`）
+## 9. 交接注意事项
+
+- **MiflowLog 走 libxposed 框架日志（LSPosed 日志页），不写 logcat**！看模块日志必须用 LSPosed 日志页搜索 `HyperFlowPlus`
+- logcat 里 milink 的 tag 是 `dist:crossdeviceservice`（进程 com.milink.service），InCallUI 是 `InCall`
+- 用户设备上 MyHyperModifier 模块会疯狂刷 LSPosed 日志（miui.systemui.plugin），需用搜索框过滤
+- 用户沟通风格：要现成包/命令，反感长篇解释和低效方案；每次完成一步汇报
