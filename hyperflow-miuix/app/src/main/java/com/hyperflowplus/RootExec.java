@@ -5,6 +5,9 @@ import android.content.Context;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStream;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * root 通道：把流转短信以真实短信形式注入收件箱。
@@ -130,17 +133,30 @@ public final class RootExec {
         suMissTs = 0;
     }
 
-    /** 以 su 运行整条命令，返回 stdout（失败返回 null） */
+    /** 以 su 运行整条命令，返回 stdout（失败返回 null）。带 8 秒超时：换密码等场景下
+     *  locksettings.db 被占用 / su 授权弹窗未响应时命令会永久挂起，超时直接放弃，
+     *  避免 UI 卡死在"正在识别本机锁屏类型…"（AuthSetupScreen 检测流程依赖此兜底）。 */
     public static String su(String cmd) {
+        return su(cmd, 8000L);
+    }
+
+    public static String su(String cmd, long timeoutMs) {
         try {
             String su = firstAvailableSu();
             if (su == null) {
                 return null;
             }
             Process p = new ProcessBuilder(su, "-c", cmd).redirectErrorStream(true).start();
-            String out = readAll(p.getInputStream());
-            p.waitFor();
-            return out;
+            FutureTask<String> task = new FutureTask<>(() -> readAll(p.getInputStream()));
+            new Thread(task).start();
+            try {
+                String out = task.get(timeoutMs, TimeUnit.MILLISECONDS);
+                p.waitFor();
+                return out;
+            } catch (TimeoutException te) {
+                p.destroy();
+                return null;
+            }
         } catch (Throwable t) {
             return null;
         }
