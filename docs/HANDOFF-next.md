@@ -1,12 +1,15 @@
-# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta41 构建中）
+# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta42 构建中）
 
 > 用途：本文件供下一个接手的人/AI 快速续上。所有事实以本仓库代码 + `docs/trustservice-auth-chain.md` 为准；本快照之后的改动以 git 历史为准。
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。remote URL 内嵌 PAT token，用 `git remote get-url origin` 提取（禁止明文打印）；**持续用同一把 PAT 不轮换**。
-- 当前 **beta41 构建中**（本地编译通过，未 commit）：设置页「外观」→「界面外观」，小字改"可单独设置App的界面外观"。
+- 当前 **beta42 构建中**（走 CI，未本地编译）：
+  1. 确认弹窗（解锁时流转/双开/妙享直通等）统一**贴底 bottomInset=0**——Popup 独立窗口盖住悬浮导航栏，系统 Dialog 同款（原 88dp 智能避让导致偏上）。
+  2. **前缀弹窗"飞上面"根治**：MainActivity 显式 `windowSoftInputMode="adjustResize"`（原默认 adjustPan 键盘弹出把整个窗口顶上去）+ 前缀弹窗 `bottomInset=0.dp` 贴输入法顶。
+  3. 「免预填调试 · 检测捕获状态」**改彩蛋机关**：默认不显示，点击 AuthSetupScreen 大标题「锁屏密码预设置」10 次（2 秒窗口）才显示（FlowScreen 设备协同机关同款 pattern）。
 - 已交付主线状态：
-  - **电话流转化**（beta38 起回归可用）：来电一律放行（锁屏/亮屏不分）+ 同一来电 3 秒只放行一次；VoipType 复用原生 isVoipSupported 判定（**deviceType 从真实参数 args[4] 取**，修 beta37 反射拿 -1 bug）；Relay 精准化。**用户已装 beta38 未反馈实测结果**。
+  - **电话流转化**（beta38 起回归可用）：来电一律放行（锁屏/亮屏不分）+ 同一来电 3 秒只放行一次；VoipType 复用原生 isVoipSupported 判定（**deviceType 从真实参数 args[4] 取**，修 beta37 反射拿 -1 bug）；Relay 精准化。**用户已装未反馈电话实测结果**。
   - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。
   - **预设置入口**（beta40）：功能页「妙享直通」开关下新增显式「锁屏密码预设置」入口（原彩蛋机关保留）。
 - 两条主线：① 电话流转化（等用户装包实测反馈）；② A 方案静默校验（免明文 HAT 已实现，待实测）。
@@ -97,17 +100,19 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 - 模块日志只在 **LSPosed 日志页**（TAG=HyperFlowPlus），logcat 看不到；**LSPosed zip 优先**。
 
 ## 7. 已提交的 UI 改动汇总
-- beta37：主题「外观」+「底栏形态」加提示小字（"切换后立即生效，无需重启" / "悬浮导航栏为胶囊样式，液态玻璃带模糊背景"）。
+- beta42（构建中）：确认弹窗贴底盖悬浮导航栏（bottomInset=0）；前缀弹窗键盘"飞上面"根治（adjustResize + bottomInset=0）；免预填调试入口改"点标题 10 次"彩蛋机关。
+- beta41：设置页「外观」→「界面外观」，小字"可单独设置App的界面外观"。
 - beta40：功能页妙享直通下新增「锁屏密码预设置」显式入口。
-- beta41（构建中）：「外观」→「界面外观」，小字改"可单独设置App的界面外观"。
+- beta37：主题「外观」+「底栏形态」加提示小字（"切换后立即生效，无需重启" / "悬浮导航栏为胶囊样式，液态玻璃带模糊背景"）。
 - 历史：tab「流转」→「功能」；「版本」标题 FontWeight.Medium；双开前缀提示+居中弹窗。
 
-## 8. 当前提交前待办（beta41，直接做）
-1. 本地已编译通过；版本已 bump **168 / 1.1.0-beta41**（两处已同步）。
-2. 更新 `changelog-latest.md` 头部为 beta41（界面外观文案）。
-3. `git add -A` → commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` → present_files 交付。
+## 8. 当前提交前待办（beta42，直接做）
+1. 本地未编译（环境 gradle/JDK 版本混乱，直接走 CI）；版本已 bump **170 / 1.1.0-beta42**（build.gradle.kts + ksu-module/module.prop 两处已同步）。
+2. `changelog-latest.md` 头部已改 beta42；`HANDOFF-next.md` §0/§7/§8 已同步。
+3. `git add`（4 个文件 + 2 个 docs，**勿 add `hyperflow-miuix/.kotlin/` 临时目录**）→ commit → push `beta` → dispatch CI → 等 success → 取 artifact `HyperFlow-flashable` → present_files 交付。
 4. CI 必须 Java+Kotlin 都编过（漏 import 会 cannot find symbol）。
-5. 交付后引导用户：装包 → 重启 → ①电话按 §6.4 连测；②A 方案先日常解锁一次看 `handle cached` 日志，再发起连接看自动通过。
+5. 交付后引导用户装包重启，重点验证：①确认弹窗是否贴底盖住悬浮胶囊；②前缀弹窗键盘弹出是否贴输入法不飞上面；③点"锁屏密码预设置"标题 10 次是否出现"检测捕获状态"。
+6. 后续待办延续：电话 §6.4 连测、A 方案 §4.5 实测。
 
 ## 9. 抓日志命令（root Termux，先启动后复现，别先贴停止命令）
 ```bash

@@ -73,6 +73,10 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     var saved by remember { mutableStateOf(state.hasAuth) }
     var redetect by remember { mutableStateOf(0) }       // 点"更换"递增，重新触发识别
     var diagText by remember { mutableStateOf("") }      // 检测捕获状态的结果展示（调试用）
+    // 免预填调试入口机关：默认隐藏，连点标题「锁屏密码预设置」10 下才显示
+    var showDiag by remember { mutableStateOf(false) }
+    var diagTaps by remember { mutableStateOf(0) }
+    var diagTapTime by remember { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
 
     // root 自动识别本机锁屏类型；识别到直进输入页，识别不到才落到手选；更换后递增 redetect 重新识别
@@ -101,10 +105,14 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
     // 选类型 / 数字 / 混合输入 / 识别中 / 已保存态一律放行系统返回
     BackHandler(enabled = !saved && stage == "input" && type == "pattern") { }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MiuixTheme.colorScheme.surface)
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
     ) {
         TopAppBar(
             title = "锁屏密码预设置",
@@ -119,20 +127,22 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                 .verticalScroll(scroll)
                 .padding(horizontal = 12.dp)
         ) {
-            // 常驻调试入口：检测捕获状态（任何页面状态都可见）。
+            // 免预填调试入口（默认隐藏）：连点标题「锁屏密码预设置」10 下才显示。
             // 免预填排查用——点一下就知道"解锁时模块有没有读到密码"：
             // 公共文件有值 → 捕获成功可直连；无值 → 先解锁输一次密码再回来点。
-            GroupTitle("免预填调试")
-            Card(Modifier.fillMaxWidth()) {
-                Column {
-                    ArrowPreference(
-                        title = "检测捕获状态",
-                        summary = if (diagText.isBlank()) "检查模块是否读到本机锁屏密码（公共文件/兜底/入库三处）" else diagText,
-                        onClick = {
-                            diagText = "检测中…"
-                            scope.launch { diagText = withContext(Dispatchers.IO) { checkCaptureDiag() } }
-                        }
-                    )
+            if (showDiag) {
+                GroupTitle("免预填调试")
+                Card(Modifier.fillMaxWidth()) {
+                    Column {
+                        ArrowPreference(
+                            title = "检测捕获状态",
+                            summary = if (diagText.isBlank()) "检查模块是否读到本机锁屏密码（公共文件/兜底/入库三处）" else diagText,
+                            onClick = {
+                                diagText = "检测中…"
+                                scope.launch { diagText = withContext(Dispatchers.IO) { checkCaptureDiag() } }
+                            }
+                        )
+                    }
                 }
             }
 
@@ -286,6 +296,25 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
             }
         }
     }
+
+    // 免预填调试机关：点击标题区域（避开返回按钮）2 秒内连点 10 下 → 显示调试入口
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(start = 56.dp)
+            .height(64.dp)
+            .fillMaxWidth(0.6f)
+            .clickable {
+                val now = android.os.SystemClock.elapsedRealtime()
+                diagTaps = if (now - diagTapTime > 2000) 1 else diagTaps + 1
+                diagTapTime = now
+                if (diagTaps >= 10) {
+                    diagTaps = 0
+                    showDiag = true
+                }
+            }
+    )
+}
 }
 
 private fun typeName(t: String): String = when (t) {

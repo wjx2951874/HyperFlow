@@ -244,6 +244,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
     // 双开标识前缀自定义编辑（开关开启后由"双开标识前缀"条目唤起）
     // 底部弹出 + HyperDialog imePadding：点击输入后弹窗整体上移到输入法正上方
+    // bottomInset=0：键盘弹出时卡片贴键盘顶，不悬空（配合 MainActivity adjustResize）
     if (showPrefixEdit) {
         HyperDialog(
             show = true,
@@ -251,6 +252,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             summary = "标题前自动包进【】，留空则用默认「双开」",
             centered = false,
             inApp = true,
+            bottomInset = 0.dp,
             onDismiss = { showPrefixEdit = false }
         ) {
             TextField(
