@@ -7,7 +7,7 @@
     <application
         android:name=".HFApplication"
         android:label="HyperFlow Beta"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@drawable/ic_launcher_new"
         android:theme="@style/Theme.HyperFlow"
         android:allowBackup="false">
         <!-- LSPosed 模块识别元数据 -->

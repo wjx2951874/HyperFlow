@@ -10,6 +10,11 @@
 - 确认弹窗（开启/关闭功能时的弹窗）太贴底：beta42 曾改 bottomInset=0，用户实测太靠下 → 默认 **16dp**（Popup 独立窗口仍盖住悬浮导航栏，抬 16dp 不露栏）。
 - 双开标识前缀输入框被悬浮胶囊盖住：前缀弹窗原在 FlowScreen 内渲染（悬浮胶囊在其后绘制 → 盖住输入框）。**提升到 MainActivity 根层渲染**（Scaffold 之后绘制，在悬浮胶囊之上；inApp 保留键盘跟随，贴键盘顶）。
 
+## 三、新图标落地 + 品牌名统一
+- 新图标（App 桌面图标 + 模块图标，蓝白 HyperOS 风格）：环形回流箭头 + 四向连接节点，体现"内容持续流转、多设备始终互联"（功能不只是流转：来电/短信/通知流转、妙享直通、双开、镜像）。落地 `drawable/ic_launcher_new.png`（108px）+ `drawable-xxxhdpi/ic_launcher_new.png`（432px），manifest `android:icon` 切换；旧 `ic_launcher.xml` 保留未删。
+- 品牌名统一：日志 TAG（MiflowLog/HookCallVoipNotify/HookTrustAuthAutoFill）、zip 内安装包目录与文件名（build.yml flash 路径）、customize.sh/service.sh 的 APK 名、全部文档 `HyperFlowPlus` → `HyperFlow`。**包名 `com.hyperflowplus` 保持不变**（LSPosed 作用域/root 白名单/数据目录兼容）。
+- 双开标识前缀输入框被悬浮胶囊盖住：前缀弹窗原在 FlowScreen 内渲染（悬浮胶囊在其后绘制 → 盖住输入框）。**提升到 MainActivity 根层渲染**（Scaffold 之后绘制，在悬浮胶囊之上；inApp 保留键盘跟随，贴键盘顶）。
+
 ## 历史（beta45 并入）
 ### beta45 来电流转（按用户拍板重做）
 ### 1. 移除强制 iPhone voip（用原生判定）
