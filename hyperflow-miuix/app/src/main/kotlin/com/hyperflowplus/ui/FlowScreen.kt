@@ -121,6 +121,11 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                         }
                     }
                 )
+                ArrowPreference(
+                    title = "锁屏密码预设置",
+                    summary = "手动录入锁屏密码，连接时自动完成验证（免每次输入）",
+                    onClick = { flowNav.push(Route.AuthSetup) }
+                )
             }
         }
 
