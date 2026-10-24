@@ -1,23 +1,13 @@
-# HyperFlow 1.1.0-beta37 更新日志
+# HyperFlow 1.1.0-beta38 更新日志
 
 ## 修复
 
-### 1. 间歇性"连接已断开/电话被挂断"根治（电话流转化 · 三根因，LSPosed 日志 2026-10-24 15:48 实锤）
-- **现象（beta36 实测）**：亮屏/锁屏来电流转后，小米15 间歇弹"当前连接已断开，请回到原设备接听电话"、电话被直接挂断；时好时坏、有时连续。
-- **根因 A · 同一来电重复流转（日志实锤）**：同一来电通知会被 `onNotificationPosted` 触发多轮（响铃刷新），每轮都完整走流转链 → 每台接收设备收到同一来电的**多份 voip 消息** → 小米15 多份会话冲突 → 挂断。日志每通来电出现 2 轮 `HookCallFilterPass released`。
-- **修复 A**：`HookCallFilterPass` 新增**同通知去重**——以 `sbn.getKey()` 识别同一通知，3 秒窗口内只放行一次，亮屏每设备稳定 1 份。
-- **根因 B · 锁屏双流转**：锁屏来电时广播路径（ON_CALL_VOIP）1 份 + 监听路径放行 2 份 = 3 份消息 → 必冲突。
-- **修复 B**：`HookCallFilterPass` 新增**跨进程真实锁屏判定**（Binder 到 system_server 的 `IWindowManager.isKeyguardLocked`，绕开进程内被模拟的 API）；真实锁屏不放行监听路径（广播路径独享），查不到保守按锁屏处理。
-- **根因 C · 全局模拟锁屏干扰 voip 会话**：旧 `HookCallRelay` 把 milink 进程内 KeyguardManager/PowerManager/Display 全套 hook 成"锁屏态"，小米15 接听时 milink 查 `isInteractive=false` 误判息屏 → 中断会话 → 间歇挂断。
-- **修复 C**：`HookCallRelay` 重写为**精准版**——不再模拟任何系统状态，只 hook `NotificationHandler.isDeviceSupported`，对来电且原判定拒绝时返回 true（放行流转），短信/其他通知与 voip 会话建立全部恢复真实状态。
-
-### 2. iPhone X 恢复来电通知（beta36 回归修复）
-- **现象（beta36 实测）**：iPhone X 收不到任何通知（连 msg 都没有）。原因：beta36 对所有设备来电硬编码改 voip，iPhone 端"小米互联服务"App 不处理 voip 消息 → 直接丢弃。
-- **修复**：`HookCallVoipType` 不再硬编码设备类型，**复用原生 `VoipTransHelper.isVoipSupported` 判定**（反编译确认：来电 + 转移开关 + 本机支持 + 远端 relayCall flags 达标才 voip）——小米15 全屏接听 voip，iPhone X 自动降级为 msg 通知。完全对齐原生"支持 voip 推送 voip、不支持降级通知"语义。
-
-### 3. 设置页提示小字
-- 主题「外观」下新增提示："切换后立即生效，无需重启"。
-- 主题「底栏形态」下新增提示："悬浮导航栏为胶囊样式，液态玻璃带模糊背景"。
+### 1. 电话流转化：按用户实测重排（beta38，亮屏 voip / 锁屏原逻辑 / 单份流转）
+- **beta37 翻车复盘**：①锁屏时拦监听路径，实测锁屏没有独立广播路径兜底 → 锁屏全灭；②VoipType 反射 DeviceSubInfo.getDeviceType() 取 deviceType（方法不存在 → -1），原生判定恒 false → 亮屏全降级通知；③用户明确否决复杂去重。
+- **beta38 修复**：
+  - `HookCallFilterPass`：来电**一律放行**（锁屏/亮屏不分，锁屏不再拦截），同一来电通知 3 秒内**只放行第一次**（系统回调多次也只让 milink 处理一次 → 每台设备永远只收 1 份）。
+  - `HookCallVoipType`：**不硬编码任何设备**，复用原生 `isVoipSupported` 判定——**只给原生判定支持 voip 的设备在亮屏标 voip**（小米15 全屏接听、新款 iPhone 亮屏也收 voip 来电）；原生不支持的（iPhone X）自动保持 msg 通知。deviceType 改为从 buildPlainMessage 真实参数（args[4]）取。锁屏（广播来源）消息类型完全走原生判定（锁屏原逻辑，不干预）。
+  - `HookCallRelay`：保持精准化（不模拟屏幕状态，voip 会话建立不受干扰）。
 
 ## 进展（开发埋点，不影响现有行为）
 
@@ -26,7 +16,18 @@
 
 ---
 
-# 历史（beta35 及之前）
+# 历史（beta37 及之前）
+
+## 修复
+
+### 1. 间歇性"连接已断开/电话被挂断"三根因（beta37，LSPosed 日志 2026-10-24 15:48 实锤；beta38 已按实测重排）
+- 同 beta38 修复说明（三 hook 变化见上）。beta37 版本为：FilterPass 加真实锁屏拦截+去重、VoipType 用原生判定（deviceType 取错）、Relay 精准化——其中 FilterPass 锁屏拦截与 VoipType 取错值已实测翻车，由 beta38 修正；Relay 精准化保留。
+
+### 2. iPhone X 恢复来电通知（beta36 回归，beta38 继续）
+- beta36 对所有设备硬编码 voip → iPhone 连通知都不显示；beta37/38 改为原生判定 → 支持 voip 的设备收 voip，iPhone X 自动降级 msg 通知。
+
+### 3. 设置页提示小字（beta37）
+- 主题「外观」新增提示"切换后立即生效，无需重启"；「底栏形态」新增提示"悬浮导航栏为胶囊样式，液态玻璃带模糊背景"。
 
 ## 修复
 
