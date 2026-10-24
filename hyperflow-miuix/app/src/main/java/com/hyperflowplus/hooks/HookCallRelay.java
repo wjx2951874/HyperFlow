@@ -15,22 +15,23 @@ import io.github.libxposed.api.XposedInterface.ExceptionMode;
 import io.github.libxposed.api.XposedInterface.Hooker;
 
 /**
- * 功能① 亮屏来电流转 · 精准放行（milink 进程，beta37 重构）。
+ * 功能① 解锁时流转 · 亮屏放行（milink 进程，beta43 修正）。
  *
  * 反编译确认 milink 流转判定链（NotificationHandler.isDeviceSupported）：
  *   if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return true;
  *   return false;   // ← 亮屏拒绝流转
  *
- * v0.6.10 教训：全局模拟锁屏会误伤正常通话流程。beta36 之前本模块采用"把 milink 进程内
- * KeyguardManager/PowerManager/Display 全 hook 成锁屏态"的方案——实测发现副作用：
- * 小米15 亮屏接听时，milink 处理 voip 会话建立会查 PowerManager.isInteractive()（被模拟成
- * false）→ 认为设备息屏 → 中断会话 → 小米15 弹"当前连接已断开，请回到原设备接听电话"，
- * 电话被直接挂断（间歇性，时序竞争）。
+ * 注意：isDeviceSupported 是**所有通知**（短信/微信/来电等）的流转判定点，
+ * 不是来电专用。beta37 曾只对来电放行 → 普通通知亮屏不再流转（beta43 实测回归）。
  *
- * beta37 重构：**收起全局状态模拟**，只精准 hook `NotificationHandler.isDeviceSupported`：
- * 仅对**来电（callType==1）且原判定为拒绝**时返回 true（放行流转）；
- * 短信/其他通知走原判定，不动；voip 会话建立不再受屏幕状态模拟干扰（恢复真实值）。
- * 锁屏双流转由 HookCallFilterPass 的真实锁屏判定防护（锁屏不放行监听路径）。
+ * v0.6.10 / beta36 教训：全局模拟锁屏（把 KeyguardManager/PowerManager/Display 全 hook
+ * 成锁屏态）会误伤正常通话流程——小米15 亮屏接听时 milink 查 PowerManager.isInteractive()
+ * （被模拟成 false）→ 认为设备息屏 → 中断会话 → 电话被挂断（间歇性时序竞争）。
+ *
+ * beta43 修复：**不模拟任何全局状态**，只精准 hook `NotificationHandler.isDeviceSupported`：
+ * 原判定为拒绝（亮屏）时一律返回 true 放行——来电与普通通知同等待遇，
+ * 恢复 beta36 之前"解锁时流转"的完整行为。voip 会话建立不再受屏幕状态模拟干扰
+ * （PowerManager 等返回真实值，电话流程安全）。
  *
  * 门控：功能① force_transfer。
  */
@@ -67,8 +68,10 @@ public class HookCallRelay {
                                     int callType = ex != null ? ex.getInt(CALL_TYPE, -1) : -1;
                                     if (callType == CALL_INCOMING) {
                                         MiflowLog.i("HookCallRelay: incoming call isDeviceSupported false->true, allow transfer");
-                                        return Boolean.TRUE;
+                                    } else {
+                                        MiflowLog.i("HookCallRelay: notification isDeviceSupported false->true, allow transfer (screen-on, non-call)");
                                     }
+                                    return Boolean.TRUE;
                                 }
                             } catch (Throwable t) {
                                 MiflowLog.e("HookCallRelay: intercept failed, pass through", t);
@@ -76,7 +79,7 @@ public class HookCallRelay {
                             return result;
                         }
                     });
-            MiflowLog.i("HookCallRelay: installed on NotificationHandler.isDeviceSupported (precise, no global screen simulation)");
+            MiflowLog.i("HookCallRelay: installed on NotificationHandler.isDeviceSupported (all notifications, no global screen simulation)");
         } catch (ClassNotFoundException e) {
             MiflowLog.w("HookCallRelay: NotificationHandler not found (version mismatch?), skip");
         } catch (Throwable t) {
