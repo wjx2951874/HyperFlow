@@ -243,5 +243,4 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
         // beta46：双开标识前缀编辑弹窗已提升到 MainActivity 根层渲染（Scaffold 之后，
         // 绘制顺序在悬浮胶囊之后 → 弹窗盖住胶囊；inApp 保留键盘跟随）。此处不再渲染。
-    }
 }
