@@ -22,10 +22,10 @@ install_apk() { # $1=apk路径
 }
 
 # 通道1（v0.6.13 提升）：模块目录本地 APK —— KSU 先完整解压再 source 执行 customize.sh，
-# MODDIR 反推正确后，system/priv-app/HyperFlowPlus/HyperFlowPlus.apk 必在本地，直接安装，
+# MODDIR 反推正确后，system/priv-app/HyperFlow/HyperFlow.apk 必在本地，直接安装，
 # 不再走网络。
-APK="$MODDIR/HyperFlowPlus.apk"
-[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
+APK="$MODDIR/HyperFlow.apk"
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlow.apk" 2>/dev/null | head -1)
 [ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)
 if [ -n "$APK" ] && [ -f "$APK" ]; then
   if install_apk "$APK"; then

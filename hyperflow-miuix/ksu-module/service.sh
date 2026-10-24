@@ -15,8 +15,8 @@ fi
 # 自动安装/更新管理 App：模块 boot 后完整挂载，find 必中 system/priv-app 实体 APK。
 # 后台等待系统启动完成；未安装则装，版本旧则覆盖更新。
 # v0.6.5：加日志到 /data/local/tmp/hyperflow_install.log（找不到/失败可定位）
-APK="$MODDIR/HyperFlowPlus.apk"
-[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlowPlus.apk" 2>/dev/null | head -1)
+APK="$MODDIR/HyperFlow.apk"
+[ -f "$APK" ] || APK=$(find "$MODDIR" -name "HyperFlow.apk" 2>/dev/null | head -1)
 [ -f "$APK" ] || APK=$(find "$MODDIR" -name "*.apk" 2>/dev/null | head -1)
 (
   sleep 5

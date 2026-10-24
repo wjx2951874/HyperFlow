@@ -8,7 +8,7 @@ import android.util.Log;
  * 框架不可用时回退 android.util.Log。
  */
 public final class MiflowLog {
-    public static final String TAG = "HyperFlowPlus";
+    public static final String TAG = "HyperFlow";
 
     private MiflowLog() {
     }

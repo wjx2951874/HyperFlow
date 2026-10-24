@@ -36,7 +36,7 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  */
 public class HookTrustAuthAutoFill {
 
-    private static final String TAG = "HyperFlowPlus";
+    private static final String TAG = "HyperFlow";
 
     /** Q0.c 的三个输入视图实现类（数字 PIN / 字母数字密码 / 图案）。 */
     private static final String[] INPUT_VIEWS = {

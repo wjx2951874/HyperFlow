@@ -53,13 +53,13 @@ Release APK 需要签名（本地 keystore 或 CI 签名；密钥信息属私有
 ```
 HyperFlow-x.y.z-flashable.zip
 ├── module.prop          # 模块元数据 + updateJson
-├── HyperFlowPlus.apk    # 管理 App（根目录一份）
+├── HyperFlow.apk    # 管理 App（根目录一份）
 ├── service.sh           # 开机：KSU 白名单 + 自动安装/升级 App
 ├── README.txt           # 模块内说明
 └── system/
     └── priv-app/
-        └── HyperFlowPlus/
-            └── HyperFlowPlus.apk   # 系统应用位（刷入自动装）
+        └── HyperFlow/
+            └── HyperFlow.apk   # 系统应用位（刷入自动装）
 ```
 
 （`scripts-build-v0443.sh` 有现成的 python zipfile 组装先例，可参考改版本号复用。）

@@ -99,7 +99,7 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 ### 6.5 抓日志要点（已踩坑）
 - Note12 Termux：`su -c 'nohup logcat -v threadtime > /sdcard/nt.log 2>&1 &'`（**必须 nohup**，否则 su 退出即杀后台）。
 - 小米15 aShell You（Shizuku）：**不要加 & 后台**（执行器不保留后台任务），前台挂着等复现。
-- 模块日志只在 **LSPosed 日志页**（TAG=HyperFlowPlus），logcat 看不到；**LSPosed zip 优先**。
+- 模块日志只在 **LSPosed 日志页**（TAG=HyperFlow），logcat 看不到；**LSPosed zip 优先**。
 
 ## 7. 已提交的 UI 改动汇总
 - beta42：确认弹窗贴底盖悬浮导航栏（bottomInset=0）；前缀弹窗键盘"飞上面"根治（adjustResize + bottomInset=0）；免预填调试入口改"点标题 10 次"彩蛋机关。
@@ -121,9 +121,9 @@ ANDROID_HOME=/home/user/.doubao_tools/android-sdk \
 su; logcat -c; nohup logcat -v threadtime > /sdcard/a1.log 2>&1 &
 # 复现（对端发起连接/来电）后：
 pkill -f "logcat -v threadtime"
-grep -E "HyperFlowPlus|A-1|A-2|MiTrustService|gatekeeper|verifyCredential" /sdcard/a1.log > /sdcard/a1_key.log
+grep -E "HyperFlow|A-1|A-2|MiTrustService|gatekeeper|verifyCredential" /sdcard/a1.log > /sdcard/a1_key.log
 ```
-日志走 LSPosed 管理器日志页（TAG=`HyperFlowPlus`），回退 android.util.Log。
+日志走 LSPosed 管理器日志页（TAG=`HyperFlow`），回退 android.util.Log。
 
 ## 10. 遗留登记（未开始/未完成，勿丢）
 - **电话线**：beta45 已重做未实测——按 §6.4 连测并导 LSPosed zip 回传核对日志，重点：亮屏 voip 带名字、锁屏单份、iPhone 降级、DeviceSubInfo 反射拿到的 deviceType 是否正确。

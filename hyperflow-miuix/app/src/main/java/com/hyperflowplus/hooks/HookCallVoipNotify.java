@@ -54,7 +54,7 @@ import io.github.libxposed.api.XposedInterface.Hooker;
  */
 public class HookCallVoipNotify {
 
-    private static final String TAG = "HyperFlowPlus";
+    private static final String TAG = "HyperFlow";
     private static final String ACTION_ON_CALL_VOIP = "com.xiaomi.dist.notification.action.ON_CALL_VOIP";
     private static final String PKG_MILINK = "com.milink.service";
     private static final String NOTIFICATION_TAG = "incall"; // 与 StatusBarNotifier.NOTIFICATION_TAG 一致

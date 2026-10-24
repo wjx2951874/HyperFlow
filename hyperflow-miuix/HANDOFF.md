@@ -55,7 +55,7 @@
   - 另 `buildAndSendNotification` 6 参重载（1368）dump 缺失，内部是否也调广播未确认
 - **未定论（下一步要查的）**：
   1. 12:44:57 的原生广播（resendNotification 链）为何 15 秒后才到 milink？可能：milink 冷启动（12:44:57.254）窗口广播丢失 / FixedThreadPool 排队 / 广播系统延迟
-  2. 12:45:12.950 那条广播是"原生迟到的"还是"我们补发的"？**区分方法：看 LSPosed 日志页**（MiflowLog 走框架日志不写 logcat！）——搜索 HyperFlowPlus，看有没有 `ON_CALL_VOIP relayed`（补发执行标志）和 `HookCallRelay: PowerManager.isInteractive CALLED`（milink 判定点 hook 生效标志）
+  2. 12:45:12.950 那条广播是"原生迟到的"还是"我们补发的"？**区分方法：看 LSPosed 日志页**（MiflowLog 走框架日志不写 logcat！）——搜索 HyperFlow，看有没有 `ON_CALL_VOIP relayed`（补发执行标志）和 `HookCallRelay: PowerManager.isInteractive CALLED`（milink 判定点 hook 生效标志）
   3. 亮屏 vs 锁屏：锁屏流转成功走的是哪条链（onStateChange 广播？resendNotification 链？通知监听路径 onNotificationPosted？）
 
 ### 2.4 现有相关代码
@@ -68,7 +68,7 @@
 - **注意**：`RelayUtils.getIPhoneCall` / `isSupportRelayToIphone` / `getRelayCall` 在 onStateChange 里决定是否发广播（1211）——**锁屏 vs 亮屏广播差异可能在这**，建议下一步反编译确认这几个方法
 
 ### 2.5 下一步建议（给接手者）
-1. 让用户装最新包（含 scope 修正）后，**LSPosed 日志页搜 HyperFlowPlus**，亮屏来电看：`ON_CALL_VOIP relayed` 有无、`HookCallRelay ... CALLED` 有无 → 判定补发是否执行、milink 判定点是否生效
+1. 让用户装最新包（含 scope 修正）后，**LSPosed 日志页搜 HyperFlow**，亮屏来电看：`ON_CALL_VOIP relayed` 有无、`HookCallRelay ... CALLED` 有无 → 判定补发是否执行、milink 判定点是否生效
 2. 若补发没执行（notifyNotification 亮屏没被调）→ 换挂点：hook `onStateChange`（INCOMING 转移时直接补发广播）或 hook `sendNotificationBroadcast` 的调用路径
 3. 若补发执行了但 milink 没收到 → 检查广播构造（可能缺 category="call" / fullScreenIntent 导致接收端不显示，用户实测"锁屏才显示"可能与此有关）
 4. 接收端 Xiaomi 15 未 root（有 ADB），如需接收端日志：`adb logcat -v time > /sdcard/x15.log` 抓小米 15 收到 voip 推送后的处理
@@ -142,7 +142,7 @@
 
 ## 9. 交接注意事项
 
-- **MiflowLog 走 libxposed 框架日志（LSPosed 日志页），不写 logcat**！看模块日志必须用 LSPosed 日志页搜索 `HyperFlowPlus`
+- **MiflowLog 走 libxposed 框架日志（LSPosed 日志页），不写 logcat**！看模块日志必须用 LSPosed 日志页搜索 `HyperFlow`
 - logcat 里 milink 的 tag 是 `dist:crossdeviceservice`（进程 com.milink.service），InCallUI 是 `InCall`
 - 用户设备上 MyHyperModifier 模块会疯狂刷 LSPosed 日志（miui.systemui.plugin），需用搜索框过滤
 - 用户沟通风格：要现成包/命令，反感长篇解释和低效方案；每次完成一步汇报

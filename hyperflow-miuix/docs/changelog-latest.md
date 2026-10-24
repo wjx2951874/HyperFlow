@@ -123,7 +123,7 @@
 - **修复**：改双通道——
   - 通道1（首选）：`cmd lock_settings get-credential-type`（Android 11+ 系统服务权威回答，不依赖 sqlite3），1=图案 / 2=数字PIN / 3=混合密码；
   - 通道2（兜底）：sqlite3 读 `lockscreen.password_type`，仅认 0x20000=数字、0x40000/0x80000/0x90000=混合，0x10000 歧义值放弃判断避免误判；
-  - 两通道都失败时打 `HyperFlowPlus` 日志（含两通道原始输出）便于真机排查，界面落手动选择。
+  - 两通道都失败时打 `HyperFlow` 日志（含两通道原始输出）便于真机排查，界面落手动选择。
 
 ### 5. CI 构建链修复（beta33 追加）
 - **问题**：`.github/workflows/build.yml` 的 setup-java 仍为 17，而项目要求 Java 21，CI 直接跑必然 `invalid source release: 21` 失败（此前包是本地 JDK21 环境编的，CI 配置未同步）。

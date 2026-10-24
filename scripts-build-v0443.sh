@@ -7,9 +7,9 @@ OUT=$ROOT/../hf-v0443
 APK=$ROOT/app/build/outputs/apk/release/app-release.apk
 MOD=$ROOT/ksu-module
 
-rm -rf "$OUT" && mkdir -p "$OUT/system/priv-app/HyperFlowPlus"
-cp "$APK" "$OUT/HyperFlowPlus.apk"
-cp "$APK" "$OUT/system/priv-app/HyperFlowPlus/HyperFlowPlus.apk"
+rm -rf "$OUT" && mkdir -p "$OUT/system/priv-app/HyperFlow"
+cp "$APK" "$OUT/HyperFlow.apk"
+cp "$APK" "$OUT/system/priv-app/HyperFlow/HyperFlow.apk"
 cp "$MOD/module.prop" "$OUT/module.prop"
 cp "$MOD/service.sh" "$OUT/service.sh"
 cp "$MOD/README.txt" "$OUT/README.txt"
@@ -21,9 +21,9 @@ python3 - <<'EOF'
 import zipfile, os
 base = "HyperFlow-0.4.43-flashable.zip"
 entries = [
-    "system/", "system/priv-app/", "system/priv-app/HyperFlowPlus/",
-    "module.prop", "HyperFlowPlus.apk", "service.sh", "README.txt",
-    "system/priv-app/HyperFlowPlus/HyperFlowPlus.apk",
+    "system/", "system/priv-app/", "system/priv-app/HyperFlow/",
+    "module.prop", "HyperFlow.apk", "service.sh", "README.txt",
+    "system/priv-app/HyperFlow/HyperFlow.apk",
 ]
 with zipfile.ZipFile(base, "w", zipfile.ZIP_DEFLATED) as z:
     for e in entries:
