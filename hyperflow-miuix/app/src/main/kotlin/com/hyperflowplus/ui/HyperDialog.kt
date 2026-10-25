@@ -67,7 +67,12 @@ fun HyperDialog(
     inApp: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    if (inApp) {
+    // beta51 修复：show 参数此前完全未被使用（缺少 if(show) 包裹）——
+    // 只要 ConfirmDialog 被组合（无论 show 真假）弹窗就无条件渲染 →
+    // 切消息 tab 未开启页"强制出现"弹窗、点取消后 showStartDialog=false 但弹窗不关（取消没反应）。
+    // 现在 show=false 直接不渲染，所有调用方（含未自己包 if 的 MessagesScreen）显隐恢复正常。
+    if (show) {
+        if (inApp) {
         // App 内覆盖层：不建独立窗口，imePadding 在 MainActivity 内容树内真实响应键盘。
         // 键盘弹出时遮罩区域收窄到键盘上方，卡片贴键盘顶；键盘动画平滑跟随，不蹦跳。
         Box(
@@ -198,6 +203,7 @@ fun HyperDialog(
                 content()
             }
         }
+    }
     }
 }
 

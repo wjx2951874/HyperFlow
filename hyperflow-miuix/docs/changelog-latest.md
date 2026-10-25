@@ -1,10 +1,16 @@
-# HyperFlow 1.1.0-beta50 更新日志
+# HyperFlow 1.1.0-beta51 更新日志
 
-## 一、图标收小（beta47 放大过头，用户反馈"又太大了"）
-- beta47 中心裁剪 75%（图形 ~80%）→ 桌面偏大 → **beta50 改为中心裁剪 85%（图形 ~71%）**，介于原始 ~60% 与 beta47 ~80% 之间。108px / xxxhdpi 432px 同步重新生成。
+## 一、弹窗"强制出现 + 取消键点了没反应"总根因修复（HyperDialog show 参数从未被使用）
+- **根因**：`HyperDialog(show = ...)` 的 show 参数**完全没有被使用**——函数体直接 `if (inApp)`，没有 `if (show)` 包裹。只要 ConfirmDialog 被组合（无论 show 真假）弹窗就无条件渲染。
+- **表现**（用户实测）：没开应用内消息的设备切到消息 tab → 未开启页的 ConfirmDialog 被组合 → 弹窗"强制出现"（正常不该出现）；点取消 → showStartDialog=false 但 HyperDialog 无视 show → 弹窗不关 → "取消键点了没反应"。
+- 其他弹窗正常的原因：调用方自己包了 `if (showXxx)`（如删除确认），只有 MessagesScreen 的确认窗没包。
+- **修复（beta51）**：HyperDialog 函数体加 `if (show)` 包裹（show=false 直接不渲染）。所有调用方显隐恢复正常：切 tab 不再弹、点取消立即关闭。
+- **待用户实测**：消息 tab 未开启页不再自动弹确认窗；点"立即开始"才弹；取消键可正常关闭。
 
-## 二、版本行字体对齐其他条目（用户反馈与"查看源代码"等条目字体不一致）
-- 版本行值原为 `FontWeight.Light`（偏细）→ 改为 `FontWeight.Normal`，与其他作者 App（miuix ArrowPreference 标准条目）一致。
+## 历史（beta50 并入）
+### beta50 图标收小 + 版本行字体对齐
+- 图标收小：beta47 中心裁剪 75%（图形 ~80%）→ 桌面偏大 → **beta50 改为中心裁剪 85%（图形 ~71%）**，介于原始 ~60% 与 beta47 ~80% 之间。108px / xxxhdpi 432px 同步重新生成。
+- 版本行字体：版本值原为 `FontWeight.Light`（偏细）→ 改为 `FontWeight.Normal`，与其他作者 App（miuix ArrowPreference 标准条目）一致。
 
 ## 历史（beta49 并入）
 ### beta49 亮屏来电手机号（判定失败）真正根因修复——deviceType/deviceId 拿错参数
