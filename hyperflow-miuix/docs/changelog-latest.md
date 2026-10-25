@@ -1,11 +1,19 @@
-# HyperFlow 1.1.0-beta51 更新日志
+# HyperFlow 1.1.0-beta52 更新日志
 
-## 一、弹窗"强制出现 + 取消键点了没反应"总根因修复（HyperDialog show 参数从未被使用）
+## 一、system_server 注入从未生效的总根因修复（XposedEntry 不在主 dex）
+- **根因**：Compose 引入后 App 变为多 dex，D8 把 XposedEntry 及其依赖分到 classes3.dex，**主 dex（classes.dex）里没有 XposedEntry**。system_server 由 zygote fork，LSPosed 在 zygote 期只从模块主 dex 加载 XposedEntry → 找不到 → **静默跳过 system_server 注入**（modules.log 里 `(system)` 只有 HyperCeiler，无 HyperFlow）。
+- **表现**（用户实测）：分身微信点击拉镜像主微信依旧同时打开主微信（HookRemoteOpen 点击通知重定向 999 分身空间从未运行，系统默认在主用户打开）；锁屏密码捕获（HookKeyguardCapture 也在 system_server）同步失效。
+- **对照**：HyperCeiler 纯 Java 单 dex，XposedEntry 在主 dex → system_server 注入正常。
+- **修复（beta52）**：`app/multiDexKeep.pro` + build.gradle.kts `multiDexKeepProguard`，强制 XposedEntry + hooks.** + MiflowLog + BuildConfig 留在主 dex。
+- **验证方式**：CI 出包后检查 classes.dex 是否含 com/hyperflowplus/XposedEntry；装机后 LSPosed 日志应出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`。
+- **待用户实测**：重启设备后抓 LSPosed 日志验证注入；分身点击拉镜像不再开主微信。
+
+## 历史（beta51）
+### 弹窗"强制出现 + 取消键点了没反应"总根因修复（HyperDialog show 参数从未被使用）
 - **根因**：`HyperDialog(show = ...)` 的 show 参数**完全没有被使用**——函数体直接 `if (inApp)`，没有 `if (show)` 包裹。只要 ConfirmDialog 被组合（无论 show 真假）弹窗就无条件渲染。
-- **表现**（用户实测）：没开应用内消息的设备切到消息 tab → 未开启页的 ConfirmDialog 被组合 → 弹窗"强制出现"（正常不该出现）；点取消 → showStartDialog=false 但 HyperDialog 无视 show → 弹窗不关 → "取消键点了没反应"。
+- **表现**：没开应用内消息的设备切到消息 tab → 未开启页的 ConfirmDialog 被组合 → 弹窗"强制出现"；点取消 → showStartDialog=false 但 HyperDialog 无视 show → 弹窗不关（取消键没反应）。
+- **修复（beta51）**：HyperDialog 函数体加 `if (show)` 包裹。切 tab 不再弹、点取消立即关闭。
 - 其他弹窗正常的原因：调用方自己包了 `if (showXxx)`（如删除确认），只有 MessagesScreen 的确认窗没包。
-- **修复（beta51）**：HyperDialog 函数体加 `if (show)` 包裹（show=false 直接不渲染）。所有调用方显隐恢复正常：切 tab 不再弹、点取消立即关闭。
-- **待用户实测**：消息 tab 未开启页不再自动弹确认窗；点"立即开始"才弹；取消键可正常关闭。
 
 ## 历史（beta50 并入）
 ### beta50 图标收小 + 版本行字体对齐

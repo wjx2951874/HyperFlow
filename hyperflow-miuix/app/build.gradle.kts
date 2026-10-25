@@ -12,8 +12,11 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 179
-        versionName = "1.1.0-beta51"
+        versionCode = 180
+        versionName = "1.1.0-beta52"
+        // beta52：Xposed 入口必须留主 dex（zygote 期 LSPosed 只从主 dex 加载 XposedEntry，
+        // 否则 system_server 注入静默失败——分身跳转/锁屏密码捕获一直没生效的根因）
+        multiDexKeepProguard = file("multiDexKeep.pro")
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
