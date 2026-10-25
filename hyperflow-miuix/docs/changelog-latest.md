@@ -1,6 +1,13 @@
-# HyperFlow 1.1.0-beta48 更新日志
+# HyperFlow 1.1.0-beta49 更新日志
 
-## 一、锁屏双份（通知+voip 一起来）真正根因修复
+## 一、亮屏来电手机号（判定失败）真正根因修复——deviceType/deviceId 拿错参数
+- **反编译最新版 milink 签名实锤**：`buildPlainMessage(sbn, DeviceSubInfo, TrustedDeviceInfo, String, int)`——`args[1]` 是 **DeviceSubInfo 对象**（含接收端设备的 deviceId/deviceType），`args[4]` 是 `i10`（**消息体普通 int，不是 deviceType**）。
+- beta45/46/47/48 一直拿 `args[4]` 当 deviceType（漂移成 148748/195737 乱值；恰好是合法小值时优先采用 → 判定全错）→ 原生 isVoipSupported 恒 false → 亮屏只剩手机号通知。deviceId 也从 `args[3]`（String 内容）错拿。
+- **修复（beta49）**：直接从 `args[1]`（DeviceSubInfo）反射 `getDeviceType()`/`getDeviceId()`（小米原生自己就是 `deviceSubInfo.getDeviceType()`，jadx 实锤方法存在且未混淆）；getDeviceType 反射失败再兜底字段遍历。**去掉 args[4] 优先逻辑**。
+- **待用户实测**：亮屏来电应为"带名字的 voip 全屏接听"（小米15/新款 iPhone），iPhone X 保持卡片降级。
+
+## 历史（beta48 并入）
+### beta48 锁屏双份（通知+voip 一起来）真正根因修复
 - **beta45/46 的 isScreenOn() 判断顺序有缺陷**：先查 `PowerManager.isInteractive()`，屏幕亮着就判"亮屏"。来电会点亮屏幕——**锁屏界面亮着时 isInteractive()=true → 直接误判亮屏** → 放行监听路径 → 锁屏通知卡片+voip 双份（用户实测 beta46 依旧双份，与 beta45 声称修复矛盾）。
 - **修复**：KeyguardManager 锁屏判定**优先**——`isKeyguardLocked()==true` 即锁屏（即使屏幕亮），保持原生过滤（广播路径独享一份 voip）；亮屏非锁屏才放行监听路径。
 

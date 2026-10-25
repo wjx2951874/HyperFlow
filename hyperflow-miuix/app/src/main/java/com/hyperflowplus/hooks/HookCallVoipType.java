@@ -93,24 +93,32 @@ public class HookCallVoipType {
                                 if (callType != CALL_INCOMING) {
                                     return result; // 只处理来电
                                 }
-                                String deviceId = chain.getArgs().size() > 3
-                                        && chain.getArgs().get(3) != null
-                                        ? chain.getArgs().get(3).toString() : null;
-                                // deviceType 获取（beta45 重写）：args[4] 曾是 deviceType（beta36 实测
-                                // 11/1 正常），但 milink 更新后该参数漂移成无意义大数（148748/195737 等）
-                                // → 原生 isVoipSupported 恒 false → 亮屏全降级 msg（用户实测"只有手机号通知"）。
-                                // 兜底：反射 DeviceSubInfo（args[1]）内部字段找合法小整数 deviceType；
-                                // args[4] 若仍是合法小值则优先采用。
+                                // deviceType/deviceId 获取（beta49 重写，对齐反编译最新签名）：
+                                //   buildPlainMessage(sbn, DeviceSubInfo, TrustedDeviceInfo, String, int)
+                                //   args[1] = DeviceSubInfo（接收端设备对象，含 deviceId/deviceType）
+                                //   args[4] = i10（消息体普通 int，NOT deviceType——beta45/46/47/48 拿错参数，
+                                //             漂移成 148748/195737 乱值；恰好小值时优先采用 → 判定全错 → 亮屏手机号）
+                                //   小米原生自己就是 deviceSubInfo.getDeviceType()（jadx 实锤方法存在且未混淆）。
                                 int deviceType = -1;
-                                if (chain.getArgs().size() > 4
-                                        && chain.getArgs().get(4) instanceof Integer) {
-                                    int v = ((Integer) chain.getArgs().get(4)).intValue();
-                                    if (v > 0 && v <= 1000) {
-                                        deviceType = v; // 合法 deviceType 值域（1=手机 4=平板 11=iPhone…）
+                                String deviceId = null;
+                                Object dsi = chain.getArgs().size() > 1
+                                        ? chain.getArgs().get(1) : null; // DeviceSubInfo
+                                if (dsi != null) {
+                                    try {
+                                        Method gt = dsi.getClass().getMethod("getDeviceType");
+                                        gt.setAccessible(true);
+                                        deviceType = ((Integer) gt.invoke(dsi)).intValue();
+                                    } catch (Throwable t) {
+                                        MiflowLog.e("HookCallVoipType: getDeviceType() reflect failed, fallback field scan", t);
+                                        deviceType = findDeviceTypeFromSubInfo(dsi);
                                     }
-                                }
-                                if (deviceType == -1) {
-                                    deviceType = findDeviceTypeFromSubInfo(chain.getArgs().get(1));
+                                    try {
+                                        Method gid = dsi.getClass().getMethod("getDeviceId");
+                                        gid.setAccessible(true);
+                                        deviceId = (String) gid.invoke(dsi);
+                                    } catch (Throwable t) {
+                                        MiflowLog.e("HookCallVoipType: getDeviceId() reflect failed", t);
+                                    }
                                 }
                                 String oldType = typeField.get(result).toString();
                                 // beta45 规则（用户拍板"用原生的那个逻辑"）：
