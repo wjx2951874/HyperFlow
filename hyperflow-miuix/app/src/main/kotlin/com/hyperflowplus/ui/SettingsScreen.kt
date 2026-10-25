@@ -255,7 +255,7 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                         Text(
                             updTxt,
                             style = MiuixTheme.textStyles.body2,
-                            fontWeight = FontWeight.Light,
+                            fontWeight = FontWeight.Normal,
                             color = updColor
                         )
                     }

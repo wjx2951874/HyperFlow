@@ -1,6 +1,13 @@
-# HyperFlow 1.1.0-beta49 更新日志
+# HyperFlow 1.1.0-beta50 更新日志
 
-## 一、亮屏来电手机号（判定失败）真正根因修复——deviceType/deviceId 拿错参数
+## 一、图标收小（beta47 放大过头，用户反馈"又太大了"）
+- beta47 中心裁剪 75%（图形 ~80%）→ 桌面偏大 → **beta50 改为中心裁剪 85%（图形 ~71%）**，介于原始 ~60% 与 beta47 ~80% 之间。108px / xxxhdpi 432px 同步重新生成。
+
+## 二、版本行字体对齐其他条目（用户反馈与"查看源代码"等条目字体不一致）
+- 版本行值原为 `FontWeight.Light`（偏细）→ 改为 `FontWeight.Normal`，与其他作者 App（miuix ArrowPreference 标准条目）一致。
+
+## 历史（beta49 并入）
+### beta49 亮屏来电手机号（判定失败）真正根因修复——deviceType/deviceId 拿错参数
 - **反编译最新版 milink 签名实锤**：`buildPlainMessage(sbn, DeviceSubInfo, TrustedDeviceInfo, String, int)`——`args[1]` 是 **DeviceSubInfo 对象**（含接收端设备的 deviceId/deviceType），`args[4]` 是 `i10`（**消息体普通 int，不是 deviceType**）。
 - beta45/46/47/48 一直拿 `args[4]` 当 deviceType（漂移成 148748/195737 乱值；恰好是合法小值时优先采用 → 判定全错）→ 原生 isVoipSupported 恒 false → 亮屏只剩手机号通知。deviceId 也从 `args[3]`（String 内容）错拿。
 - **修复（beta49）**：直接从 `args[1]`（DeviceSubInfo）反射 `getDeviceType()`/`getDeviceId()`（小米原生自己就是 `deviceSubInfo.getDeviceType()`，jadx 实锤方法存在且未混淆）；getDeviceType 反射失败再兜底字段遍历。**去掉 args[4] 优先逻辑**。
