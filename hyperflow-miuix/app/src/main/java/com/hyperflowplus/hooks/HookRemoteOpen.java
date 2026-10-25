@@ -108,6 +108,11 @@ public class HookRemoteOpen {
                     if (!hasIntentParam(m)) {
                         continue;
                     }
+                    // beta54：按真实签名定位参数，不再"末尾找 Integer"猜 userId——
+                    // startActivity 的 10/11 参重载末尾 int 是 flags（0x24000000 之类），
+                    // 被 findUserId 误当成 userId → userId 非 0/-1/999 → 直接放行 → 主微信被拉起
+                    // （这正是"苹果时好时坏、小米两个都开"的根因：走 AsUser 就改写成功，走 startActivity 就放行）
+                    int[] idx = locateIndices(m);
                     try {
                         m.setAccessible(true);
                         XposedEntry.get().hook(m)
@@ -115,7 +120,7 @@ public class HookRemoteOpen {
                                 .intercept(new Hooker() {
                                     @Override
                                     public Object intercept(Chain chain) throws Throwable {
-                                        return redirectToClone(chain);
+                                        return redirectToClone(chain, idx);
                                     }
                                 });
                         found++;
@@ -129,6 +134,35 @@ public class HookRemoteOpen {
         }
     }
 
+    /**
+     * 定位关键参数索引：
+     * [0] = callingPackage 参数索引（startActivity 系列 Binder 签名的 index 1，callingFeatureId 紧随其后）
+     * [1] = userId 参数索引：startActivityAsUser 系列的末尾 int 是 userId；startActivity 系列没有 userId
+     *       参数（默认主空间 user 0），记 -1，按 0 语义处理。
+     */
+    private static int[] locateIndices(Method m) {
+        Class<?>[] types = m.getParameterTypes();
+        // callingPackage：index 1（IApplicationThread caller 之后第一个 String）；找不到时 -1 走 Binder 反查
+        int pkgIdx = -1;
+        for (int i = 0; i < types.length; i++) {
+            if (types[i] == String.class) {
+                pkgIdx = i;
+                break;
+            }
+        }
+        // userId：仅 startActivityAsUser 有；取最后一个 int（其签名末尾固定 int userId）
+        int userIdIdx = -1;
+        if (m.getName().equals("startActivityAsUser")) {
+            for (int i = types.length - 1; i >= 0; i--) {
+                if (types[i] == int.class) {
+                    userIdIdx = i;
+                    break;
+                }
+            }
+        }
+        return new int[]{pkgIdx, userIdIdx};
+    }
+
     private static boolean hasIntentParam(Method m) {
         for (Class<?> t : m.getParameterTypes()) {
             if (Intent.class.isAssignableFrom(t)) {
@@ -138,7 +172,7 @@ public class HookRemoteOpen {
         return false;
     }
 
-    private static Object redirectToClone(Chain chain) throws Throwable {
+    private static Object redirectToClone(Chain chain, int[] idx) throws Throwable {
         List<Object> args = chain.getArgs();
         if (args == null || args.isEmpty()) {
             return chain.proceed();
@@ -149,7 +183,7 @@ public class HookRemoteOpen {
             }
             // 1) 调用者必须属于允许集（小米互联远程打开 / 本 App 消息页）；
             //    明确排除桌面/系统（手动开主空间绝不改写）
-            String caller = findCallingPackage(args);
+            String caller = findCallingPackage(args, idx);
             if (caller == null || EXCLUDED_CALLERS.contains(caller)) {
                 return chain.proceed();
             }
@@ -165,9 +199,11 @@ public class HookRemoteOpen {
             if (!TARGET_PKGS.contains(pkg)) {
                 return chain.proceed();
             }
-            // 3) 当前请求是主空间（userId==0 或签名无 userId 参数=默认主空间）
+            // 3) 当前请求是主空间（userId==0；startActivity 系列无 userId 参数=默认主空间 0）
             //    且该应用已开双开（999 空间存在）
-            int userId = findUserId(args);
+            // beta54：userIdIdx==-1（startActivity 无 userId 参数）→ 按主空间 0 语义处理，
+            // 不再被"末尾 flags int"误判成非 0 用户而放行（这是两个都开的根因）
+            int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
             MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
                 + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
             
@@ -183,7 +219,7 @@ public class HookRemoteOpen {
                     MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
                     return chain.proceed();
                 }
-                if (userId != 0 && userId != -1) {
+                if (userId != 0) {
                     return chain.proceed();
                 }
                 long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
@@ -197,13 +233,13 @@ public class HookRemoteOpen {
                 return chain.proceed();
             }
             MiflowLog.d("clone open: detected clone notification (marker=" + isCloneMarked + "), redirecting to user " + USER_CLONE);
-            if (userId == 0) {
-                // 4a) 有 userId 参数：直接改写为 999，让 system_server 在分身空间打开（无反射失败风险）
-                setUserId(args, USER_CLONE);
+            if (idx[1] >= 0) {
+                // 4a) 有 userId 参数（startActivityAsUser）：直接改写为 999
+                args.set(idx[1], USER_CLONE);
                 MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
                 Config.bump(Config.CNT_CLONE);
             } else {
-                // 4b) 签名无 userId 参数（系统默认主空间打开）：
+                // 4b) startActivity 无 userId 参数（系统默认主空间打开）：
                 //     吞掉原调用，改用 IActivityTaskManager.startActivityAsUser 以 999 重发。
                 //     反射失败/不可用时兜底走原逻辑，绝不误伤本地打开。
                 if (relaunchAsClone(chain, intent, pkg)) {
@@ -218,26 +254,39 @@ public class HookRemoteOpen {
         return chain.proceed();
     }
 
-    /** 找 callingPackage 参数：只认白/黑名单中的 String 值（V1.1.0 起按集合匹配，
-     *  兼容 com.xiaomi.mirror 等新调用方；resolvedType 等无关 String 不命中） */
     /**
      * v1.1.0-beta5：callingPackage 不是 startActivity 的参数，而是 system_server 内部通过
      * Binder.getCallingPackage() 解析的。之前从 args 里找 String 参数，永远找不到。
      * 修复：用 Binder.getCallingUid() 获取调用者 uid，再通过 IPackageManager 反查包名。
      * system_server 里没有 Application，所以用 ServiceManager.getService("package") 获取。
+     *
+     * v1.1.0-beta54：优先按方法签名定位的 callingPackage 参数索引直接取值
+     * （startActivity/startActivityAsUser 的 Binder 签名 index 1 就是 callingPackage，
+     * 跨进程 Binder 调用时该参数由系统填充，可信）；拿不到再走 uid 反查兜底。
      */
-    private static String findCallingPackage(List<Object> args) {
-        try {
-            // 先尝试从 args 里找（兼容某些机型把 callingPackage 当参数传的情况）
-            for (Object a : args) {
-                if (a instanceof String) {
-                    String s = (String) a;
-                    if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
-                        return s;
-                    }
+    private static String findCallingPackage(List<Object> args, int[] idx) {
+        // 1) 按签名索引直接取 callingPackage（可信，且避免 ATMS 层 Binder.getCallingUid 失真成 1000）
+        if (idx[0] >= 0 && idx[0] < args.size()) {
+            Object v = args.get(idx[0]);
+            if (v instanceof String) {
+                String s = (String) v;
+                if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
+                    MiflowLog.d("clone open: callingPackage(param)=" + s);
+                    return s;
                 }
             }
-            // v1.1.0-beta5：用 Binder.getCallingUid() 获取调用者 uid，反查包名
+        }
+        // 2) 兜底：从 args 里找白/黑名单 String（兼容某些机型把 callingPackage 放其它位置）
+        for (Object a : args) {
+            if (a instanceof String) {
+                String s = (String) a;
+                if (ALLOWED_CALLERS.contains(s) || EXCLUDED_CALLERS.contains(s)) {
+                    return s;
+                }
+            }
+        }
+        // 3) v1.1.0-beta5：用 Binder.getCallingUid() 获取调用者 uid，反查包名
+        try {
             int callingUid = android.os.Binder.getCallingUid();
             MiflowLog.d("clone open: callingUid=" + callingUid);
             // system_server 里用 ServiceManager 获取 IPackageManager
@@ -268,16 +317,6 @@ public class HookRemoteOpen {
             }
         }
         return null;
-    }
-
-    /** 找 userId 参数：签名末尾的 int（startActivity 系列最后一个 int 基本都是 userId） */
-    private static int findUserId(List<Object> args) {
-        for (int i = args.size() - 1; i >= 0; i--) {
-            if (args.get(i) instanceof Integer) {
-                return (Integer) args.get(i);
-            }
-        }
-        return -1;
     }
 
     /**
@@ -317,13 +356,10 @@ public class HookRemoteOpen {
         }
     }
 
-    /** 把 userId 参数改写为分身空间 */
-    private static void setUserId(List<Object> args, int userId) {
-        for (int i = args.size() - 1; i >= 0; i--) {
-            if (args.get(i) instanceof Integer) {
-                args.set(i, userId);
-                return;
-            }
+    /** 把 userId 参数改写为分身空间（beta54 起按精确索引改写） */
+    private static void setUserId(List<Object> args, int userIdIdx, int userId) {
+        if (userIdIdx >= 0 && userIdIdx < args.size()) {
+            args.set(userIdIdx, userId);
         }
     }
 }
