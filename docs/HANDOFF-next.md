@@ -1,18 +1,19 @@
-# HyperFlow 交接文档（换工具前快照，更新至 2026-10-24，beta46 构建中）
+# HyperFlow 交接文档（换工具前快照，更新至 2026-10-25，beta48 已交付）
 
 > 用途：本文件供下一个接手的人/AI 快速续上。所有事实以本仓库代码 + `docs/trustservice-auth-chain.md` 为准；本快照之后的改动以 git 历史为准。
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。remote URL 内嵌 PAT token，用 `git remote get-url origin` 提取（禁止明文打印）；**持续用同一把 PAT 不轮换**。
-- 当前 **beta46 构建中**（versionCode 174）：
-  1. **系统框架作用域双兼容**（分身点击/自动捕获密码的根因修复）：用户 LSPosed 勾了「Android系统(android)」但 framework 是 Vector/JingMatrix 分支，system_server 注入 pkgName 传 `"system"`（作用域里「系统框架 system」与「Android系统 android」是两个条目），XposedEntry 只匹配 `"android"` → **HookRemoteOpen / HookKeyguardCapture 在 system_server 根本没装上**（beta44 日志无 system_server 加载记录）。修复 = 双匹配 `"android" || "system"`。
-  2. **确认弹窗上移 16dp**（beta42 曾 bottomInset=0 贴底，用户实测太靠下）。
-  3. **前缀输入弹窗提升 MainActivity 根层**（原在 FlowScreen 内渲染被悬浮胶囊盖住；提升后 Scaffold 之后绘制 → 盖住胶囊，inApp 保留键盘跟随）。
+- 当前 **beta48 已交付**（versionCode 176，commit 9a936fa）：
+  1. **锁屏双份（通知+voip 一起来）真根因修复**：beta45/46 的 `isScreenOn()` 判断顺序缺陷——先查 `PowerManager.isInteractive()`，来电点亮屏幕后锁屏界面亮着 `isInteractive()=true` 直接判"亮屏" → 放行监听路径 → 双份。beta48 改为 **KeyguardManager 锁屏判定优先**（isKeyguardLocked 即锁屏，即使屏幕亮；亮屏非锁屏才放行）。
+  2. 图标放大（环形图形 60%→80%，桌面占满）+ 双开标识前缀弹窗上移 16dp（对齐确认弹窗）。
+  3. system_server 作用域双兼容（`android`+`system`）——分身点击同开、自动捕获密码为空的根因修复。
+- **用户当前无手机可测来电（2026-10-25 明确表示暂不测试）**：电话线 beta48 待实测、锁屏验证 UI 不自动消失、自动捕获密码为空、亮屏手机号等均**未实测确认**，等有设备再连测。
 - 已交付主线状态：
-  - **电话流转化**：beta45 重做后待实测（详见 §6）。
-  - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。**注意：依赖 HookKeyguardCapture（system_server），beta46 起作用域修复后才能真正生效**。
+  - **电话流转化**：beta48 修复锁屏双份后待实测（详见 §6）。
+  - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。**依赖 HookKeyguardCapture（system_server），beta46 作用域双兼容后理论上生效，待实测**。
   - **预设置入口**（beta40）：功能页「妙享直通」开关下新增显式「锁屏密码预设置」入口（原彩蛋机关保留）。
-- 两条主线：① 电话流转化（beta45 等用户装包实测）；② A 方案静默校验（作用域修复后待实测）。
+- 两条主线：① 电话流转化（beta48 待用户有设备实测）；② A 方案静默校验（作用域修复后待实测）。
 
 ## 1. 项目是什么
 小米澎湃 OS 互联增强：Xposed 模块（通知/短信流转、分身双开标识、电话流转化）+ miuix 原生 UI App。被控端 root（Note12 Turbo），发起端小米15（无 root 走 Shizuku），另有 iPhone X（deviceType=11，iOS 端仅认 msg 通知）。
