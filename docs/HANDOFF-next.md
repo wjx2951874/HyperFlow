@@ -4,16 +4,29 @@
 
 ## 0. 一句话现状
 - 仓库 `wjx2951874/HyperFlow`，工作分支 **`beta`**（正式通道 `main` 不动，`update.json` 停在旧正式版，测试期**不要改**，避免误推正式）。remote URL 内嵌 PAT token，用 `git remote get-url origin` 提取（禁止明文打印）；**持续用同一把 PAT 不轮换**。
-- 当前 **beta48 已交付**（versionCode 176，commit 9a936fa）：
+- 当前 **beta53 已交付**（versionCode 181，commit 1aebeeb）：system_server 注入根治（R8+keep 入口进主 dex，APK 单 dex），等用户装机重启抓日志实测分身跳转/密码捕获。此前 beta48-52 见下方 §0.5 补记。
   1. **锁屏双份（通知+voip 一起来）真根因修复**：beta45/46 的 `isScreenOn()` 判断顺序缺陷——先查 `PowerManager.isInteractive()`，来电点亮屏幕后锁屏界面亮着 `isInteractive()=true` 直接判"亮屏" → 放行监听路径 → 双份。beta48 改为 **KeyguardManager 锁屏判定优先**（isKeyguardLocked 即锁屏，即使屏幕亮；亮屏非锁屏才放行）。
   2. 图标放大（环形图形 60%→80%，桌面占满）+ 双开标识前缀弹窗上移 16dp（对齐确认弹窗）。
   3. system_server 作用域双兼容（`android`+`system`）——分身点击同开、自动捕获密码为空的根因修复。
 - **用户当前无手机可测来电（2026-10-25 明确表示暂不测试）**：电话线 beta48 待实测、锁屏验证 UI 不自动消失、自动捕获密码为空、亮屏手机号等均**未实测确认**，等有设备再连测。
-- 已交付主线状态：
+- 已交付主线状态（beta53 后）：
+  - **system_server 注入（分身跳转 HookRemoteOpen / 密码捕获 HookKeyguardCapture）**：beta53 R8 方案实锤入口进主 dex，等用户装包重启实测。
+  - **分身跳转验证方法**：LSPosed 日志应出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`。
+
   - **电话流转化**：beta48 修复锁屏双份后待实测（详见 §6）。
   - **A 方案**（beta39 起免明文）：日常解锁缓存 gatekeeper handle，授权时 handle+challenge 直接换 HAT 回传，不碰密码明文；无 handle 自动回退预设置凭证/手动。**依赖 HookKeyguardCapture（system_server），beta46 作用域双兼容后理论上生效，待实测**。
   - **预设置入口**（beta40）：功能页「妙享直通」开关下新增显式「锁屏密码预设置」入口（原彩蛋机关保留）。
 - 两条主线：① 电话流转化（beta48 待用户有设备实测）；② A 方案静默校验（作用域修复后待实测）。
+
+
+## 0.5 版本进展补记（beta49–beta53，本快照之后已交付）
+
+- **beta49（34091c3/177）**：亮屏来电手机号根因修复——反编译 milink 实锤 `buildPlainMessage` 的 `args[1]` 是 DeviceSubInfo（含 deviceId/deviceType），此前一直错拿 `args[4]`。反射 `args[1].getDeviceType()` 替代。待用户有手机实测。
+- **beta50（50232a5/178）**：图标中心裁剪 85% 收小 + 版本行字体 Normal 对齐；App/压缩包命名 HyperFlowPlus→HyperFlow。
+- **beta51（e9c03e8/179）**：弹窗"强制出现+取消没反应"根治——`HyperDialog` 的 show 参数从未被使用（函数体无 `if(show)` 包裹），加 `if(show)` 包裹恢复。
+- **beta52（9a88406/180）【方案已证无效，不要沿用】**：尝试 multiDexKeepProguard 让 XposedEntry 进主 dex——AGP 9.4.1+minSdk33 下 D8 独立模式**忽略** multiDexKeep，出包 dex 分配与 beta51 完全一致（XposedEntry 仍在 classes3）。**不要再走此路线**。
+- **beta53（1aebeeb/181，本次交付）【根治生效】**：开 **R8**（isMinifyEnabled=true）+ `app/proguard-rules.pro` keep 入口/hooks。**实锤**：APK 被压成单 dex（classes.dex 3.09MB），XposedEntry 在主 dex（strings 计数 1），17 个 hooks 全保留。**这是 HyperCeiler 同款做法（其 system 注入正常的原因）**。
+- **待用户装 beta53 后验证**：LSPosed 日志出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`；分身点击拉镜像不再同开主微信；锁屏密码捕获恢复。
 
 ## 1. 项目是什么
 小米澎湃 OS 互联增强：Xposed 模块（通知/短信流转、分身双开标识、电话流转化）+ miuix 原生 UI App。被控端 root（Note12 Turbo），发起端小米15（无 root 走 Shizuku），另有 iPhone X（deviceType=11，iOS 端仅认 msg 通知）。

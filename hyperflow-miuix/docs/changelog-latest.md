@@ -1,13 +1,15 @@
-# HyperFlow 1.1.0-beta52 更新日志
+# HyperFlow 1.1.0-beta53 更新日志
 
-## 一、system_server 注入从未生效的总根因修复（XposedEntry 不在主 dex）
+## 一、system_server 注入从未生效的总根因修复（XposedEntry 不在主 dex）——beta53 方案终版生效
 - **根因**：Compose 引入后 App 变为多 dex，D8 把 XposedEntry 及其依赖分到 classes3.dex，**主 dex（classes.dex）里没有 XposedEntry**。system_server 由 zygote fork，LSPosed 在 zygote 期只从模块主 dex 加载 XposedEntry → 找不到 → **静默跳过 system_server 注入**（modules.log 里 `(system)` 只有 HyperCeiler，无 HyperFlow）。
 - **表现**（用户实测）：分身微信点击拉镜像主微信依旧同时打开主微信（HookRemoteOpen 点击通知重定向 999 分身空间从未运行，系统默认在主用户打开）；锁屏密码捕获（HookKeyguardCapture 也在 system_server）同步失效。
 - **对照**：HyperCeiler 纯 Java 单 dex，XposedEntry 在主 dex → system_server 注入正常。
-- **修复（beta52）**：`app/multiDexKeep.pro` + build.gradle.kts `multiDexKeepProguard`，强制 XposedEntry + hooks.** + MiflowLog + BuildConfig 留在主 dex。
-- **验证方式**：CI 出包后检查 classes.dex 是否含 com/hyperflowplus/XposedEntry；装机后 LSPosed 日志应出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`。
-- **待用户实测**：重启设备后抓 LSPosed 日志验证注入；分身点击拉镜像不再开主微信。
+- **beta52 失败教训（已存档）**：`app/multiDexKeep.pro` + `multiDexKeepProguard` **实测无效**——AGP 9.4.1 + minSdk 33 下 D8 独立模式（isMinifyEnabled=false）忽略 multiDexKeep，CI 出包后 dex 分配与 beta51 完全相同（XposedEntry 仍在 classes3，主 dex 计数 0）。**不要再走 multiDexKeep 路线**。
+- **beta53 修复（生效）**：开 **R8（isMinifyEnabled=true，isShrinkResources=false）** + `app/proguard-rules.pro`（keep XposedEntry/hooks.**/MiflowLog/BuildConfig/Config + kotlinx.serialization 规则 + hiddenapibypass + dontwarn libxposed）——R8 模式 keep 类强制进主 dex。**验证实锤**：CI 出包（run 40155818437）APK 被 R8 压成**单 dex（classes.dex 3.09MB）**，`strings classes.dex | grep -c com/hyperflowplus/XposedEntry` = **1**；17 个 hooks 类全部保留。
+- **验证方式**：装机重启后 LSPosed 日志应出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`；分身点击拉镜像不再开主微信。
+- **待用户实测**：装 beta53 重启设备抓 LSPosed 日志验证注入；分身点击拉镜像不再开主微信。
 
+## 历史（beta51）
 ## 历史（beta51）
 ### 弹窗"强制出现 + 取消键点了没反应"总根因修复（HyperDialog show 参数从未被使用）
 - **根因**：`HyperDialog(show = ...)` 的 show 参数**完全没有被使用**——函数体直接 `if (inApp)`，没有 `if (show)` 包裹。只要 ConfirmDialog 被组合（无论 show 真假）弹窗就无条件渲染。
