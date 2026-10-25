@@ -12,11 +12,11 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 180
-        versionName = "1.1.0-beta52"
-        // beta52：Xposed 入口必须留主 dex（zygote 期 LSPosed 只从主 dex 加载 XposedEntry，
-        // 否则 system_server 注入静默失败——分身跳转/锁屏密码捕获一直没生效的根因）
-        multiDexKeepProguard = file("multiDexKeep.pro")
+        versionCode = 181
+        versionName = "1.1.0-beta53"
+        // beta53：开 R8 + keep 让 Xposed 入口进主 dex（beta52 的 multiDexKeepProguard 在
+        // AGP9+minSdk33 下被 D8 独立模式忽略，dex 分配未变）。R8 模式下 keep 类强制进主 dex，
+        // zygote 期 LSPosed 才能加载 XposedEntry → system_server 注入恢复（分身跳转/密码捕获）。
     }
 
     val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
@@ -33,7 +33,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
