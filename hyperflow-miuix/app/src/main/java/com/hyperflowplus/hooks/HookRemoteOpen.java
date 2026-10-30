@@ -434,7 +434,7 @@ public class HookRemoteOpen {
             if (displayId == 0) {
                 return chain.proceed(); // 只关心搬到虚拟屏/投屏屏的动作，本地屏放行
             }
-            Object thisObj = chain.getThis();
+            Object thisObj = chain.getThisObject();
             if (thisObj == null) {
                 return chain.proceed();
             }
