@@ -7,6 +7,7 @@ import com.hyperflowplus.MiflowLog;
 import com.hyperflowplus.XposedEntry;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.HashSet;
@@ -135,6 +136,12 @@ public class HookRemoteOpen {
                 MiflowLog.w("HookRemoteOpen[" + host + "] not available: " + t.getMessage());
             }
         }
+        // beta62：hook moveRootTaskToDisplay——mirror 点分身通知时除了 send contentIntent（开分身），
+        // 还会额外把主空间(u0)同名应用的 task 搬到投屏屏（mirror 按包名流转、不区分多开空间），
+        // 导致主微信与分身同时出现在投屏屏 = 双开。这是 beta58 以来一直漏掉的第二条路径。
+        // 在这里拦截"主空间双开应用被搬到虚拟屏"的动作；分身(999)走 contentIntent/ActivityStarter，
+        // 不经此接口，不受影响。
+        hookMoveRootTaskToDisplay(cl);
     }
 
     /**
@@ -370,5 +377,144 @@ public class HookRemoteOpen {
         if (userIdIdx >= 0 && userIdIdx < args.size()) {
             args.set(userIdIdx, userId);
         }
+    }
+
+    /**
+     * beta62：拦截 ActivityTaskManagerService.moveRootTaskToDisplay(int taskId, int displayId)。
+     *
+     * 背景（hf_b61 logcat 实锤）：mirror 进程点「分身通知」时，除 send 999 contentIntent（开分身）
+     * 之外，还会调用 moveRootTaskToDisplay 把主空间(u0)同名应用的 task 搬到投屏虚拟屏
+     * （mirror 的 RelayAppLocalHelper.openAppMirrorByRelay 按包名流转，不区分 user 999/0）。
+     * 结果是主微信与分身同时出现在投屏屏 → 双开。
+     *
+     * 拦截条件：目标 task 的 userId==0 && 包名∈支持应用集 && 该应用 999 空间存在 && 目标屏非本地(0)。
+     * 分身(999)打开走 contentIntent → ActivityStarter，不经过本接口，故拦截不影响分身正常上投屏屏。
+     */
+    private static void hookMoveRootTaskToDisplay(ClassLoader cl) {
+        try {
+            Class<?> atms = Class.forName("com.android.server.wm.ActivityTaskManagerService", false, cl);
+            int found = 0;
+            for (Method m : atms.getDeclaredMethods()) {
+                if (!m.getName().equals("moveRootTaskToDisplay")) {
+                    continue;
+                }
+                Class<?>[] pt = m.getParameterTypes();
+                // 前两个参数必须是 int（taskId, displayId）；兼容 2 参/3 参重载（第三个 onTop 等忽略）
+                if (pt.length < 2 || pt[0] != int.class || pt[1] != int.class) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                return interceptMoveRootTaskToDisplay(chain);
+                            }
+                        });
+                found++;
+            }
+            MiflowLog.i("HookRemoteOpen: hooked " + found + " moveRootTaskToDisplay methods");
+        } catch (Throwable t) {
+            MiflowLog.w("HookRemoteOpen: hookMoveRootTaskToDisplay failed: " + t.getMessage());
+        }
+    }
+
+    private static Object interceptMoveRootTaskToDisplay(Chain chain) throws Throwable {
+        try {
+            if (!Config.isCloneTransferEnabled()) {
+                return chain.proceed();
+            }
+            List<Object> args = chain.getArgs();
+            if (args == null || args.size() < 2) {
+                return chain.proceed();
+            }
+            int taskId = ((Integer) args.get(0)).intValue();
+            int displayId = ((Integer) args.get(1)).intValue();
+            if (displayId == 0) {
+                return chain.proceed(); // 只关心搬到虚拟屏/投屏屏的动作，本地屏放行
+            }
+            Object thisObj = chain.getThis();
+            if (thisObj == null) {
+                return chain.proceed();
+            }
+            // mRootWindowContainer → anyTaskForId(taskId, MATCH_ATTACHED_TASK_OR_RECENT_TASKS=1)
+            Field fRwc = findField(thisObj.getClass(), "mRootWindowContainer");
+            if (fRwc == null) {
+                MiflowLog.w("moveRootTaskToDisplay: mRootWindowContainer not found, allow");
+                return chain.proceed();
+            }
+            Object rwc = fRwc.get(thisObj);
+            if (rwc == null) {
+                return chain.proceed();
+            }
+            Method anyTask = findMethod(rwc.getClass(), "anyTaskForId", 2);
+            if (anyTask == null) {
+                MiflowLog.w("moveRootTaskToDisplay: anyTaskForId(int,int) not found, allow");
+                return chain.proceed();
+            }
+            Object task = anyTask.invoke(rwc, taskId, 1);
+            if (task == null) {
+                return chain.proceed();
+            }
+            int userId = -1;
+            Field fUid = findField(task.getClass(), "mUserId");
+            if (fUid != null) {
+                userId = ((Integer) fUid.get(task)).intValue();
+            }
+            String pkg = null;
+            Method getBase = findMethod(task.getClass(), "getBaseIntent", 0);
+            if (getBase != null) {
+                Intent bi = (Intent) getBase.invoke(task);
+                if (bi != null && bi.getComponent() != null) {
+                    pkg = bi.getComponent().getPackageName();
+                }
+            }
+            if (pkg == null) {
+                return chain.proceed();
+            }
+            int callingUid = android.os.Binder.getCallingUid();
+            MiflowLog.d("moveRootTaskToDisplay: task=" + taskId + " pkg=" + pkg
+                    + " userId=" + userId + " -> display " + displayId + " callingUid=" + callingUid);
+            if (userId != 0) {
+                return chain.proceed(); // 只拦主空间；分身(999)放行
+            }
+            if (!TARGET_PKGS.contains(pkg)) {
+                return chain.proceed();
+            }
+            if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
+                return chain.proceed(); // 未开双开的应用放行
+            }
+            MiflowLog.i("moveRootTaskToDisplay BLOCKED: main-user " + pkg
+                    + " (taskId=" + taskId + ") -> display " + displayId);
+            return null; // 吞掉调用：阻止主空间应用被搬到投屏屏
+        } catch (Throwable t) {
+            MiflowLog.w("interceptMoveRootTaskToDisplay failed: " + t.getMessage());
+        }
+        return chain.proceed();
+    }
+
+    private static Field findField(Class<?> cls, String name) {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Method findMethod(Class<?> cls, String name, int paramCount) {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == paramCount) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+        }
+        return null;
     }
 }
