@@ -49,6 +49,14 @@ public class HookRemoteOpen {
     // v1.1.0-beta9：记录最近一次 u999 打开时间（仅作标记丢失时的兜底反推）
     private static long lastCloneOpenTime = 0;
 
+    // beta63：mirror 点「分身通知」时先 moveRootTaskToDisplay 把主微信(u0) task 搬到投屏屏，
+    // 再 send 999 分身 contentIntent。单看搬 task 无法区分「分身流转」和「正常流转主微信」，
+    // 直接拦（beta62）会误伤主微信正常流转。改为「搬后纠正」：先放行并记录，
+    // 等 redirectToClone 确认确实打开了 999 分身时，再把主微信 task 搬回本地屏。
+    private static long pendingMainTaskId = -1;
+    private static long pendingMainTaskTime = 0;
+    private static Object cachedAtms = null;
+
     /**
      * 适配的迷你应用包名（与小米互联「支持的应用」列表中的第三方 App 对齐）。
      * 微信/QQ 为 V0.4.43 首批；V0.5.4 扩展飞书/钉钉/企业微信（含飞书国际版 Lark）。
@@ -235,6 +243,7 @@ public class HookRemoteOpen {
                 + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
             if (userId == USER_CLONE) {
                 lastCloneOpenTime = System.currentTimeMillis();
+                tryCorrectMainTask(); // beta63：分身已在打开，纠正此前被 mirror 误搬的主微信 task
                 MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
                 return chain.proceed();
             }
@@ -256,6 +265,7 @@ public class HookRemoteOpen {
 
     /** 统一改写入口：有 userId 参数直接改；无则吞掉原调用用 startActivityAsUser(999) 重发。 */
     private static Object redirect(List<Object> args, int[] idx, Chain chain, Intent intent, String pkg) throws Throwable {
+        tryCorrectMainTask(); // beta63：确认是分身打开，纠正此前被 mirror 误搬的主微信 task
         if (idx[1] >= 0) {
             args.set(idx[1], USER_CLONE);
             MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
@@ -485,13 +495,54 @@ public class HookRemoteOpen {
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 return chain.proceed(); // 未开双开的应用放行
             }
-            MiflowLog.i("moveRootTaskToDisplay BLOCKED: main-user " + pkg
-                    + " (taskId=" + taskId + ") -> display " + displayId);
-            return null; // 吞掉调用：阻止主空间应用被搬到投屏屏
+            // beta63：不再直接吞掉（会误伤主微信正常流转），改为「搬后纠正」。
+            // 先放行让主微信暂时搬过去，同时记录 task，等 redirectToClone 确认
+            // 确实打开了 999 分身时再搬回本地屏。
+            cachedAtms = thisObj;
+            pendingMainTaskId = taskId;
+            pendingMainTaskTime = System.currentTimeMillis();
+            MiflowLog.i("moveRootTaskToDisplay: main-user " + pkg
+                    + " (taskId=" + taskId + ") -> display " + displayId
+                    + " (deferred, will correct if clone opens)");
+            return chain.proceed();
         } catch (Throwable t) {
             MiflowLog.w("interceptMoveRootTaskToDisplay failed: " + t.getMessage());
         }
         return chain.proceed();
+    }
+
+    /**
+     * beta63：搬后纠正。当确认 999 分身被打开（点分身通知）时调用：
+     * 若此前极短时间内有主空间双开应用的 task 被搬到了非本地屏（mirror 误搬），
+     * 则把该 task 搬回本地屏，从而只让分身留在投屏屏。
+     * 正常流转主微信时不会走到这里（打开的是 user 0），故不误伤。
+     */
+    private static void tryCorrectMainTask() {
+        try {
+            long now = System.currentTimeMillis();
+            if (pendingMainTaskId < 0 || (now - pendingMainTaskTime) > 3000) {
+                return;
+            }
+            long taskId = pendingMainTaskId;
+            pendingMainTaskId = -1;
+            pendingMainTaskTime = 0;
+            Object atms = cachedAtms;
+            if (atms == null) {
+                MiflowLog.w("moveRootTaskToDisplay correct: no cached ATMS, skip");
+                return;
+            }
+            // ATMS.moveRootTaskToDisplay(int taskId, int displayId)：内部自带
+            // synchronized(mGlobalLock) + clearCallingIdentity，任何线程调用都安全。
+            Method mover = findMethod(atms.getClass(), "moveRootTaskToDisplay", 2);
+            if (mover == null) {
+                MiflowLog.w("moveRootTaskToDisplay correct: ATMS.moveRootTaskToDisplay(int,int) not found");
+                return;
+            }
+            mover.invoke(atms, (int) taskId, 0);
+            MiflowLog.i("moveRootTaskToDisplay CORRECTED: main-user task=" + taskId + " back to display 0");
+        } catch (Throwable t) {
+            MiflowLog.w("moveRootTaskToDisplay correct failed: " + t.getMessage());
+        }
     }
 
     private static Field findField(Class<?> cls, String name) {
