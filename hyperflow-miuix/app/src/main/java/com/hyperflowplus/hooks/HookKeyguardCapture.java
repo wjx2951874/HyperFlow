@@ -23,6 +23,12 @@ import io.github.libxposed.api.XposedInterface.Hooker;
 public class HookKeyguardCapture {
 
     public static void install(ClassLoader cl) {
+        // 主通道：LockSettingsService.checkCredential —— 系统锁屏（Keyguard）输密码/图案解锁
+        // 时真正调用的入口（ILockSettings.checkCredential 的实现），重启后首次解锁必走它。
+        if (hookCheckCredential(cl)) {
+            return;
+        }
+        // 兜底：LockPatternUtils.verifyCredential（部分 ROM 的便捷入口）
         try {
             Class<?> lpu = Class.forName("com.android.internal.widget.LockPatternUtils");
             final Class<?> lc = Class.forName("com.android.internal.widget.LockscreenCredential");
@@ -46,8 +52,6 @@ public class HookKeyguardCapture {
                                             .getMethod("isMatched").invoke(result);
                                     if (matched) {
                                         capture(chain.getArgs().get(0));
-                                        // 免明文 HAT 通道：缓存解锁句柄（gatekeeper handle），
-                                        // trustservice 授权时用 handle+challenge 直接换 HAT，不碰明文密码
                                         try {
                                             Long handle = (Long) result.getClass()
                                                     .getMethod("getGatekeeperPasswordHandle").invoke(result);
@@ -64,13 +68,64 @@ public class HookKeyguardCapture {
                                 return result;
                             }
                         });
-                MiflowLog.i("HookKeyguardCapture: hooked LockPatternUtils.verifyCredential (daily unlock)");
+                MiflowLog.i("HookKeyguardCapture: hooked LockPatternUtils.verifyCredential (fallback)");
                 return;
             }
             MiflowLog.w("HookKeyguardCapture: verifyCredential(LockscreenCredential,int,int) not found");
         } catch (Throwable t) {
             MiflowLog.w("HookKeyguardCapture: install failed: " + t);
         }
+    }
+
+    /** 主通道：hook LockSettingsService.checkCredential(LockscreenCredential,int,int) */
+    private static boolean hookCheckCredential(ClassLoader cl) {
+        try {
+            Class<?> lss = Class.forName("com.android.internal.widget.LockSettingsService");
+            final Class<?> lc = Class.forName("com.android.internal.widget.LockscreenCredential");
+            for (Method m : lss.getDeclaredMethods()) {
+                if (!m.getName().equals("checkCredential")) {
+                    continue;
+                }
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length != 3 || pt[0] != lc || pt[1] != int.class || pt[2] != int.class) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                Object result = chain.proceed();
+                                try {
+                                    boolean matched = (boolean) result.getClass()
+                                            .getMethod("isMatched").invoke(result);
+                                    if (matched) {
+                                        capture(chain.getArgs().get(0));
+                                        try {
+                                            Long handle = (Long) result.getClass()
+                                                    .getMethod("getGatekeeperPasswordHandle").invoke(result);
+                                            if (handle != null && handle.longValue() != 0L) {
+                                                CapturedCred.writeHandle(handle.longValue());
+                                            }
+                                        } catch (Throwable t) {
+                                            MiflowLog.w("KeyguardCapture: handle cache failed: " + t);
+                                        }
+                                    }
+                                } catch (Throwable t) {
+                                    MiflowLog.e("KeyguardCapture: hook err", t);
+                                }
+                                return result;
+                            }
+                        });
+                MiflowLog.i("HookKeyguardCapture: hooked LockSettingsService.checkCredential (system unlock)");
+                return true;
+            }
+            MiflowLog.w("HookKeyguardCapture: LockSettingsService.checkCredential not found");
+        } catch (Throwable t) {
+            MiflowLog.w("HookKeyguardCapture: checkCredential hook failed: " + t);
+        }
+        return false;
     }
 
     /** 从校验成功的凭证对象提取明文+类型并落盘。 */
