@@ -101,8 +101,11 @@ public class HookRemoteOpen {
                 Class<?> cls = Class.forName(host, false, cl);
                 int found = 0;
                 for (Method m : cls.getDeclaredMethods()) {
-                    // 拦截所有带 Intent 参数的 startActivity / startActivityAsUser（多版本签名兜底）
-                    if (!m.getName().equals("startActivity") && !m.getName().equals("startActivityAsUser")) {
+                    // 拦截所有带 Intent 参数的 startActivity 系列（startActivity / startActivityAsUser /
+                    // startActivityAsCaller / startActivityWithOptions / startActivityForUser 等，多版本签名兜底）。
+                    // beta58：milink 打开应用的请求实测走 startActivityAsCaller/WithOptions/ForUser（beta57 只 hook
+                    // startActivity/startActivityAsUser 时完全漏掉，主微信被直接打开 → 双开），必须全前缀覆盖。
+                    if (!m.getName().startsWith("startActivity")) {
                         continue;
                     }
                     if (!hasIntentParam(m)) {
@@ -150,9 +153,12 @@ public class HookRemoteOpen {
                 break;
             }
         }
-        // userId：仅 startActivityAsUser 有；取最后一个 int（其签名末尾固定 int userId）
+        // userId：带用户语义的重载（startActivityAsUser / startActivityAsCaller / startActivityForUser）
+        // 末尾 int 是 userId；纯 startActivity / startActivityWithOptions 没有 userId 参数（默认主空间 0），记 -1。
         int userIdIdx = -1;
-        if (m.getName().equals("startActivityAsUser")) {
+        String mn = m.getName();
+        if (mn.equals("startActivityAsUser") || mn.equals("startActivityAsCaller")
+                || mn.equals("startActivityForUser")) {
             for (int i = types.length - 1; i >= 0; i--) {
                 if (types[i] == int.class) {
                     userIdIdx = i;

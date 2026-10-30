@@ -170,38 +170,49 @@ public class HookTrustAuthAuto {
     /** hook 锁屏验证输入框的 onResume：记录实例；A-2 已成功则立即自动关闭。 */
     private static void hookAuthUi(ClassLoader cl) {
         try {
-            Class<?> act = cl.loadClass("com.xiaomi.trustservice.remoteservice.locksettings.LockScreenUIActivity");
+            // beta58：旧实现按混淆类名 com.xiaomi.trustservice.remoteservice.locksettings.LockScreenUIActivity
+            // 找 onResume，部分 ROM 类名已变（日志：A-2: LockScreenUIActivity.onResume not found）。
+            // 改 hook 框架 Activity.onResume，按类名特征（trustservice / lockscreen）识别授权 UI，混淆免疫。
+            Class<?> act = cl.loadClass("android.app.Activity");
+            Method onResume = null;
             for (Method m : act.getDeclaredMethods()) {
-                if (!m.getName().equals("onResume") || m.getParameterCount() != 0) {
-                    continue;
+                if (m.getName().equals("onResume") && m.getParameterCount() == 0) {
+                    onResume = m;
+                    break;
                 }
-                m.setAccessible(true);
-                XposedEntry.get().hook(m)
-                        .setExceptionMode(ExceptionMode.PROTECTIVE)
-                        .intercept(new Hooker() {
-                            @Override
-                            public Object intercept(Chain chain) throws Throwable {
-                                try {
-                                    Object self = chain.getThisObject();
-                                    if (self instanceof android.app.Activity) {
+            }
+            if (onResume == null) {
+                MiflowLog.w("A-2: Activity.onResume not found");
+                return;
+            }
+            onResume.setAccessible(true);
+            XposedEntry.get().hook(onResume)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept(new Hooker() {
+                        @Override
+                        public Object intercept(Chain chain) throws Throwable {
+                            try {
+                                Object self = chain.getThisObject();
+                                if (self instanceof android.app.Activity) {
+                                    String cn = self.getClass().getName();
+                                    if (cn.contains("trustservice") || cn.contains("lockscreen")
+                                            || cn.contains("LockScreen")) {
                                         authUi = new java.lang.ref.WeakReference<>((android.app.Activity) self);
-                                        MiflowLog.i("A-2: auth UI shown, authOk=" + authOk);
+                                        MiflowLog.i("A-2: auth UI shown (" + cn + "), authOk=" + authOk);
                                         if (authOk) {
                                             finishAuthUi();
                                         }
                                     }
-                                } catch (Throwable t) {
-                                    MiflowLog.e("A-2: ui hook err", t);
                                 }
-                                return chain.proceed();
+                            } catch (Throwable t) {
+                                MiflowLog.e("A-2: ui hook err", t);
                             }
-                        });
-                MiflowLog.i("A-2: hooked LockScreenUIActivity.onResume");
-                return;
-            }
-            MiflowLog.w("A-2: LockScreenUIActivity.onResume not found");
+                            return chain.proceed();
+                        }
+                    });
+            MiflowLog.i("A-2: hooked Activity.onResume (trustservice UI capture)");
         } catch (Throwable t) {
-            MiflowLog.w("A-2: LockScreenUIActivity class not found, auto-close UI unavailable: " + t);
+            MiflowLog.w("A-2: hookAuthUi failed: " + t);
         }
     }
 
@@ -210,6 +221,8 @@ public class HookTrustAuthAuto {
         try {
             final android.app.Activity a = authUi.get();
             if (a == null) {
+                // beta58 兜底：弱引用未捕获到实例时，从 ActivityThread.mActivities 找前台授权 UI
+                closeAuthViaActivityThread();
                 return;
             }
             android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -225,6 +238,51 @@ public class HookTrustAuthAuto {
             });
         } catch (Throwable t) {
             MiflowLog.e("A-2: finishAuthUi failed", t);
+        }
+    }
+
+    /** 兜底：从 ActivityThread.mActivities（框架字段，不混淆）找前台 trustservice 授权 Activity 并 finish。 */
+    private static void closeAuthViaActivityThread() {
+        try {
+            Object at = Class.forName("android.app.ActivityThread")
+                    .getMethod("currentActivityThread").invoke(null);
+            if (at == null) return;
+            java.lang.reflect.Field mAct = at.getClass().getDeclaredField("mActivities");
+            mAct.setAccessible(true);
+            Object map = mAct.get(at);
+            if (map == null) return;
+            java.lang.reflect.Method sizeM = map.getClass().getMethod("size");
+            java.lang.reflect.Method valueAtM = map.getClass().getMethod("valueAt", int.class);
+            int n = (Integer) sizeM.invoke(map);
+            for (int i = n - 1; i >= 0; i--) {
+                Object rec = valueAtM.invoke(map, i);
+                if (rec == null) continue;
+                java.lang.reflect.Field actF = rec.getClass().getDeclaredField("activity");
+                actF.setAccessible(true);
+                Object o = actF.get(rec);
+                if (o instanceof android.app.Activity) {
+                    final android.app.Activity act = (android.app.Activity) o;
+                    String cn = act.getClass().getName();
+                    if (cn.contains("trustservice") || cn.contains("lockscreen")
+                            || cn.contains("LockScreen")) {
+                        android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                        h.post(() -> {
+                            try {
+                                if (!act.isFinishing()) {
+                                    act.finish();
+                                    MiflowLog.i("A-2: auth UI auto-closed via mActivities: " + cn);
+                                }
+                            } catch (Throwable t2) {
+                                MiflowLog.e("A-2: finish auth UI err (at)", t2);
+                            }
+                        });
+                        return;
+                    }
+                }
+            }
+            MiflowLog.w("A-2: no auth activity found in mActivities");
+        } catch (Throwable t) {
+            MiflowLog.e("A-2: closeAuthViaActivityThread failed", t);
         }
     }
 
