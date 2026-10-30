@@ -1,6 +1,7 @@
 # HyperFlow 更新日志
 
-> 按版本倒序。正式版 v1.0.0 起记录；开发版历史日志不再展示。
+> 按版本倒序。正式版 v1.0.0 起记录；开发版（beta）历史日志不再展示。
+> **beta 迭代日志**（beta54 起，最新 1.1.0-beta60）见 [`changelog-latest.md`](changelog-latest.md)。
 
 ---
 

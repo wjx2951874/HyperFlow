@@ -50,9 +50,23 @@
 2. **HookRemoteOpen 重排**：`redirectToClone` 先查 intent 上 `hf_is_clone` 标记（caller 无关直接改 999）；再查远程白名单 caller（ALLOWED_CALLERS={com.milink.service, com.xiaomi.mirror, com.hyperflowplus}）且 userId∈{0,-1} 直接改 999；最后 3 秒时序反推兜底。统一走 `redirect()` 入口（有 userId 参数直接改 / 无则 `relaunchAsClone` 吞调用重发 999）。EXCLUDED_CALLERS={com.miui.home, com.android.launcher3, com.miui.systemui, android} 永远放行。TARGET_PKGS={com.tencent.mm, com.tencent.mobileqq, com.ss.android.lark, com.larksuite.cn, com.alibaba.android.rimet, com.tencent.wework}（QQ 等分身同步覆盖）。
 3. **HookMirrorObserve 全路径观察**：新增 `android.app.IActivityTaskManager$Stub$Proxy` 的 startActivity* 家族 hook（框架类不混淆），日志 `[MIRROR-OBS] ATM.<method>` 显示 mirror 进程实际调用。
 
-### 2.3 当前阻塞：等待用户 beta60 全量日志（已给全局抓法）
-```
-su -c 'rm -rf /data/adb/lspd/log; echo 已清空,现在去复现双开; sleep 120; tar -czf /sdcard/hf_full.tgz /data/adb/lspd 2>/dev/null; logcat -d > /sdcard/hf_logcat.txt; echo 完成: /sdcard/hf_full.tgz + /sdcard/hf_logcat.txt'
+### 2.3 当前阻塞：等待用户 beta60 有效日志（抓法已修正，勿再 rm log）
+
+**最新实锤（2026-10-30 晚，两次日志分析）**：
+- **双开触发点实锤**（beta58 时代 log.old 18:57-19:10）：
+  ```
+  19:07:27  clone open check: caller=com.xiaomi.mirror pkg=com.tencent.mm userId=0
+  19:07:29  clone open: uid=10277 pkg=com.tencent.mm   ← u0 主微信被 mirror 进程拉起
+  ```
+  双开 = **com.xiaomi.mirror（镜像/远控/投屏）以 userId=0 启动微信**；beta58 时序反推（3 秒内有 u999 记录）拦不住第一发 u0；**beta59 的"远程 caller 直接改 999"正是治这条**。
+- **日志抓取方法两次实锤**：`rm -rf /data/adb/lspd/log` 后 LSPosed daemon 仍攥旧文件句柄，新日志写进"已删除文件"，之后 tar `/data/adb/lspd` 永远只有 log.old、log/ 空。**禁止 rm -rf log**（用户两次 tgz 均为空即此因）。
+- logcat 通道 0 行模块日志属正常（MiflowLog 优先 libxposed 框架文件日志，不走 logcat）；logcat 里的 `LSPosedFramework: (pkg)...` 行仅部分 hook（如 HookCallRelay）会出。
+
+**正确抓法（装 beta60 重启后）**：
+```bash
+# 复现（流转/远控到另一台设备，在那边点微信，看到双开）——本地打开桌面不在 hook 范围，不会触发
+# 复现完抓（勿 rm、勿 sleep 空窗，复现后再打包）
+su -c 'tar -czf /sdcard/hf_b60.tgz /data/adb/lspd/log; logcat -d > /sdcard/hf_b60_logcat.txt; echo 完成'
 ```
 期望关键日志行：
 - `clone contentIntent rebuilt -> user 999`（第一层触发）

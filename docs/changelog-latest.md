@@ -1,6 +1,25 @@
-# HyperFlow 1.1.0-beta33 更新日志
+# HyperFlow 1.1.0-beta60 更新日志
 
-## 修复
+## beta60（versionCode 188，commit fd2eff2）——锁屏密码捕获主通道改造
+- **锁屏凭证捕获**：主通道从 `LockPatternUtils.verifyCredential`（实测 0 捕获，非真实入口）改为 **`com.android.internal.widget.LockSettingsService.checkCredential(LockscreenCredential,int,int)`**——system_server 内锁屏输密码的真正验证入口，**重启后首次解锁必走**；`verifyCredential` 保留兜底。
+- 捕获走 `CapturedCred.write(type, raw)`（公共文件 + trustservice sp），`HookTrustAuth` 自动填直接复用，**授权盘一次都不再弹**。
+- pattern 点阵串注入格式待实测（pin 已验证 len=6 数字串）。分身逻辑与 beta59 完全一致。
+
+## beta59（versionCode 187，commit a2915e3）——双开根治三层防线（待日志验证）
+1. **HookCloneBypass 发送端釜底抽薪**：分身通知 contentIntent **重建为 userId=999 的 PendingIntent**（全反射，ActivityThread/UserHandle/5 参重载全 @hide）；intent 打 `hf_is_clone` 标记。
+2. **HookRemoteOpen 重排**：先查 `hf_is_clone` 标记 → 远程白名单 caller（userId∈{0,-1}）直接改 999 → 3 秒时序反推兜底；统一走 `redirect()` 入口。
+3. **HookMirrorObserve 全路径观察**：新增 `IActivityTaskManager$Stub$Proxy` startActivity* 家族 hook，日志 `[MIRROR-OBS] ATM.<method>`。
+
+## beta58（versionCode 186，commit 24d4ee9）
+- HookRemoteOpen 全前缀 `startsWith("startActivity")`（milink 实测走 AsCaller/WithOptions/ForUser）。
+- 授权 UI 自动关闭：改 `ActivityThread.mActivities`（框架字段）遍历 finish + hook 框架 `Activity.onResume` 按类名过滤 + `closeAuthViaActivityThread()` 兜底。
+
+## beta57（versionCode 185，commit f127b0f）——system_server 注入根治
+- 恢复新式 libxposed 架构，补 `onSystemServerStarting` 分发（对照 HyperModifier/Vector 机制）；删 `assets/xposed_init` 防 legacy 误判；用户实测注入成功。
+
+## 历史（beta56 及更早，详见 hyperflow-miuix/docs/changelog-latest.md）
+
+## 历史（beta33）
 
 ### 1. 消息列表排序菜单：把"排序依据"和"排序方向"拆成两组单选
 - **问题**：旧菜单把「按发送人 / 按时间」（排序依据）和「切换为正序/倒序」（排序方向）混在同一个单选列表里，选了"按时间+倒序"时，"按时间"和"切换为正序"两项同时打勾，分不清是按什么排、先后怎么定。

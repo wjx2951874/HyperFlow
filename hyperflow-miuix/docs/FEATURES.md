@@ -50,27 +50,36 @@ if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return 
 
 ---
 
-## 功能②-2 点击分身通知 → 打开 999 微信/QQ/飞书/钉钉/企业微信（✅ 部分待验证）
+## 功能②-2 点击分身通知 → 打开 999 微信/QQ/飞书/钉钉/企业微信（✅ 三层防线 beta59 已实现，待 beta60 日志验证）
 
 **原理**：接收端点击分身通知 → 系统"跨设备镜像打开应用"把 Intent 发回发送端 →
-milink 在 **system_server** 执行 `startActivity`（目标包=微信/QQ，userId=0 → 会打开主空间）。
-hook 拦截该调用：
-- 条件：调用者是 `com.milink.service`（或本 App 消息页）&& 目标包 ∈ 支持应用集
-  && 该包在 user 999 空间存在（`/data/user/999/<pkg>` 存在=已开双开）
-- 动作：把 userId 改写为 **999** 重发 → 直接打开多开应用
-- 其余情况（本地打开、其他应用、未开双开）**一律走系统原逻辑**，绝不误伤
+milink/镜像进程在 **system_server** 执行 `startActivity`（目标包=微信/QQ，默认 userId=0 → 会打开主空间造成双开）。
+hook 拦截该调用并改写 userId=999。
+
+**三层防线（beta59 起，全代码落盘）**：
+1. **发送端釜底抽薪（HookCloneBypass）**：分身通知（`sbn.getUser().hashCode()==999`）的 `contentIntent` **重建为 `PendingIntent.getActivity(..., UserHandle(999))`**（全反射，ActivityThread/UserHandle/5 参重载全 @hide）；intent 打 `hf_is_clone` 标记——点击直达分身，不依赖 caller 白名单与时序。
+2. **HookRemoteOpen 重排（system_server）**：`redirectToClone` 先查 `hf_is_clone` 标记（caller 无关直接改 999）→ 远程白名单 caller（ALLOWED_CALLERS 且 userId∈{0,-1}）直接改 999 → 3 秒时序反推兜底；统一走 `redirect()`（有 userId 参数直接 `args.set`，无则 `relaunchAsClone` 吞调用重发 999）。
+3. **HookMirrorObserve 全路径观察**：`IActivityTaskManager$Stub$Proxy` startActivity* 家族 hook（框架类不混淆），日志 `[MIRROR-OBS] ATM.<method>` 显示 mirror 进程实际调用。
+
+**关键历史证据**（beta58 时代 log.old 实锤双开触发点）：
+```
+19:07:27  clone open check: caller=com.xiaomi.mirror pkg=com.tencent.mm userId=0
+19:07:29  clone open: uid=10277 pkg=com.tencent.mm   ← u0 主微信被 mirror 进程拉起
+```
+→ 双开 = **com.xiaomi.mirror（镜像/远控/投屏）以 userId=0 启动微信**；beta58 时序反推（要求 3 秒内有 u999 打开记录）拦不住第一发 u0；beta59 的"远程 caller 直接改 999"即治这条。
 
 **支持应用集**（与小米互联「支持的应用」列表中的第三方 App 对齐，v0.5.4 起）：
 微信 `com.tencent.mm` / QQ `com.tencent.mobileqq` / 飞书 `com.ss.android.lark`（含国际版 `com.larksuite.cn`）/
 钉钉 `com.alibaba.android.rimet` / 企业微信 `com.tencent.wework`
 
-**代码位置**：`java/com/hyperflowplus/hooks/HookRemoteOpen.java`（注入 system_server，`android` 作用域）
+**代码位置**：`java/com/hyperflowplus/hooks/HookRemoteOpen.java`（注入 system_server）、`HookCloneBypass.java`（milink）、`HookMirrorObserve.java`（mirror/system_server）
 **关键实现细节**：
 - 无 `int userId` 参数的重载（`startActivity(intent)`）也要拦——反射 `IActivityTaskManager.startActivityAsUser` 11 参重载以 user 999 重发
-- `ALLOWED_CALLERS` / `EXCLUDED_CALLERS` 白黑名单见文件头注释
+- `ALLOWED_CALLERS` = `{com.milink.service, com.xiaomi.mirror, com.hyperflowplus}`；`EXCLUDED_CALLERS` = `{com.miui.home, com.android.launcher3, com.miui.systemui, android}`（本地打开/系统 UI 一律放行）
+- `hf_is_clone` 标记优先于 caller 白名单（PendingIntent 路径 caller=目标应用自己，白名单判定会漏）
 - 新增应用只需往 `TARGET_PKGS` 加包名，其余逻辑零改动
 
-**限制**：需用户已开对应 App 的双开（999 空间存在才改写）；未开双开自动回退主空间。
+**限制**：需用户已开对应 App 的双开（999 空间存在才改写）；未开双开自动回退主空间。pattern 时序反推仅在标记/白名单都未命中时兜底。
 
 ---
 
@@ -116,16 +125,21 @@ hook 拦截该调用：
 
 ---
 
-## 功能⑤ 自动输锁屏密码（🔲 占位，P1）
+## 功能⑤ 妙享直通：远控授权自动填 + 授权 UI 自动关闭（✅ beta60 已实现，待全量日志验收）
 
-**现状**：开关与密码存储已实现（`auto_unlock` + `auto_unlock_pwd`，明文，使用者自行填写）；
-hook 为**占位实现**（只记录开关状态），功能待 P0 验证。
+**目标**：远控/流转连接时，授权盘**一次都不弹**——锁屏密码自动捕获、授权时自动填、验证通过自动关 UI。
 
-**候选实现路线（未定）**：
-1. AccessibilityService 监听"输入锁屏密码"弹窗，自动填 Password 并点确认
-2. LSPosed hook SystemUI 的解锁对话框，直接注入密码（需先定位 OS4 弹窗类）
+**三层链路（beta60）**：
 
-**代码位置**：`hooks/HookAutoUnlock.java`
+1. **锁屏凭证捕获（system_server）**：`HookKeyguardCapture` 主通道 = **`com.android.internal.widget.LockSettingsService.checkCredential(LockscreenCredential,int,int)`**（系统锁屏输密码的真正验证入口，**重启后首次解锁必走**）；`LockPatternUtils.verifyCredential` 留兜底。捕获成功 → `CapturedCred.write(type, raw)`（公共文件 `/data/system/hyperflow_captured` + trustservice sp 双写）。
+2. **授权盘自动填（trustservice）**：`HookTrustAuth` / `HookTrustAuthAutoFill` 在授权盘校验入口（`A.d.e(String)`，type 码 1=PIN/2=图案/3=混合）自动注入——`readPublic` → `readLocalSp` 复用捕获凭证，**不再弹授权盘**；预设置凭证（App 内 AES-GCM 录入 `auth_type/auth_secret/auth_pattern`）作为无捕获时的回退。
+3. **授权 UI 自动关闭（trustservice）**：`HookTrustAuthUiClose` 遍历 `ActivityThread.mActivities`（框架字段不混淆）finish 前台 trustservice/lockscreen Activity + hook 框架 `Activity.onResume` 按类名特征过滤 + `closeAuthViaActivityThread()` 兜底。
+
+**补充**：`HookAutoUnlock`（milink 进程）hook `MiLinkUnlockAppFunctions.unlockSwitch` 直过，提供"跳过验证"的另一条路（`silent_auth` 开关）。
+
+**代码位置**：`hooks/HookKeyguardCapture.java`、`hooks/HookTrustAuth.java`、`hooks/HookTrustAuthAuto.java`、`hooks/HookTrustAuthAutoFill.java`、`hooks/HookTrustAuthUiClose.java`、`hooks/CapturedCred.java`、`hooks/HookAutoUnlock.java`
+
+**已知限制**：pattern 的 `LockscreenCredential.getCredential()` 返回点阵串，注入格式待实测；捕获依赖"重启后首次解锁输密码"这一真实入口（指纹/面部解锁不触发）。
 
 ---
 

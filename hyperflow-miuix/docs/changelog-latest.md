@@ -1,13 +1,29 @@
-# HyperFlow 1.1.0-beta53 更新日志
+# HyperFlow 1.1.0-beta60 更新日志
 
-## 一、system_server 注入从未生效的总根因修复（XposedEntry 不在主 dex）——beta53 方案终版生效
-- **根因**：Compose 引入后 App 变为多 dex，D8 把 XposedEntry 及其依赖分到 classes3.dex，**主 dex（classes.dex）里没有 XposedEntry**。system_server 由 zygote fork，LSPosed 在 zygote 期只从模块主 dex 加载 XposedEntry → 找不到 → **静默跳过 system_server 注入**（modules.log 里 `(system)` 只有 HyperCeiler，无 HyperFlow）。
-- **表现**（用户实测）：分身微信点击拉镜像主微信依旧同时打开主微信（HookRemoteOpen 点击通知重定向 999 分身空间从未运行，系统默认在主用户打开）；锁屏密码捕获（HookKeyguardCapture 也在 system_server）同步失效。
-- **对照**：HyperCeiler 纯 Java 单 dex，XposedEntry 在主 dex → system_server 注入正常。
-- **beta52 失败教训（已存档）**：`app/multiDexKeep.pro` + `multiDexKeepProguard` **实测无效**——AGP 9.4.1 + minSdk 33 下 D8 独立模式（isMinifyEnabled=false）忽略 multiDexKeep，CI 出包后 dex 分配与 beta51 完全相同（XposedEntry 仍在 classes3，主 dex 计数 0）。**不要再走 multiDexKeep 路线**。
-- **beta53 修复（生效）**：开 **R8（isMinifyEnabled=true，isShrinkResources=false）** + `app/proguard-rules.pro`（keep XposedEntry/hooks.**/MiflowLog/BuildConfig/Config + kotlinx.serialization 规则 + hiddenapibypass + dontwarn libxposed）——R8 模式 keep 类强制进主 dex。**验证实锤**：CI 出包（run 40155818437）APK 被 R8 压成**单 dex（classes.dex 3.09MB）**，`strings classes.dex | grep -c com/hyperflowplus/XposedEntry` = **1**；17 个 hooks 类全部保留。
-- **验证方式**：装机重启后 LSPosed 日志应出现 `=== HyperFlow loaded in system_server ===` 与 `HookRemoteOpen[system] installed`；分身点击拉镜像不再开主微信。
-- **待用户实测**：装 beta53 重启设备抓 LSPosed 日志验证注入；分身点击拉镜像不再开主微信。
+## beta60（versionCode 188，commit fd2eff2）——锁屏密码捕获主通道改造
+- **锁屏凭证捕获**：主通道从 `LockPatternUtils.verifyCredential`（实测 0 捕获，非真实入口）改为 **`com.android.internal.widget.LockSettingsService.checkCredential(LockscreenCredential,int,int)`**——system_server 内锁屏输密码的真正验证入口，**重启后首次解锁必走**；`verifyCredential` 保留兜底。
+- 捕获走 `CapturedCred.write(type, raw)`（公共文件 `/data/system/hyperflow_captured` + trustservice sp），`HookTrustAuth` / `HookTrustAuthAutoFill` 自动填直接复用（`readPublic` → `readLocalSp`），授权盘一次都不再弹。
+- **格式注意**：pattern 的 `LockscreenCredential.getCredential()` 返回点阵串，注入格式待实测（pin 已验证 len=6 数字串）。
+- 分身逻辑与 beta59 完全一致，无行为变更。
+
+## beta59（versionCode 187，commit a2915e3）——双开根治三层防线（待 beta60 全量日志验证）
+1. **HookCloneBypass 发送端釜底抽薪**：`markCloneTitle` 只对 `sbn.getUser().hashCode()==999` 的分身通知动手，把 `n.contentIntent` **重建为 `PendingIntent.getActivity(..., UserHandle(999))`**（全反射，ActivityThread/UserHandle/5 参重载全 @hide）；intent 打 `hf_is_clone` 标记供 HookRemoteOpen 兜底识别。
+2. **HookRemoteOpen 重排**：`redirectToClone` 先查 `hf_is_clone` 标记（caller 无关直接改 999）→ 远程白名单 caller（ALLOWED_CALLERS 且 userId∈{0,-1}）直接改 999 → 3 秒时序反推兜底；统一走 `redirect()` 入口（有 userId 参数直接 `args.set`，无则 `relaunchAsClone` 吞调用重发 999）。
+3. **HookMirrorObserve 全路径观察**：新增 `android.app.IActivityTaskManager$Stub$Proxy` 的 startActivity* 家族 hook（框架类不混淆），日志 `[MIRROR-OBS] ATM.<method>` 显示 mirror 进程实际调用。
+
+## beta58（versionCode 186，commit 24d4ee9）——双开/授权 UI 修复
+- **HookRemoteOpen 全前缀**：`startsWith("startActivity")` 覆盖 AsCaller/WithOptions/ForUser（milink 实测走这些，beta57 只 hook startActivity/AsUser 漏网）。
+- **授权 UI 自动关闭**：删混淆字段 f1753J 反射，改 `ActivityThread.mActivities`（框架字段不混淆）遍历 finish 前台 trustservice/lockscreen Activity；HookTrustAuthAuto 的 hookAuthUi 改 hook 框架 `Activity.onResume` 按类名特征过滤 + `closeAuthViaActivityThread()` 双重兜底。
+
+## beta57（versionCode 185，commit f127b0f）——system_server 注入根治
+- 恢复新式 libxposed 架构；补 `onSystemServerStarting` 分发（对照 HyperModifier/Vector 的 `SystemServerHookers.kt`）；`git rm assets/xposed_init` 防 legacy 误判；用户实测注入成功（system_server 四条绿 hook）。
+- 根因回溯：Compose 引入后多 dex，D8 把 XposedEntry 分到 classes3 → 主 dex 无入口 → system_server 静默跳过注入（beta53 已用 R8 单 dex 解决，beta55/56 legacy 化实测无效被否决）。
+
+## 历史（beta56 及更早）
+### beta56：修复 hook 桥双执行 + legacy 探针兜底并出包（用户实测否决 legacy 化路线）
+### beta55：legacy 化尝试（被 beta56 用户实测否决，"legacy 不影响功能"不成立）
+### beta54：拉回新式基线
+### beta53：system_server 注入总根因修复——R8 单 dex 方案生效
 
 ## 历史（beta51）
 ## 历史（beta51）

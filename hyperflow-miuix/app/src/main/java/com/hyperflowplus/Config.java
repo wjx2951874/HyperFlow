@@ -60,9 +60,9 @@ public final class Config {
     public static final String KEY_SMS_PERSIST = "sms_persist";             // 功能③ 短信持久化
     public static final String KEY_ARCHIVE_APP = "archive_app";                // ③ App 内消息归档开关（关=消息页不显示）
     public static final String KEY_SMS_NUMERIC_ONLY = "sms_numeric_only";   // ③ 仅纯数字号码写入收件箱
-    public static final String KEY_AUTO_UNLOCK = "auto_unlock";             // 功能⑤（P1）自动输锁屏密码开关
-    public static final String KEY_AUTO_UNLOCK_PASSWORD = "auto_unlock_pwd"; // 功能⑤（P1）明文密码，用户自行填写
-    public static final String KEY_SILENT_AUTH = "silent_auth";              // 妙享直通：远控连接自动跳过密码验证
+    public static final String KEY_AUTO_UNLOCK = "auto_unlock";             // 功能⑤ 妙享直通：远控授权自动跳过（旧开关，兼容）
+    public static final String KEY_AUTO_UNLOCK_PASSWORD = "auto_unlock_pwd"; // 功能⑤ 旧版明文密码（已被 KEY_AUTH_* AES 加密凭证取代，仅兼容读取）
+    public static final String KEY_SILENT_AUTH = "silent_auth";              // 妙享直通：远控连接自动跳过密码验证（HookAutoUnlock.unlockSwitch 直过）
     // 妙享直通预存锁屏凭证（供 HookTrustAuth 在 trustservice 授权盘自动填入）
     public static final String KEY_AUTH_TYPE = "auth_type";                 // pin / password / pattern
     public static final String KEY_AUTH_SECRET = "auth_secret";             // AES-GCM 加密的 PIN/混合密码

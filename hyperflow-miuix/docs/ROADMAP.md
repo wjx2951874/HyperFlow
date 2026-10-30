@@ -35,6 +35,15 @@
 
 | 项 | 说明 | 验证点 |
 |---|---|---|
+| system_server 注入根治 | beta57（`onSystemServerStarting` 新式通道，对照 HyperModifier/Vector 机制） | 已实测注入成功（四条绿 hook）；装包重启后 LSPosed 日志见 `HyperFlow loaded in system_server` |
+| 双开根治三层防线 | beta59（发送端重建 999 PendingIntent + 远程 caller 直改 999 + ATM 全路径观察） | **待 beta60 全量日志验证**：`clone open check: caller=com.xiaomi.mirror` → `remote caller ... redirecting` |
+| 锁屏凭证捕获主通道 | beta60（`LockSettingsService.checkCredential`，重启后首次解锁必走） | 待验证：重启输密码解锁 → 授权盘一次都不弹 |
+| 授权 UI 自动关闭 | beta58（mActivities 遍历 + onResume 过滤 + closeAuthViaActivityThread 兜底） | 待验证：验证通过 UI 自动消失（期望日志 `verify OK, UI closed via mActivities`） |
+
+## ⏳ 已实现，待真机验证（v0.5.3 刚改，用户未最终确认）
+
+| 项 | 说明 | 验证点 |
+|---|---|---|
 | 悬浮 + 玻璃同开 | v0.5.3 重构为 InstallerX 结构，不再闪退 | 同时开启不闪退、玻璃折射可见 |
 | 分身只出一条 | v0.5.3 跨进程去重（内容指纹 + 共享文件） | 分身通知不再重复出现两条 |
 | 点击【分身】开 999 | v0.5.1 HookRemoteOpen 重写 + v0.5.4 扩展飞书/钉钉/企业微信 | 点带【分身】的通知拉起 999 空间微信/QQ/飞书/钉钉/企业微信 |
@@ -46,7 +55,6 @@
 |---|---|---|
 | 悬浮胶囊"整体位置移动" | 把整条悬浮导航栏拖到屏幕任意位置 | **用户已澄清不要**：要的是"选中项拖动切 tab"（✅ v0.5.3 已实现），不做整体位置拖拽 |
 | KSU"点更新直接弹日志" | 模块详情页更新按钮也显示 changelog | KernelSU 源码交互如此（只有主页"新版本可用"卡片点击弹日志），模块无法改变；备选=把详情页更新提示换成日志样式，方案未定 |
-| 自动输锁屏密码（P1） | 重启后被妙享桌面拦截时自动输密码 | 占位实现；候选路线：无障碍监听 / hook SystemUI 解锁对话框（未定） |
 | 分身镜像一键方案 | 直接"拉 999 用户权限"而不是依赖点击链路 | 用户问过"能不能把拉主微信变成拉 999"；当前 HookRemoteOpen 已覆盖点击场景，镜像方案的独立需求未落码 |
 | 澎湃 OS 版本串补全 | 设备信息中的澎湃 OS 版本识别更全 | 已补过一批，仍可能有新版本串未覆盖 |
 | 消息来源标记增强 | 本地/云端数据来源更明确（liveAvailable 已有基础） | 用户提过"小米端读不到就是本地，要显示一下"；当前消息页已有（本地）标注 |
