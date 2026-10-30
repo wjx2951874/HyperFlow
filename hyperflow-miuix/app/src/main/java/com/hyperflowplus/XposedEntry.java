@@ -20,6 +20,9 @@ import com.hyperflowplus.hooks.HookTrustAuthUiClose;
 
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * HyperFlow —— libxposed API 102 入口（LSPosed/Vector 新框架）。
@@ -45,12 +48,48 @@ public class XposedEntry extends XposedModule {
 
     private static volatile XposedEntry instance;
 
+    // system_server 级 hook 幂等闸门：onSystemServerStarting 与 onPackageLoaded("android"/"system")
+    // 双通道都可能触发，只允许真正安装一次，避免同一方法被重复 hook。
+    private static final AtomicBoolean SYSTEM_HOOKS_INSTALLED = new AtomicBoolean();
+
     public XposedEntry() {
         instance = this;
     }
 
     public static XposedEntry get() {
         return instance;
+    }
+
+    /**
+     * Vector/JingMatrix 系框架在 system_server 启动时必然回调此方法（startBootstrapServices 触发，
+     * 见 Vector SystemServerHookers.StartBootstrapServicesHooker → dispatchSystemServerStarting），
+     * 是"新式模块注入 system_server"最可靠的入口（对照 HyperModifier MyHyperModifier.onSystemServerStarting）。
+     * onPackageLoaded 依赖 LoadedApk hook 命中，在部分框架/system_server 场景不触发，故双通道双保险。
+     */
+    @Override
+    public void onSystemServerStarting(SystemServerStartingParam param) {
+        markLoaded();
+        ClassLoader cl = param.getClassLoader();
+        try {
+            MiflowLog.i("=== HyperFlow onSystemServerStarting (system_server entry) ===");
+            installSystemHooks(cl);
+        } catch (Throwable t) {
+            MiflowLog.e("XposedEntry onSystemServerStarting init failed", t);
+        }
+    }
+
+    /** 安装 system_server 级 hook（分身点击拦截 + 锁屏凭证捕获），幂等。 */
+    private static void installSystemHooks(ClassLoader cl) {
+        if (!SYSTEM_HOOKS_INSTALLED.compareAndSet(false, true)) {
+            MiflowLog.i("system hooks already installed, skip");
+            return;
+        }
+        installSafely("HookRemoteOpen[system]", new Runnable() {
+            @Override public void run() { HookRemoteOpen.installSystem(cl); }
+        });
+        installSafely("HookKeyguardCapture", new Runnable() {
+            @Override public void run() { HookKeyguardCapture.install(cl); }
+        });
     }
 
     @Override
@@ -68,12 +107,7 @@ public class XposedEntry extends XposedModule {
             //  "系统框架 system" 与 "Android系统 android" 是两个条目，注入用 system）。
             try {
                 MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect + keyguard capture, pkgName=" + pkgName + ") ===");
-                installSafely("HookRemoteOpen[system]", new Runnable() {
-                    @Override public void run() { HookRemoteOpen.installSystem(cl); }
-                });
-                installSafely("HookKeyguardCapture", new Runnable() {
-                    @Override public void run() { HookKeyguardCapture.install(cl); }
-                });
+                installSystemHooks(cl);
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry system init failed", t);
             }
