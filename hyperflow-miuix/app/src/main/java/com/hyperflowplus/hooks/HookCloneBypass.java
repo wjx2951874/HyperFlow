@@ -142,23 +142,42 @@ public class HookCloneBypass {
             if (n == null || n.extras == null) {
                 return;
             }
-            // 给分身通知的"打开 Intent"打上 hf_is_clone 标记：
-            // 点击通知时系统会用 contentIntent 里的 Intent 发起 startActivity，
-            // HookRemoteOpen 检查到该标记就直接改写为 999 空间，
-            // 不再依赖"先收到 u999 打开、3 秒内再收到 u0"的时序反推（该时序有竞态，
-            // 第一发 u0 先到时主微信会被误放行 → 两个微信都被拉起）。
+            // beta59：把 contentIntent 重建为 userId=999 的 PendingIntent——本机点击分身通知
+            // 直接开分身空间，不依赖 HookRemoteOpen 的时序反推/标记（实测 PendingIntent 启动时
+            // caller=目标应用自己，被 HookRemoteOpen 白名单放行 → u0 被开 → 双开）。
+            // 同时给 intent 打 hf_is_clone 标记，供 system_server 侧 PendingIntent 路径兜底识别。
             try {
                 android.app.PendingIntent pi = n.contentIntent;
                 if (pi != null) {
-                    // getIntent() 是 API 33+ 方法，编译期按 minSdk 不可直接调用，用反射（运行期必在 Android 14+）
                     java.lang.reflect.Method gm = android.app.PendingIntent.class.getMethod("getIntent");
                     Intent ci = (Intent) gm.invoke(pi);
                     if (ci != null) {
                         ci.putExtra(HF_IS_CLONE, true);
+                        // ActivityThread 是 @hide 类，公共 stub 里没有，用反射拿 currentApplication
+                        Class<?> atCls = Class.forName("android.app.ActivityThread");
+                        Object app = atCls.getMethod("currentApplication").invoke(null);
+                        android.content.Context ctx = (android.content.Context) app;
+                        if (ctx != null) {
+                            java.lang.reflect.Method rm = android.app.PendingIntent.class.getMethod("getRequestCode");
+                            java.lang.reflect.Method fm = android.app.PendingIntent.class.getMethod("getFlags");
+                            int req = (Integer) rm.invoke(pi);
+                            int flags = (Integer) fm.invoke(pi);
+                            // getActivity(Context,int,Intent,int,UserHandle)：@hide 重载，公共 stub 不可见，
+                            // 且 UserHandle(int)/of(int) 也不可见 → 全程反射（运行期均为 public，Android 14+ 必然存在）。
+                            Object uh = Class.forName("android.os.UserHandle")
+                                    .getConstructor(int.class).newInstance(999);
+                            java.lang.reflect.Method gam = android.app.PendingIntent.class.getMethod(
+                                    "getActivity", android.content.Context.class, int.class,
+                                    Intent.class, int.class, android.os.UserHandle.class);
+                            android.app.PendingIntent newPi = (android.app.PendingIntent) gam.invoke(
+                                    null, ctx, req, ci, flags, uh);
+                            n.contentIntent = newPi;
+                            MiflowLog.d("clone contentIntent rebuilt -> user 999");
+                        }
                     }
                 }
             } catch (Throwable t) {
-                MiflowLog.w("markCloneTitle intent tag failed: " + t.getMessage());
+                MiflowLog.w("markCloneTitle contentIntent rebuild failed: " + t.getMessage());
             }
             CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
             if (title == null || title.length() == 0) {

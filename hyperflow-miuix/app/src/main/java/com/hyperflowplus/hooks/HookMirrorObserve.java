@@ -32,7 +32,61 @@ public class HookMirrorObserve {
         hookStartActivity(cl);
         hookPendingIntentSend(cl);
         hookObfuscatedRelay(cl);
+        hookAtmProxy(cl);
         MiflowLog.i("HookMirrorObserve installed (diagnostic, read-only)");
+    }
+
+    /** 观测 mirror 进程内所有 IActivityTaskManager.startActivity* Binder 代理调用（框架类不混淆，全路径兜底） */
+    private static void hookAtmProxy(ClassLoader cl) {
+        try {
+            Class<?> proxy = Class.forName("android.app.IActivityTaskManager$Stub$Proxy", false, cl);
+            int found = 0;
+            for (Method m : proxy.getDeclaredMethods()) {
+                if (!m.getName().startsWith("startActivity")) {
+                    continue;
+                }
+                boolean hasIntent = false;
+                for (Class<?> t : m.getParameterTypes()) {
+                    if (Intent.class.isAssignableFrom(t)) {
+                        hasIntent = true;
+                        break;
+                    }
+                }
+                if (!hasIntent) {
+                    continue;
+                }
+                m.setAccessible(true);
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                try {
+                                    StringBuilder sb = new StringBuilder();
+                                    for (Object a : chain.getArgs()) {
+                                        if (a instanceof Intent) {
+                                            Intent it = (Intent) a;
+                                            sb.append(" intent=").append(it.getComponent())
+                                              .append(" flags=0x").append(Integer.toHexString(it.getFlags()))
+                                              .append(" userId=").append(it.getIntExtra("android.intent.extra.USER_ID", -1));
+                                        } else {
+                                            sb.append(" ").append(a == null ? "null" : a.getClass().getSimpleName());
+                                        }
+                                    }
+                                    MiflowLog.i("[MIRROR-OBS] ATM." + m.getName() + sb
+                                            + " stack=" + stackTop());
+                                } catch (Throwable t) {
+                                    MiflowLog.w("[MIRROR-OBS] ATM observe failed: " + t.getMessage());
+                                }
+                                return chain.proceed();
+                            }
+                        });
+                found++;
+            }
+            MiflowLog.i("[MIRROR-OBS] ATM proxy hooked " + found + " startActivity* methods");
+        } catch (Throwable t) {
+            MiflowLog.w("[MIRROR-OBS] hookAtmProxy failed: " + t.getMessage());
+        }
     }
 
     /** 观测 mirror 进程内所有 Context.startActivity：打 component/pkg/flags/目标屏 + 调用栈 */

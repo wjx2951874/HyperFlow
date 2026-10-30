@@ -187,16 +187,7 @@ public class HookRemoteOpen {
             if (!Config.isCloneTransferEnabled()) {
                 return chain.proceed();
             }
-            // 1) 调用者必须属于允许集（小米互联远程打开 / 本 App 消息页）；
-            //    明确排除桌面/系统（手动开主空间绝不改写）
-            String caller = findCallingPackage(args, idx);
-            if (caller == null || EXCLUDED_CALLERS.contains(caller)) {
-                return chain.proceed();
-            }
-            if (!ALLOWED_CALLERS.contains(caller)) {
-                return chain.proceed();
-            }
-            // 2) 目标包必须是支持应用集（微信/QQ/飞书/钉钉/企业微信）
+            // 1) 目标包必须是支持应用集（微信/QQ/飞书/钉钉/企业微信）
             Intent intent = findIntent(args);
             if (intent == null || intent.getComponent() == null) {
                 return chain.proceed();
@@ -205,57 +196,69 @@ public class HookRemoteOpen {
             if (!TARGET_PKGS.contains(pkg)) {
                 return chain.proceed();
             }
-            // 3) 当前请求是主空间（userId==0；startActivity 系列无 userId 参数=默认主空间 0）
-            //    且该应用已开双开（999 空间存在）
-            // beta54：userIdIdx==-1（startActivity 无 userId 参数）→ 按主空间 0 语义处理，
-            // 不再被"末尾 flags int"误判成非 0 用户而放行（这是两个都开的根因）
-            int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
-            MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
-                + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
-            
-            // 识别"分身通知点击"（V1.1.0-beta10 重构：请求自描述，摆脱时序竞态）
-            // 之前的反推法（先收到 u999 打开、3 秒内再收到 u0 → 认为分身通知）有竞态：
-            // 第一发 u0 经常在 u999 之前到达 → 被判成"主通知"放行 → 主微信先被拉起，
-            // 随后分身再开 → "两个微信都起来"。现在优先看请求自带的 hf_is_clone 标记：
-            boolean isCloneMarked = intent.getBooleanExtra(HF_IS_CLONE, false);
-            if (!isCloneMarked) {
-                // 标记缺失时兜底用旧的"最近 u999 打开时间"反推（兼容标记在链路中丢失的情况）
-                if (userId == USER_CLONE) {
-                    lastCloneOpenTime = System.currentTimeMillis();
-                    MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
-                    return chain.proceed();
-                }
-                if (userId != 0) {
-                    return chain.proceed();
-                }
-                long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
-                if (sinceClone > 3000) {
-                    MiflowLog.d("clone open: no clone marker & no recent clone open (" + sinceClone + "ms ago), main notification, skip");
-                    return chain.proceed();
-                }
-            }
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 MiflowLog.d("clone open: " + pkg + " not dual-installed, fallback to main user");
                 return chain.proceed();
             }
-            MiflowLog.d("clone open: detected clone notification (marker=" + isCloneMarked + "), redirecting to user " + USER_CLONE);
-            if (idx[1] >= 0) {
-                // 4a) 有 userId 参数（startActivityAsUser）：直接改写为 999
-                args.set(idx[1], USER_CLONE);
-                MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
-                Config.bump(Config.CNT_CLONE);
-            } else {
-                // 4b) startActivity 无 userId 参数（系统默认主空间打开）：
-                //     吞掉原调用，改用 IActivityTaskManager.startActivityAsUser 以 999 重发。
-                //     反射失败/不可用时兜底走原逻辑，绝不误伤本地打开。
-                if (relaunchAsClone(chain, intent, pkg)) {
-                    MiflowLog.d("clone open relaunched: " + pkg + " → user " + USER_CLONE);
-                    Config.bump(Config.CNT_CLONE);
-                    return null;
+            // 2) 自描述标记优先（beta59）：分身通知点击的 intent 带 hf_is_clone。
+            //    PendingIntent 启动时 caller=目标应用自己（微信），白名单判断会放行 → 主微信被开 → 双开。
+            //    有标记即确认是"点击分身通知"，直接改 999，不依赖 caller 白名单。
+            boolean isCloneMarked = intent.getBooleanExtra(HF_IS_CLONE, false);
+            if (isCloneMarked) {
+                MiflowLog.d("clone open: marker hit (caller-independent), redirecting " + pkg + " -> " + USER_CLONE);
+                return redirect(args, idx, chain, intent, pkg);
+            }
+            // 3) 远程打开请求（beta59 简化）：caller ∈ 白名单（milink/mirror/hyperflow）且主空间打开
+            //    → 只可能来自流转/镜像，直接改 999，不再要求时序反推（反推有竞态，第一发 u0 先到会误放行）。
+            String caller = findCallingPackage(args, idx);
+            if (caller != null && ALLOWED_CALLERS.contains(caller)) {
+                int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
+                if (userId == 0 || userId == -1) {
+                    MiflowLog.d("clone open: remote caller " + caller + ", redirecting " + pkg + " -> " + USER_CLONE);
+                    return redirect(args, idx, chain, intent, pkg);
                 }
             }
+            // 4) 时序反推兜底（beta59 保留）：无标记、非白名单 caller（如桌面/微信自己）时，
+            //    仅当 3 秒内有过 u999 打开记录才认为这是分身通知的配套启动。
+            if (caller != null && EXCLUDED_CALLERS.contains(caller)) {
+                return chain.proceed();
+            }
+            int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
+            MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
+                + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
+            if (userId == USER_CLONE) {
+                lastCloneOpenTime = System.currentTimeMillis();
+                MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
+                return chain.proceed();
+            }
+            if (userId != 0) {
+                return chain.proceed();
+            }
+            long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
+            if (sinceClone > 3000) {
+                MiflowLog.d("clone open: no clone marker & no recent clone open (" + sinceClone + "ms ago), main notification, skip");
+                return chain.proceed();
+            }
+            MiflowLog.d("clone open: detected clone notification (recent u999), redirecting to user " + USER_CLONE);
+            return redirect(args, idx, chain, intent, pkg);
         } catch (Throwable t) {
             MiflowLog.w("redirectToClone failed: " + t.getMessage());
+        }
+        return chain.proceed();
+    }
+
+    /** 统一改写入口：有 userId 参数直接改；无则吞掉原调用用 startActivityAsUser(999) 重发。 */
+    private static Object redirect(List<Object> args, int[] idx, Chain chain, Intent intent, String pkg) throws Throwable {
+        if (idx[1] >= 0) {
+            args.set(idx[1], USER_CLONE);
+            MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
+            Config.bump(Config.CNT_CLONE);
+            return chain.proceed();
+        }
+        if (relaunchAsClone(chain, intent, pkg)) {
+            MiflowLog.d("clone open relaunched: " + pkg + " → user " + USER_CLONE);
+            Config.bump(Config.CNT_CLONE);
+            return null;
         }
         return chain.proceed();
     }
