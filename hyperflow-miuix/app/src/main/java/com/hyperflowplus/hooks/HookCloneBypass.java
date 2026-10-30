@@ -154,44 +154,55 @@ public class HookCloneBypass {
             // requestCode/flags 原值跨进程拿不到，用合理默认值重建即可（requestCode=0、
             // flags=FLAG_UPDATE_CURRENT|FLAG_IMMUTABLE=0xC000000），不影响"打开分身应用"目标。
             // 同时给 intent 打 hf_is_clone 标记，供 system_server 侧 PendingIntent 路径兜底识别。
+            // 修复：不读原 contentIntent 的 Intent——Android 12+ 跨进程
+            // PendingIntent.getIntent() 对 IMMUTABLE 且跨 uid 的 PI 抛 SecurityException，
+            // 反射包成 InvocationTargetException（日志 rebuild failed: InvocationTargetException）。
+            // 改用包名构造"打开分身应用"的 Intent，再用 @hide getActivityAsUser 造 999 PI。
             try {
                 android.app.PendingIntent pi = n.contentIntent;
                 if (pi == null) {
                     MiflowLog.w("markCloneTitle: contentIntent is null, skip rebuild");
                 } else {
-                    java.lang.reflect.Method gm = android.app.PendingIntent.class.getMethod("getIntent");
-                    Intent ci = (Intent) gm.invoke(pi);
-                    if (ci == null) {
-                        MiflowLog.w("markCloneTitle: getIntent() returned null (cross-process restricted), skip rebuild");
+                    String pkg = sbn.getPackageName();
+                    if (pkg == null || pkg.isEmpty()) {
+                        MiflowLog.w("markCloneTitle: packageName is null, skip rebuild");
                     } else {
-                        ci.putExtra(HF_IS_CLONE, true);
-                        // ActivityThread 是 @hide 类，公共 stub 里没有，用反射拿 currentApplication
+                        Intent launch = new Intent(Intent.ACTION_MAIN);
+                        launch.addCategory(Intent.CATEGORY_LAUNCHER);
+                        launch.setPackage(pkg);
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        launch.putExtra(HF_IS_CLONE, true);
+
                         Class<?> atCls = Class.forName("android.app.ActivityThread");
                         Object app = atCls.getMethod("currentApplication").invoke(null);
                         android.content.Context ctx = (android.content.Context) app;
                         if (ctx == null) {
                             MiflowLog.w("markCloneTitle: currentApplication() is null, skip rebuild");
                         } else {
+                            // UserHandle.of(int) 是 public API，比 @hide 构造器更稳
                             Object uh = Class.forName("android.os.UserHandle")
-                                    .getConstructor(int.class).newInstance(999);
+                                    .getMethod("of", int.class).invoke(null, 999);
                             java.lang.reflect.Method gam = android.app.PendingIntent.class.getMethod(
                                     "getActivityAsUser", android.content.Context.class, int.class,
                                     Intent.class, int.class, android.os.Bundle.class,
                                     android.os.UserHandle.class);
+                            // FLAG_UPDATE_CURRENT(0x08000000) | FLAG_IMMUTABLE(0x04000000)
                             android.app.PendingIntent newPi = (android.app.PendingIntent) gam.invoke(
-                                    null, ctx, 0, ci, 0xC000000, null, uh);
+                                    null, ctx, 0, launch, 0x0C000000, null, uh);
                             if (newPi == null) {
                                 MiflowLog.w("markCloneTitle: getActivityAsUser returned null, skip rebuild");
                             } else {
                                 n.contentIntent = newPi;
-                                MiflowLog.d("clone contentIntent rebuilt -> user 999");
+                                MiflowLog.d("clone contentIntent rebuilt -> user 999 (fresh launch)");
                             }
                         }
                     }
                 }
             } catch (Throwable t) {
                 MiflowLog.w("markCloneTitle contentIntent rebuild failed: "
-                        + t.getClass().getName() + ": " + t.getMessage());
+                        + t.getClass().getName() + ": " + t.getMessage()
+                        + (t.getCause() != null ? " / cause=" + t.getCause().getClass().getName()
+                                + ": " + t.getCause().getMessage() : ""));
             }
             CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
             if (title == null || title.length() == 0) {
