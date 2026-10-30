@@ -80,8 +80,29 @@ public class HookKeyguardCapture {
     /** 主通道：hook LockSettingsService.checkCredential(LockscreenCredential,int,int) */
     private static boolean hookCheckCredential(ClassLoader cl) {
         try {
-            Class<?> lss = Class.forName("com.android.internal.widget.LockSettingsService");
+            // beta61 修复：AOSP 中 LockSettingsService 的真实路径是
+            // com.android.server.locksettings.LockSettingsService（services.jar），
+            // 旧代码写的 com.android.internal.widget.LockSettingsService 不存在，
+            // 必然 ClassNotFoundException（真机日志实锤），主通道从未生效。
+            // 双类名兜底，避免个别 ROM 分支路径不同。
             final Class<?> lc = Class.forName("com.android.internal.widget.LockscreenCredential");
+            Class<?> lss = null;
+            String usedName = null;
+            for (String name : new String[]{
+                    "com.android.server.locksettings.LockSettingsService",
+                    "com.android.internal.widget.LockSettingsService"}) {
+                try {
+                    lss = Class.forName(name, false, cl);
+                    usedName = name;
+                    break;
+                } catch (Throwable ignore) {
+                }
+            }
+            if (lss == null) {
+                MiflowLog.w("HookKeyguardCapture: LockSettingsService not found in either path");
+                return false;
+            }
+            MiflowLog.i("HookKeyguardCapture: LockSettingsService = " + usedName);
             for (Method m : lss.getDeclaredMethods()) {
                 if (!m.getName().equals("checkCredential")) {
                     continue;
