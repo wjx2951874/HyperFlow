@@ -142,42 +142,56 @@ public class HookCloneBypass {
             if (n == null || n.extras == null) {
                 return;
             }
-            // beta59：把 contentIntent 重建为 userId=999 的 PendingIntent——本机点击分身通知
-            // 直接开分身空间，不依赖 HookRemoteOpen 的时序反推/标记（实测 PendingIntent 启动时
-            // caller=目标应用自己，被 HookRemoteOpen 白名单放行 → u0 被开 → 双开）。
+            // beta61 修复：把 contentIntent 重建为 userId=999 的 PendingIntent，让接收端点击
+            // 分身通知时直接开分身空间。mirror 进程实测走 PendingIntent.send（原样 send 发送端
+            // 带过来的 contentIntent）——重建成功就只开 999，重建失败就开 u0 → 双开。
+            //
+            // 实锤根因（hf_b60_clean logcat）：beta59 反射用了不存在的 API——
+            //   PendingIntent 没有 getRequestCode()/getFlags() 公开方法，也没有
+            //   5 参 getActivity(Context,int,Intent,int,UserHandle) 重载（5 参是带 Bundle 的），
+            //   getMethod 必然抛 NoSuchMethodException，重建失败（日志 rebuild failed: null）。
+            // 正确 API 是 @hide 的 getActivityAsUser(Context,int,Intent,int,Bundle,UserHandle)。
+            // requestCode/flags 原值跨进程拿不到，用合理默认值重建即可（requestCode=0、
+            // flags=FLAG_UPDATE_CURRENT|FLAG_IMMUTABLE=0xC000000），不影响"打开分身应用"目标。
             // 同时给 intent 打 hf_is_clone 标记，供 system_server 侧 PendingIntent 路径兜底识别。
             try {
                 android.app.PendingIntent pi = n.contentIntent;
-                if (pi != null) {
+                if (pi == null) {
+                    MiflowLog.w("markCloneTitle: contentIntent is null, skip rebuild");
+                } else {
                     java.lang.reflect.Method gm = android.app.PendingIntent.class.getMethod("getIntent");
                     Intent ci = (Intent) gm.invoke(pi);
-                    if (ci != null) {
+                    if (ci == null) {
+                        MiflowLog.w("markCloneTitle: getIntent() returned null (cross-process restricted), skip rebuild");
+                    } else {
                         ci.putExtra(HF_IS_CLONE, true);
                         // ActivityThread 是 @hide 类，公共 stub 里没有，用反射拿 currentApplication
                         Class<?> atCls = Class.forName("android.app.ActivityThread");
                         Object app = atCls.getMethod("currentApplication").invoke(null);
                         android.content.Context ctx = (android.content.Context) app;
-                        if (ctx != null) {
-                            java.lang.reflect.Method rm = android.app.PendingIntent.class.getMethod("getRequestCode");
-                            java.lang.reflect.Method fm = android.app.PendingIntent.class.getMethod("getFlags");
-                            int req = (Integer) rm.invoke(pi);
-                            int flags = (Integer) fm.invoke(pi);
-                            // getActivity(Context,int,Intent,int,UserHandle)：@hide 重载，公共 stub 不可见，
-                            // 且 UserHandle(int)/of(int) 也不可见 → 全程反射（运行期均为 public，Android 14+ 必然存在）。
+                        if (ctx == null) {
+                            MiflowLog.w("markCloneTitle: currentApplication() is null, skip rebuild");
+                        } else {
                             Object uh = Class.forName("android.os.UserHandle")
                                     .getConstructor(int.class).newInstance(999);
                             java.lang.reflect.Method gam = android.app.PendingIntent.class.getMethod(
-                                    "getActivity", android.content.Context.class, int.class,
-                                    Intent.class, int.class, android.os.UserHandle.class);
+                                    "getActivityAsUser", android.content.Context.class, int.class,
+                                    Intent.class, int.class, android.os.Bundle.class,
+                                    android.os.UserHandle.class);
                             android.app.PendingIntent newPi = (android.app.PendingIntent) gam.invoke(
-                                    null, ctx, req, ci, flags, uh);
-                            n.contentIntent = newPi;
-                            MiflowLog.d("clone contentIntent rebuilt -> user 999");
+                                    null, ctx, 0, ci, 0xC000000, null, uh);
+                            if (newPi == null) {
+                                MiflowLog.w("markCloneTitle: getActivityAsUser returned null, skip rebuild");
+                            } else {
+                                n.contentIntent = newPi;
+                                MiflowLog.d("clone contentIntent rebuilt -> user 999");
+                            }
                         }
                     }
                 }
             } catch (Throwable t) {
-                MiflowLog.w("markCloneTitle contentIntent rebuild failed: " + t.getMessage());
+                MiflowLog.w("markCloneTitle contentIntent rebuild failed: "
+                        + t.getClass().getName() + ": " + t.getMessage());
             }
             CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
             if (title == null || title.length() == 0) {
