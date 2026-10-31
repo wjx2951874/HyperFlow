@@ -1,59 +1,50 @@
-# HyperFlow 1.1.0-beta60 更新日志
+# HyperFlow 1.1.0 更新日志
 
-## beta60（versionCode 188，commit fd2eff2）——锁屏密码捕获主通道改造
-- **锁屏凭证捕获**：主通道从 `LockPatternUtils.verifyCredential`（实测 0 捕获，非真实入口）改为 **`com.android.internal.widget.LockSettingsService.checkCredential(LockscreenCredential,int,int)`**——system_server 内锁屏输密码的真正验证入口，**重启后首次解锁必走**；`verifyCredential` 保留兜底。
-- 捕获走 `CapturedCred.write(type, raw)`（公共文件 + trustservice sp），`HookTrustAuth` 自动填直接复用，**授权盘一次都不再弹**。
-- pattern 点阵串注入格式待实测（pin 已验证 len=6 数字串）。分身逻辑与 beta59 完全一致。
+**正式版发布**（versionCode 201）——本文覆盖 beta61 ~ beta72 全部改进，是这一轮迭代的正式收口版本。
 
-## beta59（versionCode 187，commit a2915e3）——双开根治三层防线（待日志验证）
-1. **HookCloneBypass 发送端釜底抽薪**：分身通知 contentIntent **重建为 userId=999 的 PendingIntent**（全反射，ActivityThread/UserHandle/5 参重载全 @hide）；intent 打 `hf_is_clone` 标记。
-2. **HookRemoteOpen 重排**：先查 `hf_is_clone` 标记 → 远程白名单 caller（userId∈{0,-1}）直接改 999 → 3 秒时序反推兜底；统一走 `redirect()` 入口。
-3. **HookMirrorObserve 全路径观察**：新增 `IActivityTaskManager$Stub$Proxy` startActivity* 家族 hook，日志 `[MIRROR-OBS] ATM.<method>`。
+---
 
-## beta58（versionCode 186，commit 24d4ee9）
-- HookRemoteOpen 全前缀 `startsWith("startActivity")`（milink 实测走 AsCaller/WithOptions/ForUser）。
-- 授权 UI 自动关闭：改 `ActivityThread.mActivities`（框架字段）遍历 finish + hook 框架 `Activity.onResume` 按类名过滤 + `closeAuthViaActivityThread()` 兜底。
+## 核心修复
 
-## beta57（versionCode 185，commit f127b0f）——system_server 注入根治
-- 恢复新式 libxposed 架构，补 `onSystemServerStarting` 分发（对照 HyperModifier/Vector 机制）；删 `assets/xposed_init` 防 legacy 误判；用户实测注入成功。
+### 1. 点击分身通知，不会再把主应用一起拉起来
 
-## 历史（beta56 及更早，详见 hyperflow-miuix/docs/changelog-latest.md）
+这是本轮耗时最久的问题，前后跨了 10 个 beta 版本才从表象追到根因。
 
-## 历史（beta33）
+- **现象**：在另一台设备点击「微信分身」的通知，本机的主微信会被同时拉起（同屏双开）。
+- **排查过程**：日志里重建 PendingIntent 的用户一直是 999（分身），发送层从头到尾是对的；真正把主微信带上屏的，是小米互联里那段「把应用搬到投屏屏」的逻辑——它只按**主空间用户（0）**去查任务，压根没有「这条通知属于 999」的概念，于是永远查到主微信的窗口并搬上去。
+- **最终方案**：在该逻辑的源头接管用户判定——当流程确实是为打开分身而来时，让它按 **999 用户**去查找任务；并保留一层兜底，对搬到投屏屏的动作按任务归属区分，只拦主空间、放行分身。
+- **效果**：点击分身通知时主微信从头到尾不动，同时不影响另一侧正常的微信流转（早期版本曾用过粗拦截，会把分身自己挡住上不了屏，已修正）。
 
-### 1. 消息列表排序菜单：把"排序依据"和"排序方向"拆成两组单选
-- **问题**：旧菜单把「按发送人 / 按时间」（排序依据）和「切换为正序/倒序」（排序方向）混在同一个单选列表里，选了"按时间+倒序"时，"按时间"和"切换为正序"两项同时打勾，分不清是按什么排、先后怎么定。
-- **修复**：菜单拆成两组各自互斥单选——
-  - 排序依据：按发送人 / 按时间
-  - 排序方向：正序 / 倒序
-- 排序存储格式不变（`name_asc/name_desc/time_asc/time_desc`），列表排序逻辑无需改动。
-- 会话详情页「最新在前 / 最早在前」本就是干净的两项单选，未改动。
+### 2. 短信列表排序乱、日期不准
 
-### 2.（回顾）弹窗闪退已在 beta31 根治
-- **问题**：消息排序、显示模式、外观、会话详情排序等 miuix 弹窗菜单点击即崩。
-- **根源**：miuix 菜单内部的 `NavigationBackHandler` 需要 `LocalNavigationEventDispatcherOwner`，菜单被提层到独立 composition 后读不到 entry 内的 owner（null）即抛 `IllegalStateException: No NavigationEventDispatcher was provided`。`renderInRootScaffold=true` 只改绘制层级、补不上 owner。
-- **根治**：在 `AppNavigation` 最外层（`MiuixTheme` 内、`NavDisplay` 外）用 `CompositionLocalProvider` 提供一个兜底空 `NavigationEventDispatcher()`，entry 内 `NavDisplay` 自行覆盖；不再依赖 `renderInRootScaffold` 开关。
+- **主因**：排序比较写成了两个毫秒时间戳相减后强转 `Int`。毫秒差只要超过约 **24.86 天**就会整数溢出翻成负数，比较符号直接反转——本地历史（几个月累积）和实时（刚收到）一起显示时必然触发，所以那个组合下乱得最明显。
+- **次因**：部分旧格式的时间串解析不出来，时间戳被当成 1970 年，这些记录插在正常消息中间，进一步放大错序；去重也因此失配，导致同一条短信显示两遍。
+- **修复**：三处排序全部改为全量长整数比较（永不溢出）；时间解析补齐旧归档格式与秒/毫秒时间戳，加合理性闸门剔除不可能的时间；`content_time` 取不到有效时间时回退同一行的时间戳列；去重在时间不可信时退化为按正文匹配。
+- 会话详情页（点进某个联系人之后的详情列表）的显示口径也随之统一。
 
-### 3. 界面小调整
-- 底部导航第 2 个 tab「流转」改名为「功能」（顶部页名同步）；页面内"通知流转"分组能力名保留。
-- 设置页「版本」标题字重由 Regular 提到 Medium，与其他条目对齐，不再偏细。
-- 双开标识前缀：条目提示改为「现在为【内容】，点击可修改」；编辑弹窗由底部随键盘飘移改为屏幕居中稳定卡片（标题+说明+输入框+取消/保存）。
+---
 
-## 进展（开发埋点，不影响现有行为）
+## 其他改进
 
-### A 方案 · 主动后台静默校验 A-1（只读观测）
-- 新增 `HookTrustAuthAuto`，挂在 `com.xiaomi.trustservice` 的会话建立点 `Z0.b.g()/h()`。
-- 当前为 A-1 观测版：`proceed()` 让原流程照常走（UI 照弹、不抢流程、不回传），随后后台遍历静态单例字段，按"类型 + 值摘要"打印 challenge、回传代理、分支标识，供真实连接日志定位。
-- A-2 待 A-1 日志确认字段后，再接 `verifyCredential → getGatekeeperPasswordHandle → verifyGatekeeperPasswordHandle → getGatekeeperHAT → 按分支回传真 HAT`，实现不用手输、后台自动过校验。
-- 旧被动填值 `HookTrustAuth`（hook `A.d.e` 替换入参）保留不动。
+- **锁屏凭证捕获**：修正主线通道的真实类名路径，锁屏密码/图案的捕获在新版 surfaced 后更稳定，配合妙享直通的自动填充，授权盘基本不用再手动输入。
+- **来电流转**：亮屏状态下的来电补齐通知广播，来电可以正常流转到另一台设备（此前只有锁屏来电会流转）。
+- **模块作用域**：补齐 `com.xiaomi.trustservice`、`com.xiaomi.mirror`、`com.android.incallui`，并对新版框架的「系统框架」双标识（`android` / `system`）同时提供支持，避免勾了系统框架却注不进去。
 
-### A 方案 · A-2 主动静默校验（本版编码，待实机联调）
-- A-1 已在真实连接命中 Risk_B 分支，dump 出单例字段（见 `docs/HANDOFF-next.md` 第 4.3 节）。
-- `HookTrustAuthAuto` 在 `Z0.b.h()` 命中后开后台线程：复用系统 `b.c(type,str)` 构造凭证（PIN/混合密码/图案三型）→ `verifyCredential` 真实校验 → 取真 HAT → 按分支回传（Risk_B→`k.x`、Bind_B→`k.j`）。
-- 不模拟点击、不伪造成功；失败/异常静默放行回手动，**连续失败满 3 次本进程放弃自动**，避免反复触发系统罚时。
-- 待联调：实机确认 `A-2: SUCCESS, HAT sent via k.x`；补 Bind_A(`k.l` 两参)；图案实机验证。
+---
 
-## 已知问题
+## 正式版收口
 
-- A-2 已编码，待实机联调确认自动过；Bind_A/图案分支待补。
-- 电话流转：锁屏可流转，亮屏不行。
+- 仓库清理：移除根目录长期堆积的历史测试 APK（13 个 beta 包 + `HyperFlow-test.apk`）、`releases/` 下 0.4.x 时代的旧刷机包（11 个），以及早期一次性构建脚本。
+- 文档归档：逆向分析、方案推演类技术资料移入 `docs/dev/`，根目录 `docs/` 只保留面向用户的更新日志。
+- 说明文案全面刷新：README、模块内置说明、更新通道描述与此前停留在旧版本号的口径全部对齐到 1.1.0。
+
+---
+
+## 安装与升级
+
+- 全新安装：Root 管理器刷入 `HyperFlow-1.1.0-flashable.zip`，按 README 勾选 6 项作用域后重启。
+- 升级安装：直接覆盖刷入即可，配置与已归档的消息记录均会保留。
+
+## 反馈
+
+功能层面这一轮基本闭环，如果你在实际使用中遇到新的异常，**建议把描述 + 复现步骤 + 日志一起发**到酷安 @翰德姆，定位会快很多。
