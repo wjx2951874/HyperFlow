@@ -506,6 +506,7 @@ public class HookMirrorCloneOpen {
                 hooked++;
             }
             MiflowLog.i("[MIRROR-FIX] HookD task-move hooked " + hooked + " methods");
+            hookMyUserId(cl);
         } catch (Throwable t) {
             MiflowLog.w("[MIRROR-FIX] hookTaskMove failed: " + t.getMessage());
         }
@@ -522,6 +523,61 @@ public class HookMirrorCloneOpen {
             }
         }
         return -1;
+    }
+
+    // ------------------------------------------------------------------
+    // Hook E（beta70，最源头）：让 moveAppToDisplay 按 user 999 查 task
+    //
+    // 反编译终点：SystemOsHelper.f(pkg, from, to, cb)（日志 moveAppToDisplay）内部
+    //   int[] tasks = u0.r(fromDisplay, u0.x0(), pkg);
+    //   u0.x0() == UserHandle.myUserId() —— mirror 跑在 u0，永远返回 0，
+    //   所以按包名查 task 永远只查得到【主微信】。这是整个双开的第一因。
+    //
+    // 修法：不拦任何动作，只在「这次是分身点击」时把这一次 myUserId() 换成 999
+    // → r() 按 999 过滤，只返回分身 task → mirror 自己搬分身、把分身带到前台，
+    //   主微信从头到尾查不到。mirror 原有逻辑完整跑完，功能不受损。
+    // 锚点是框架方法 UserHandle.myUserId()（永不混淆）+ 调用栈限定，只在
+    // SystemOsHelper 调用它时生效，不影响 mirror 其他任何用途。
+    // ------------------------------------------------------------------
+    private static void hookMyUserId(ClassLoader cl) {
+        try {
+            final Method myUserId = android.os.UserHandle.class.getDeclaredMethod("myUserId");
+            myUserId.setAccessible(true);
+            XposedEntry.get().hook(myUserId)
+                    .setExceptionMode(ExceptionMode.PROTECTIVE)
+                    .intercept(new Hooker() {
+                        @Override
+                        public Object intercept(Chain chain) throws Throwable {
+                            try {
+                                long t = sCloneOpening;
+                                if (t != 0 && System.currentTimeMillis() - t <= CLONE_WINDOW_MS
+                                        && calledFromMoveAppToDisplay()) {
+                                    MiflowLog.i("[MIRROR-FIX] myUserId -> 999"
+                                            + " (moveAppToDisplay now looks up clone task)");
+                                    return Integer.valueOf(USER_CLONE);
+                                }
+                            } catch (Throwable e) {
+                                MiflowLog.w("[MIRROR-FIX] myUserId hook failed: " + e.getMessage());
+                            }
+                            return chain.proceed();
+                        }
+                    });
+            MiflowLog.i("[MIRROR-FIX] HookE myUserId hooked");
+        } catch (Throwable t) {
+            MiflowLog.w("[MIRROR-FIX] hookMyUserId failed: " + t.getMessage());
+        }
+    }
+
+    /** 只在 SystemOsHelper.moveAppToDisplay 的调用链里改写 userId，避免影响其他用途 */
+    private static boolean calledFromMoveAppToDisplay() {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        for (StackTraceElement e : st) {
+            String cn = e.getClassName();
+            if (cn.contains("SystemOsHelper") || cn.contains("p133q4.u0")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
