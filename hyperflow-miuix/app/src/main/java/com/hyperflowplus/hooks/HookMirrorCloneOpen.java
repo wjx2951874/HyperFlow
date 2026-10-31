@@ -272,12 +272,23 @@ public class HookMirrorCloneOpen {
         try {
             creatorPkg = pi.getCreatorPackage();
             android.os.UserHandle uh = pi.getCreatorUserHandle();
-            userId = (uh == null) ? -1 : uh.getIdentifier();
+            if (uh == null) {
+                userId = -1;
+            } else {
+                try {
+                    // getIdentifier() 是 @hide，编译不可见但运行时存在；反射取
+                    userId = ((Integer) android.os.UserHandle.class
+                            .getMethod("getIdentifier").invoke(uh)).intValue();
+                } catch (Throwable t2) {
+                    userId = uh.hashCode(); // UserHandle.hashCode() 即 userId
+                }
+            }
         } catch (Throwable t) {
             MiflowLog.w("[MIRROR-FIX] read creator failed: " + t.getMessage());
         }
         try {
-            Intent it = pi.getIntent();
+            // getIntent() 是 @hide，反射取（同进程 PI 可读；跨 uid 会抛 SecurityException）
+            Intent it = (Intent) PendingIntent.class.getMethod("getIntent").invoke(pi);
             if (it != null) {
                 cloneFlag = it.getBooleanExtra(HF_IS_CLONE, false);
                 if (it.getPackage() != null) {
