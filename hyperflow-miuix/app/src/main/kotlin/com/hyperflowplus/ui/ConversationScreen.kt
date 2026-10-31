@@ -65,22 +65,33 @@ private val CONV_TIME_CACHE = java.util.concurrent.ConcurrentHashMap<String, Lon
  *  V1.1.0-beta71：旧实现只认前两种，旧归档格式（M-d HH:mm）全部返回 0 → 排序失效。 */
 private fun parseConvTime(raw: String): Long {
     val s = raw.trim()
+    val v: Long
     if (s.isNotEmpty() && s.all { it.isDigit() }) {
-        val v = s.toLongOrNull() ?: return 0L
-        return if (v < 100_000_000_000L) v * 1000L else v
+        val x = s.toLongOrNull() ?: return 0L
+        v = if (x < 100_000_000_000L) x * 1000L else x
+    } else {
+        var out = 0L
+        for (p in arrayOf(
+            "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
+            "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
+        )) {
+            val t = runCatching {
+                val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
+                f.isLenient = false
+                f.parse(s)?.time
+            }.getOrNull()
+            if (t != null && t > 0L) {
+                out = t
+                break
+            }
+        }
+        v = out
     }
-    for (p in arrayOf(
-        "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
-        "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
-    )) {
-        val t = runCatching {
-            val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
-            f.isLenient = false
-            f.parse(s)?.time
-        }.getOrNull()
-        if (t != null && t > 0L) return t
-    }
-    return 0L
+    // V1.1.0-beta72：合理性闸门（与消息页同口径）——不可能的时间判为无效，
+    // 时间解析失败的短信在会话里被钉在末尾，不会插在正常消息中间打乱顺序
+    if (v <= 0L) return 0L
+    if (v < 946_684_800_000L || v > System.currentTimeMillis() + 86_400_000L) return 0L
+    return v
 }
 
 /**
