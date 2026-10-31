@@ -50,36 +50,53 @@ if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return 
 
 ---
 
-## 功能②-2 点击分身通知 → 打开 999 微信/QQ/飞书/钉钉/企业微信（✅ 三层防线 beta59 已实现，待 beta60 日志验证）
+## 功能②-2 点击分身通知 → 打开 999 微信/QQ/飞书/钉钉/企业微信（✅ 源头单点修复，beta70 定稿）
 
-**原理**：接收端点击分身通知 → 系统"跨设备镜像打开应用"把 Intent 发回发送端 →
-milink/镜像进程在 **system_server** 执行 `startActivity`（目标包=微信/QQ，默认 userId=0 → 会打开主空间造成双开）。
-hook 拦截该调用并改写 userId=999。
+**原理（beta61~beta70 的排查结论）**：早期判断问题出在「启动 Intent 的 userId」，
+于是在 system_server 里改写 `startActivity` 的 userId（即 beta59 的三层防线）。
+但日志反复证明**发送层从头到尾是对的**——每次点击只发出一次携带 999 的 PendingIntent：
 
-**三层防线（beta59 起，全代码落盘）**：
-1. **发送端釜底抽薪（HookCloneBypass）**：分身通知（`sbn.getUser().hashCode()==999`）的 `contentIntent` **重建为 `PendingIntent.getActivity(..., UserHandle(999))`**（全反射，ActivityThread/UserHandle/5 参重载全 @hide）；intent 打 `hf_is_clone` 标记——点击直达分身，不依赖 caller 白名单与时序。
-2. **HookRemoteOpen 重排（system_server）**：`redirectToClone` 先查 `hf_is_clone` 标记（caller 无关直接改 999）→ 远程白名单 caller（ALLOWED_CALLERS 且 userId∈{0,-1}）直接改 999 → 3 秒时序反推兜底；统一走 `redirect()`（有 userId 参数直接 `args.set`，无则 `relaunchAsClone` 吞调用重发 999）。
-3. **HookMirrorObserve 全路径观察**：`IActivityTaskManager$Stub$Proxy` startActivity* 家族 hook（框架类不混淆），日志 `[MIRROR-OBS] ATM.<method>` 显示 mirror 进程实际调用。
-
-**关键历史证据**（beta58 时代 log.old 实锤双开触发点）：
 ```
-19:07:27  clone open check: caller=com.xiaomi.mirror pkg=com.tencent.mm userId=0
-19:07:29  clone open: uid=10277 pkg=com.tencent.mm   ← u0 主微信被 mirror 进程拉起
+[MIRROR-FIX] h() creator=com.tencent.mm user=999 clone=false
 ```
-→ 双开 = **com.xiaomi.mirror（镜像/远控/投屏）以 userId=0 启动微信**；beta58 时序反推（要求 3 秒内有 u999 打开记录）拦不住第一发 u0；beta59 的"远程 caller 直接改 999"即治这条。
 
-**支持应用集**（与小米互联「支持的应用」列表中的第三方 App 对齐，v0.5.4 起）：
-微信 `com.tencent.mm` / QQ `com.tencent.mobileqq` / 飞书 `com.ss.android.lark`（含国际版 `com.larksuite.cn`）/
-钉钉 `com.alibaba.android.rimet` / 企业微信 `com.tencent.wework`
+真正把主应用带上屏的，是 `com.xiaomi.mirror` 里那段「把应用搬到投屏屏」的逻辑
+（`SystemOsHelper.f()`，日志 tag `moveAppToDisplay`）。它内部按
+`u0.r(fromDisplay, u0.x0(), pkg)` 查任务，而 `u0.x0()` 就是 `UserHandle.myUserId()`
+——mirror 跑在主空间，这个值恒为 **0**。它压根没有「这条通知属于 999」的概念，
+于是永远查到主微信的 task 并搬上去：
 
-**代码位置**：`java/com/hyperflowplus/hooks/HookRemoteOpen.java`（注入 system_server）、`HookCloneBypass.java`（milink）、`HookMirrorObserve.java`（mirror/system_server）
-**关键实现细节**：
-- 无 `int userId` 参数的重载（`startActivity(intent)`）也要拦——反射 `IActivityTaskManager.startActivityAsUser` 11 参重载以 user 999 重发
-- `ALLOWED_CALLERS` = `{com.milink.service, com.xiaomi.mirror, com.hyperflowplus}`；`EXCLUDED_CALLERS` = `{com.miui.home, com.android.launcher3, com.miui.systemui, android}`（本地打开/系统 UI 一律放行）
-- `hf_is_clone` 标记优先于 caller 白名单（PendingIntent 路径 caller=目标应用自己，白名单判定会漏）
-- 新增应用只需往 `TARGET_PKGS` 加包名，其余逻辑零改动
+```
+SystemUtils.moveRootTaskToDisplayCompat: 3768 10 false
+moveTaskToFront Task{3768 com.tencent.mm}      ← pid 12154 = com.xiaomi.mirror
+```
 
-**限制**：需用户已开对应 App 的双开（999 空间存在才改写）；未开双开自动回退主空间。pattern 时序反推仅在标记/白名单都未命中时兜底。
+主微信不是被"启动"的，是被**搬**来的。
+
+**最终方案（源头单点修复，注入 com.xiaomi.mirror 进程）**：
+1. **HookE（主修复）**：hook `UserHandle.myUserId()`。当调用栈含 `SystemOsHelper`、
+   且当前确实是在打开分身（`sCloneOpening` 已置位）时返回 **999**，
+   使那段查找按分身用户进行，从源头就查不到主微信。
+2. **HookD（兜底）**：hook `IActivityTaskManager$Stub$Proxy.moveRootTaskToDisplay`，
+   反查 `TaskInfo.userId`，**只拦 0（主空间）、放行 999（分身）**。
+   （beta68 曾做成无条件拦截，结果把分身自己也挡住上不了屏，beta69 修正为按 userId 区分。）
+3. **HookA/B/C**：处理 `NotificationData` 的 `PendingIntent` / creatorPackage / creatorUser，
+   确保「这条通知是分身来的」这一判断在 mirror 侧可靠可得。
+4. 发送端 `HookCloneBypass` 仍负责把分身通知的 contentIntent 重建为 userId=999 的 PendingIntent。
+
+**为什么废弃 system_server 方案**：`HookRemoteOpen.java`（旧三层防线主体）已在 beta66 整文件删除。
+它在 system_server 里靠「caller 白名单 + 3 秒时序反推」兜底，既拦不住第一发 u0，
+又会把正常的主应用流转误伤成分身。现在 **system_server 只保留 `HookKeyguardCapture`**（锁屏凭证捕获）。
+
+**代码位置**：`hooks/HookMirrorCloneOpen.java`（mirror 进程，含 HookA~HookE）、
+`hooks/HookCloneBypass.java`（milink 发送端）、`hooks/HookMirrorObserve.java`（只读观测，排障用）
+
+**支持应用集**：由小米互联「支持的应用」列表决定，已验证
+微信 `com.tencent.mm` / QQ `com.tencent.mobileqq` / 飞书 / 钉钉 / 企业微信 等。
+
+**限制**：需本机已开对应 App 的分身（999 空间存在才会改写）；未开分身时走原生主空间，属预期行为。
+
+**排障**：分身相关日志走 `MiflowLog`，在 **Xposed 管理器的模块日志**里查看，不在 logcat。
 
 ---
 
