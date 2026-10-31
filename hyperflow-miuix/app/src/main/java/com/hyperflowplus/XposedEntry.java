@@ -9,8 +9,8 @@ import com.hyperflowplus.hooks.HookCallVoipType;
 import com.hyperflowplus.hooks.HookCloneBypass;
 import com.hyperflowplus.hooks.HookForceTransfer;
 import com.hyperflowplus.hooks.HookKeyguardCapture;
+import com.hyperflowplus.hooks.HookMirrorCloneOpen;
 import com.hyperflowplus.hooks.HookMirrorObserve;
-import com.hyperflowplus.hooks.HookRemoteOpen;
 import com.hyperflowplus.hooks.HookSmsPersist;
 import com.hyperflowplus.hooks.HookSmsSenderEnrich;
 import com.hyperflowplus.hooks.HookTrustAuth;
@@ -34,12 +34,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * 作用域（新版框架）由 AndroidManifest meta-data + res/values/arrays.xml 提供，预勾选 3 项：
  *   com.milink.service（小米互联：通知流转 6 个 hook，写 milink 数据目录探针）
- *   android（经典 LSPosed 的系统框架标识：点击分身通知 → 打开 999 空间微信/QQ，HookRemoteOpen，写 /data/adb 探针）
+ *   android（经典 LSPosed 的系统框架标识：锁屏凭证捕获 HookKeyguardCapture，写 /data/adb 探针）
  *   system（新版 Vector 的系统框架标识，JingMatrix 分支用 system 而非 android）
  * 本 App（com.hyperflowplus）自身进程无需被 hook，不在推荐作用域内。
  *
  * 入口在 onPackageLoaded 中按包名分发装配 hook：
- *   - android            → 注入 system_server（HookRemoteOpen）
+ *   - android            → 注入 system_server（HookKeyguardCapture）
  *   - com.milink.service → 注入小米互联服务（其余 6 个 hook）
  *   - 其他包名           → 仅写运行态标记，不装配
  * V0.2.6 起不再启动 HTTP WebUI：配置读写全部由 App 经 su 完成。
@@ -78,15 +78,12 @@ public class XposedEntry extends XposedModule {
         }
     }
 
-    /** 安装 system_server 级 hook（分身点击拦截 + 锁屏凭证捕获），幂等。 */
+    /** 安装 system_server 级 hook（仅锁屏凭证捕获），幂等。 */
     private static void installSystemHooks(ClassLoader cl) {
         if (!SYSTEM_HOOKS_INSTALLED.compareAndSet(false, true)) {
             MiflowLog.i("system hooks already installed, skip");
             return;
         }
-        installSafely("HookRemoteOpen[system]", new Runnable() {
-            @Override public void run() { HookRemoteOpen.installSystem(cl); }
-        });
         installSafely("HookKeyguardCapture", new Runnable() {
             @Override public void run() { HookKeyguardCapture.install(cl); }
         });
@@ -100,13 +97,14 @@ public class XposedEntry extends XposedModule {
         String pkgName = param.getPackageName();
         ClassLoader cl = param.getDefaultClassLoader();
         if ("android".equals(pkgName) || "system".equals(pkgName)) {
-            // system_server：拦截"远程打开应用"请求，把分身通知的点击改为打开 999 空间
-            // 微信/QQ（需要作用域勾选 android）；并捕获日常锁屏解锁的凭证（免预填）。
+            // system_server：仅捕获日常锁屏解锁凭证（免预填授权盘）。
+            // 分身通知双开修复已迁移到 com.xiaomi.mirror 进程源头（HookMirrorCloneOpen），
+            // system_server 不再拦截远程打开（旧 HookRemoteOpen 已删除）。
             // pkgName 双兼容：经典 LSPosed 传 "android"，Vector/JingMatrix 分支传 "system"
             //（用户实测勾了 android 但 system_server 没加载 —— JingMatrix 作用域里
             //  "系统框架 system" 与 "Android系统 android" 是两个条目，注入用 system）。
             try {
-                MiflowLog.i("=== HyperFlow loaded in system_server (clone open redirect + keyguard capture, pkgName=" + pkgName + ") ===");
+                MiflowLog.i("=== HyperFlow loaded in system_server (keyguard capture, pkgName=" + pkgName + ") ===");
                 installSystemHooks(cl);
             } catch (Throwable t) {
                 MiflowLog.e("XposedEntry system init failed", t);
@@ -138,9 +136,17 @@ public class XposedEntry extends XposedModule {
             return;
         }
         if ("com.xiaomi.mirror".equals(pkgName)) {
-            // 诊断期：观测分身通知/镜像打开到底走自起 u0 还是转发 999 PendingIntent（只读，不改行为）
+            // beta65：分身通知点击双开「源头单点修复」——
+            //   反编译实锤 mirror 在 u(type=7) 链路里自建 u0 主应用 PendingIntent send
+            //   （双开根源），分身则由回调 send 微信 999 自带 contentIntent。
+            //   HookMirrorCloneOpen 在源头条处置 guard：自建 u0 PI 就地替换为 999、
+            //   跳过 u0 task 搬运；主微信从源头不再被拉起。
+            // HookMirrorObserve 保留为观测（只读），用于验证与后续机型适配。
             try {
-                MiflowLog.i("=== HyperFlow loaded in com.xiaomi.mirror (clone-open observe) ===");
+                MiflowLog.i("=== HyperFlow loaded in com.xiaomi.mirror (clone-open source fix + observe) ===");
+                installSafely("HookMirrorCloneOpen", new Runnable() {
+                    @Override public void run() { HookMirrorCloneOpen.install(cl); }
+                });
                 installSafely("HookMirrorObserve", new Runnable() {
                     @Override public void run() { HookMirrorObserve.install(cl); }
                 });
