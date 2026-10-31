@@ -92,11 +92,11 @@ fun GuideScreen(type: GuideType, onBack: () -> Unit) {
                             GuideStep("4", "重启设备后返回本页重新检测")
                         }
                         GuideType.MODULE_SCOPE -> {
-                            GuideText("本模块需要：①在 LSPosed 中启用；②勾选推荐作用域（小米互联服务 + Android 系统框架）。本 App 自身无需被勾选。")
+                            GuideText("本模块需要：①在 Xposed 管理器中启用 HyperFlow；②勾选全部 6 项推荐作用域（小米互联服务、妙享直通、小米互传服务进程、电话界面、系统框架）。本 App 自身无需被勾选。")
                             Spacer(Modifier.height(10.dp))
                             GuideStep("1", "点击下方按钮，自动写入启用 + 勾选配置")
                             GuideStep("2", "重启设备让配置生效")
-                            GuideStep("3", "返回本页重新检测，两项变绿即完成")
+                            GuideStep("3", "返回本页重新检测，各项变绿即完成")
                         }
                         GuideType.MILINK -> {
                             GuideText("小米互联服务（com.milink.service）是系统组件，负责通知流转数据源。")
@@ -198,9 +198,14 @@ private fun launchKernelSu(ctx: android.content.Context) {
 }
 
 /** 一键启用模块 + 勾选推荐作用域的 su 脚本（与首页 fixLsp 一致，供引导页复用）。
- *  推荐作用域 = 小米互联服务(com.milink.service) + 系统框架：
- *   - 经典 LSPosed：scope 文件写包名（android=系统框架）
- *   - 新版 LSPosed/Vector：作用域存 modules_config.db，系统框架标识为 "system"
+ *  推荐作用域 6 项（与 res/values/arrays.xml 的 xposedscope 一致，新增/删减请两处同步）：
+ *   - com.milink.service      小米互联服务，通知流转数据源（核心）
+ *   - com.xiaomi.trustservice 妙享直通授权盘（远控自动填凭证）
+ *   - com.xiaomi.mirror       分身通知源头（点击只开分身，不连带拉起主应用）
+ *   - com.android.incallui    电话界面（亮屏来电也能流转）
+ *   - system / android        系统框架（锁屏凭证捕获；两种框架的标识写法）
+ *  V1.1.0：此前脚本只写了 4 项，漏掉 com.xiaomi.mirror 与 com.android.incallui，
+ *  导致「一键勾选」后分身源头修复与亮屏来电流转都不生效。现改为按统一列表写入，避免再漏。
  *  脚本双写兼容：scope 文件写 system+android 两行；同时 sqlite3 直接插入 scope 表。
  *  本 App 自身进程无需被 hook，不写入。 */
 fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules/lsposed/config /data/adb/modules/zygisk_lsposed/config; do
@@ -208,23 +213,19 @@ fun fixLspScript(): String = """for d in /data/adb/lspd/config /data/adb/modules
   mkdir -p "${'$'}d/scope"
   if [ -f "${'$'}d/modules.list" ]; then grep -q 'com.hyperflowplus' "${'$'}d/modules.list" || echo 'com.hyperflowplus' >> "${'$'}d/modules.list"; fi
   sc2="${'$'}d/scope/com.hyperflowplus"
-  if [ -f "${'$'}sc2" ]; then
-    grep -qx 'com.milink.service' "${'$'}sc2" || echo 'com.milink.service' >> "${'$'}sc2"
-    grep -qx 'system' "${'$'}sc2" || echo 'system' >> "${'$'}sc2"
-    grep -qx 'android' "${'$'}sc2" || echo 'android' >> "${'$'}sc2"
-    grep -qx 'com.xiaomi.trustservice' "${'$'}sc2" || echo 'com.xiaomi.trustservice' >> "${'$'}sc2"
-  else
-    { echo 'com.milink.service'; echo 'system'; echo 'android'; echo 'com.xiaomi.trustservice'; } > "${'$'}sc2"
-  fi
+  touch "${'$'}sc2"
+  for pkg in com.milink.service com.xiaomi.trustservice com.xiaomi.mirror com.android.incallui system android; do
+    grep -qx "${'$'}pkg" "${'$'}sc2" || echo "${'$'}pkg" >> "${'$'}sc2"
+  done
 done
 chmod 644 /data/adb/lspd/config/scope/com.hyperflowplus 2>/dev/null
 chown -R 0:0 /data/adb/lspd/config 2>/dev/null
 # 新版 LSPosed/Vector：直接写 modules_config.db 的 scope 表（系统框架标识 system，user 0）
 for db in /data/adb/lspd/config/modules_config.db /data/adb/modules/lsposed/config/modules_config.db /data/adb/modules/zygisk_lsposed/config/modules_config.db; do
   [ -f "${'$'}db" ] || continue
-  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'com.milink.service',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
-  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'system',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
-  sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'com.xiaomi.trustservice',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
+  for pkg in com.milink.service com.xiaomi.trustservice com.xiaomi.mirror com.android.incallui system; do
+    sqlite3 "${'$'}db" "INSERT OR IGNORE INTO scope(mid,app_pkg_name,user_id) SELECT mid,'${'$'}pkg',0 FROM modules WHERE module_pkg_name='com.hyperflowplus';" 2>/dev/null
+  done
   chown 0:0 "${'$'}db" 2>/dev/null
 done
 echo done"""
