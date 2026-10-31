@@ -58,6 +58,31 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import com.hyperflowplus.ui.HyperDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+/** 时间解析结果缓存（排序比较会调用 O(n log n) 次） */
+private val CONV_TIME_CACHE = java.util.concurrent.ConcurrentHashMap<String, Long>(256)
+
+/** flow 时间字符串 → 时间戳：20260930T155344 / 2026-09-30 15:53 / 10-30 15:53 / 秒或毫秒时间戳。
+ *  V1.1.0-beta71：旧实现只认前两种，旧归档格式（M-d HH:mm）全部返回 0 → 排序失效。 */
+private fun parseConvTime(raw: String): Long {
+    val s = raw.trim()
+    if (s.isNotEmpty() && s.all { it.isDigit() }) {
+        val v = s.toLongOrNull() ?: return 0L
+        return if (v < 100_000_000_000L) v * 1000L else v
+    }
+    for (p in arrayOf(
+        "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
+        "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
+    )) {
+        val t = runCatching {
+            val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
+            f.isLenient = false
+            f.parse(s)?.time
+        }.getOrNull()
+        if (t != null && t > 0L) return t
+    }
+    return 0L
+}
+
 /**
  * 会话详情（短信 App 样式）：标题 = 发送人（大字）+ 来源（小字），
  * 每条消息 = 时间标签（上方小字） + 左对齐圆角气泡（正文原文）。
@@ -83,24 +108,23 @@ fun ConversationScreen(
     var selected by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    /** 时间戳解析（与消息页同规则）：content_time 有 yyyyMMddTHHmmss 和 yyyy-MM-dd HH:mm 两种格式，
-     *  字符串比较会错乱。原实现只认 M/d HH:mm（本地旧格式），导致排序全部返回 0 → 排序按钮不生效。 */
+    /** 时间戳解析（与消息页同规则）：兼容全部历史格式，解析失败返回 0 */
     fun timeToEpoch(raw: String): Long {
         if (raw.isBlank()) return 0L
-        return runCatching {
-            if (raw.contains("T")) {
-                java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
-            } else {
-                java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
-            }
-        }.getOrDefault(0L)
+        val cached = CONV_TIME_CACHE[raw]
+        if (cached != null) return cached
+        val v = parseConvTime(raw)
+        CONV_TIME_CACHE[raw] = v
+        return v
     }
     val sorted = remember(rows, desc, state.sortVersion) {
-        // 时间戳排序：兼容 content_time 两种格式（字符串比较会错乱）
+        // V1.1.0-beta71 排序乱序根因修复：旧实现 (tb - ta).toInt()，两条消息相隔超过
+        // 2^31 ms（≈24.86 天）就 Int 溢出翻转 → 老消息被排到新消息前面。
+        // 改用 java.lang.Long.compare 全量比较，永不溢出。
         rows.sortedWith { a, b ->
             val ta = timeToEpoch(a.getOrElse(0) { "" })
             val tb = timeToEpoch(b.getOrElse(0) { "" })
-            if (desc) (tb - ta).toInt() else (ta - tb).toInt()
+            if (desc) java.lang.Long.compare(tb, ta) else java.lang.Long.compare(ta, tb)
         }
     }
     val selectedRows = remember(sorted, selected) {
