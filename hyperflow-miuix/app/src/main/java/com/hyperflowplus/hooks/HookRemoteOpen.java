@@ -49,13 +49,59 @@ public class HookRemoteOpen {
     // v1.1.0-beta9：记录最近一次 u999 打开时间（仅作标记丢失时的兜底反推）
     private static long lastCloneOpenTime = 0;
 
-    // beta63：mirror 点「分身通知」时先 moveRootTaskToDisplay 把主微信(u0) task 搬到投屏屏，
-    // 再 send 999 分身 contentIntent。单看搬 task 无法区分「分身流转」和「正常流转主微信」，
-    // 直接拦（beta62）会误伤主微信正常流转。改为「搬后纠正」：先放行并记录，
-    // 等 redirectToClone 确认确实打开了 999 分身时，再把主微信 task 搬回本地屏。
-    private static long pendingMainTaskId = -1;
-    private static long pendingMainTaskTime = 0;
+    // beta64：mirror 点「分身通知」时先 moveRootTaskToDisplay 把主微信(u0) task 搬到投屏屏
+    // （onTop），再 send 999 分身 contentIntent。单看搬 task 无法区分「分身流转」和「正常流转
+    // 主微信」（caller 都是 mirror、task 都是主微信 u0）。beta62 直接拦会误伤正常流转主微信；
+    // beta63 搬后纠正（搬回 display 0）本身又 onTop 一次，等于主微信被拉起两次。改为「延迟搬动」。
+    private static long deferredTaskId = -1;
+    private static int deferredDisplayId = -1;
+    private static volatile boolean deferredCancelled = false;
     private static Object cachedAtms = null;
+    private static final android.os.Handler sHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+
+    /**
+     * beta64：延迟补搬主微信 task 的任务。mirror 点分身通知时会先 moveRootTaskToDisplay
+     * 把主微信(u0) task 搬到投屏屏（onTop），再 send 999 分身 contentIntent。单看搬 task
+     * 无法区分「分身流转」和「正常流转主微信」。此处先吞掉搬动、600ms 后自动补搬；
+     * 若期间确认打开 999 分身（cancelDeferredMove），则取消补搬，主微信从头到尾不动。
+     */
+    private static final Runnable deferredMoveRunnable = new Runnable() {
+        @Override
+        public void run() {
+            long taskId = deferredTaskId;
+            int displayId = deferredDisplayId;
+            if (taskId < 0) {
+                return;
+            }
+            deferredTaskId = -1;
+            if (deferredCancelled) {
+                MiflowLog.d("deferred move: cancelled (clone opened), main task stays local");
+                return;
+            }
+            Object atms = cachedAtms;
+            if (atms == null) {
+                MiflowLog.w("deferred move: no cached ATMS, skip");
+                return;
+            }
+            try {
+                Method mover = findMethod(atms.getClass(), "moveRootTaskToDisplay", 2);
+                if (mover == null) {
+                    MiflowLog.w("deferred move: ATMS.moveRootTaskToDisplay(int,int) not found");
+                    return;
+                }
+                long ident = android.os.Binder.clearCallingIdentity();
+                try {
+                    mover.invoke(atms, (int) taskId, displayId);
+                    MiflowLog.i("deferred move re-applied: task=" + taskId + " -> display " + displayId);
+                } finally {
+                    android.os.Binder.restoreCallingIdentity(ident);
+                }
+            } catch (Throwable t) {
+                MiflowLog.w("deferred move re-apply failed: " + t.getMessage());
+            }
+        }
+    };
 
     /**
      * 适配的迷你应用包名（与小米互联「支持的应用」列表中的第三方 App 对齐）。
@@ -202,49 +248,45 @@ public class HookRemoteOpen {
             if (!Config.isCloneTransferEnabled()) {
                 return chain.proceed();
             }
-            // 1) 目标包必须是支持应用集（微信/QQ/飞书/钉钉/企业微信）
+            // 1) 目标包必须是支持应用集（微信/QQ/飞书/钉钉/企业微信）。
+            //    包名优先 getPackage()（HookCloneBypass 重建 contentIntent 用 setPackage 隐式
+            //    Intent，getComponent() 可能为 null），无则从 component 取。
             Intent intent = findIntent(args);
-            if (intent == null || intent.getComponent() == null) {
+            if (intent == null) {
                 return chain.proceed();
             }
-            String pkg = intent.getComponent().getPackageName();
-            if (!TARGET_PKGS.contains(pkg)) {
+            String pkg = intent.getPackage();
+            if (pkg == null && intent.getComponent() != null) {
+                pkg = intent.getComponent().getPackageName();
+            }
+            if (pkg == null || !TARGET_PKGS.contains(pkg)) {
                 return chain.proceed();
             }
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 MiflowLog.d("clone open: " + pkg + " not dual-installed, fallback to main user");
                 return chain.proceed();
             }
-            // 2) 自描述标记优先（beta59）：分身通知点击的 intent 带 hf_is_clone。
-            //    PendingIntent 启动时 caller=目标应用自己（微信），白名单判断会放行 → 主微信被开 → 双开。
-            //    有标记即确认是"点击分身通知"，直接改 999，不依赖 caller 白名单。
+            int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
+            // 2) 分身打开铁证：userId 已是 999（HookCloneBypass 把 contentIntent 重建为
+            //    UserHandle.of(999) 的 PendingIntent，send 后 userId=999）。无需改写，只记录
+            //    并取消对主微信的延迟搬动（beta64）。
+            if (userId == USER_CLONE) {
+                lastCloneOpenTime = System.currentTimeMillis();
+                cancelDeferredMove();
+                MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
+                return chain.proceed();
+            }
+            // 3) 自描述标记兜底（beta59）：分身通知 contentIntent 带 hf_is_clone，即使
+            //    userId 跨进程被重置为 0 也能识别。有标记即确认是点击分身通知，改 999。
             boolean isCloneMarked = intent.getBooleanExtra(HF_IS_CLONE, false);
             if (isCloneMarked) {
                 MiflowLog.d("clone open: marker hit (caller-independent), redirecting " + pkg + " -> " + USER_CLONE);
                 return redirect(args, idx, chain, intent, pkg);
             }
-            // 3) 远程打开请求（beta59 简化）：caller ∈ 白名单（milink/mirror/hyperflow）且主空间打开
-            //    → 只可能来自流转/镜像，直接改 999，不再要求时序反推（反推有竞态，第一发 u0 先到会误放行）。
+            // 4) 时序反推兜底（beta59 保留）：无标记、非 999 时，仅当 3 秒内有过 u999 打开
+            //    记录才认为这是分身通知的配套启动。
             String caller = findCallingPackage(args, idx);
-            if (caller != null && ALLOWED_CALLERS.contains(caller)) {
-                int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
-                if (userId == 0 || userId == -1) {
-                    MiflowLog.d("clone open: remote caller " + caller + ", redirecting " + pkg + " -> " + USER_CLONE);
-                    return redirect(args, idx, chain, intent, pkg);
-                }
-            }
-            // 4) 时序反推兜底（beta59 保留）：无标记、非白名单 caller（如桌面/微信自己）时，
-            //    仅当 3 秒内有过 u999 打开记录才认为这是分身通知的配套启动。
             if (caller != null && EXCLUDED_CALLERS.contains(caller)) {
-                return chain.proceed();
-            }
-            int userId = idx[1] >= 0 ? ((Integer) args.get(idx[1])).intValue() : 0;
-            MiflowLog.d("clone open check: caller=" + caller + " pkg=" + pkg + " userId=" + userId
-                + " argsSize=" + args.size() + " argsTypes=" + args.stream().map(o -> o == null ? "null" : o.getClass().getSimpleName()).collect(java.util.stream.Collectors.joining(",")));
-            if (userId == USER_CLONE) {
-                lastCloneOpenTime = System.currentTimeMillis();
-                tryCorrectMainTask(); // beta63：分身已在打开，纠正此前被 mirror 误搬的主微信 task
-                MiflowLog.d("clone open: recorded clone open at " + lastCloneOpenTime);
                 return chain.proceed();
             }
             if (userId != 0) {
@@ -252,7 +294,7 @@ public class HookRemoteOpen {
             }
             long sinceClone = System.currentTimeMillis() - lastCloneOpenTime;
             if (sinceClone > 3000) {
-                MiflowLog.d("clone open: no clone marker & no recent clone open (" + sinceClone + "ms ago), main notification, skip");
+                MiflowLog.d("clone open: no marker & no recent clone open (" + sinceClone + "ms ago), main flow, skip");
                 return chain.proceed();
             }
             MiflowLog.d("clone open: detected clone notification (recent u999), redirecting to user " + USER_CLONE);
@@ -265,7 +307,7 @@ public class HookRemoteOpen {
 
     /** 统一改写入口：有 userId 参数直接改；无则吞掉原调用用 startActivityAsUser(999) 重发。 */
     private static Object redirect(List<Object> args, int[] idx, Chain chain, Intent intent, String pkg) throws Throwable {
-        tryCorrectMainTask(); // beta63：确认是分身打开，纠正此前被 mirror 误搬的主微信 task
+        cancelDeferredMove(); // beta64：确认是分身打开，取消对主微信的延迟搬动
         if (idx[1] >= 0) {
             args.set(idx[1], USER_CLONE);
             MiflowLog.d("clone open redirected: " + pkg + " → user " + USER_CLONE);
@@ -495,16 +537,19 @@ public class HookRemoteOpen {
             if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
                 return chain.proceed(); // 未开双开的应用放行
             }
-            // beta63：不再直接吞掉（会误伤主微信正常流转），改为「搬后纠正」。
-            // 先放行让主微信暂时搬过去，同时记录 task，等 redirectToClone 确认
-            // 确实打开了 999 分身时再搬回本地屏。
+            // beta64：「延迟搬动」——先吞掉搬动，600ms 后自动补搬；若期间确认打开
+            // 999 分身（点分身通知），则 cancelDeferredMove 取消补搬。主微信从头到尾
+            // 不被 onTop，既不双开也不被误拉；正常流转主微信仅延迟 600ms 后照常流转。
             cachedAtms = thisObj;
-            pendingMainTaskId = taskId;
-            pendingMainTaskTime = System.currentTimeMillis();
-            MiflowLog.i("moveRootTaskToDisplay: main-user " + pkg
+            deferredTaskId = taskId;
+            deferredDisplayId = displayId;
+            deferredCancelled = false;
+            MiflowLog.i("moveRootTaskToDisplay: deferred main-user " + pkg
                     + " (taskId=" + taskId + ") -> display " + displayId
-                    + " (deferred, will correct if clone opens)");
-            return chain.proceed();
+                    + " (re-apply in 600ms unless clone opens)");
+            sHandler.removeCallbacks(deferredMoveRunnable);
+            sHandler.postDelayed(deferredMoveRunnable, 600);
+            return null; // 吞掉：暂不搬主微信
         } catch (Throwable t) {
             MiflowLog.w("interceptMoveRootTaskToDisplay failed: " + t.getMessage());
         }
@@ -512,36 +557,14 @@ public class HookRemoteOpen {
     }
 
     /**
-     * beta63：搬后纠正。当确认 999 分身被打开（点分身通知）时调用：
-     * 若此前极短时间内有主空间双开应用的 task 被搬到了非本地屏（mirror 误搬），
-     * 则把该 task 搬回本地屏，从而只让分身留在投屏屏。
-     * 正常流转主微信时不会走到这里（打开的是 user 0），故不误伤。
+     * beta64：确认 999 分身已打开（点分身通知）时调用——取消对主微信的延迟补搬，
+     * 让主微信从头到尾保持不动（既不上投屏屏，也不被拉到本地屏前台）。
+     * 正常流转主微信不会走到这里（打开的是 user 0，无 999 信号），故不误伤。
      */
-    private static void tryCorrectMainTask() {
-        try {
-            long now = System.currentTimeMillis();
-            if (pendingMainTaskId < 0 || (now - pendingMainTaskTime) > 3000) {
-                return;
-            }
-            long taskId = pendingMainTaskId;
-            pendingMainTaskId = -1;
-            pendingMainTaskTime = 0;
-            Object atms = cachedAtms;
-            if (atms == null) {
-                MiflowLog.w("moveRootTaskToDisplay correct: no cached ATMS, skip");
-                return;
-            }
-            // ATMS.moveRootTaskToDisplay(int taskId, int displayId)：内部自带
-            // synchronized(mGlobalLock) + clearCallingIdentity，任何线程调用都安全。
-            Method mover = findMethod(atms.getClass(), "moveRootTaskToDisplay", 2);
-            if (mover == null) {
-                MiflowLog.w("moveRootTaskToDisplay correct: ATMS.moveRootTaskToDisplay(int,int) not found");
-                return;
-            }
-            mover.invoke(atms, (int) taskId, 0);
-            MiflowLog.i("moveRootTaskToDisplay CORRECTED: main-user task=" + taskId + " back to display 0");
-        } catch (Throwable t) {
-            MiflowLog.w("moveRootTaskToDisplay correct failed: " + t.getMessage());
+    private static void cancelDeferredMove() {
+        if (deferredTaskId >= 0 && !deferredCancelled) {
+            deferredCancelled = true;
+            MiflowLog.i("moveRootTaskToDisplay: deferred move cancelled (clone opened), main task stays");
         }
     }
 
