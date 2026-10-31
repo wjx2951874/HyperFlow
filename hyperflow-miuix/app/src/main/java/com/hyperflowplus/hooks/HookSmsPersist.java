@@ -494,18 +494,52 @@ public class HookSmsPersist {
         return t;
     }
 
-    /** flow 的 content_time 形如 20260927T112518；解析失败用当前时间 */
+    /** flow 的 content_time 形如 20260927T112518；也兼容 yyyy-MM-dd HH:mm 与秒/毫秒时间戳。
+     *  V1.1.0-beta71 短信日期错乱修复：
+     *   1) 旧实现 Long.parseLong 把 10 位「秒级」时间戳直接当毫秒写进 sms.date
+     *      （1769778828 → 1970-01-21），这条短信会掉到收件箱最底部，排序彻底乱；
+     *      现在按位数区分秒（×1000）与毫秒。
+     *   2) 解析出来的时间明显不可信（未来 / 早于 2000 年）时回落当前时间，
+     *      顺便把"UTC 被当成本地时间"导致的 +8 小时超前也一并纠正。 */
     private static long parseFlowTime(String timeStr) {
         if (timeStr != null && !timeStr.isEmpty()) {
-            try {
-                return new SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.US).parse(timeStr).getTime();
-            } catch (Throwable ignored) {
+            String s = timeStr.trim();
+            if (s.matches("\\d+")) {
                 try {
-                    return Long.parseLong(timeStr);
-                } catch (Throwable ignored2) {
+                    long v = Long.parseLong(s);
+                    return sanitizeSmsTime(v < 100_000_000_000L ? v * 1000L : v);
+                } catch (Throwable ignored) {
+                }
+            }
+            String[] patterns = {
+                    "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
+                    "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
+            };
+            for (String p : patterns) {
+                try {
+                    SimpleDateFormat f = new SimpleDateFormat(p, Locale.CHINA);
+                    f.setLenient(false);
+                    java.util.Date d = f.parse(s);
+                    if (d != null && d.getTime() > 0) {
+                        return sanitizeSmsTime(d.getTime());
+                    }
+                } catch (Throwable ignored) {
                 }
             }
         }
         return System.currentTimeMillis();
+    }
+
+    /** 时间戳合理性校正：未来时间（> now + 60s，多为 UTC 当本地解析的 +8h）与
+     *  早于 2000 年的时间（秒级时间戳误用）都不可信，统一回落当前时间。 */
+    private static long sanitizeSmsTime(long ms) {
+        long now = System.currentTimeMillis();
+        if (ms > now + 60_000L) {
+            return now;
+        }
+        if (ms < 946_684_800_000L) { // 2000-01-01
+            return now;
+        }
+        return ms;
     }
 }
