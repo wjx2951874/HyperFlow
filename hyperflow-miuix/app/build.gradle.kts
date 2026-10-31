@@ -12,8 +12,8 @@ android {
         applicationId = "com.hyperflowplus"
         minSdk = 33          // miuix-blur 硬性要求（RuntimeShader）
         targetSdk = 35
-        versionCode = 191
-        versionName = "1.1.0-beta63"
+        versionCode = 192
+        versionName = "1.1.0-beta64"
         // beta53：开 R8 + keep 让 Xposed 入口进主 dex（beta52 的 multiDexKeepProguard 在
         // AGP9+minSdk33 下被 D8 独立模式忽略，dex 分配未变）。R8 模式下 keep 类强制进主 dex，
         // zygote 期 LSPosed 才能加载 XposedEntry → system_server 注入恢复（分身跳转/密码捕获）。
