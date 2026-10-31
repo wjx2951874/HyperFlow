@@ -484,16 +484,18 @@ public class HookMirrorCloneOpen {
                                 try {
                                     long t = sCloneOpening;
                                     if (t != 0 && System.currentTimeMillis() - t <= CLONE_WINDOW_MS) {
-                                        StringBuilder sb = new StringBuilder();
                                         List<Object> as = chain.getArgs();
-                                        if (as != null) {
-                                            for (Object a : as) {
-                                                sb.append(a == null ? "null" : String.valueOf(a)).append(",");
-                                            }
+                                        int taskId = extractTaskId(as);
+                                        int userId = queryTaskUserId(taskId);
+                                        // 只拦主空间(u0) task：主微信才不该出现在投屏屏；
+                                        // 分身(999) task 放行，让分身正常上投屏屏。
+                                        if (userId == 0) {
+                                            MiflowLog.i("[MIRROR-FIX] BLOCKED u0 task move "
+                                                    + mm.getName() + " taskId=" + taskId + " userId=0");
+                                            return null; // 吞掉主微信 task 搬运
                                         }
-                                        MiflowLog.i("[MIRROR-FIX] BLOCKED u0 task move "
-                                                + mm.getName() + "(" + sb + ") during clone open");
-                                        return null; // 吞掉：主微信 task 不许出现在投屏屏
+                                        MiflowLog.i("[MIRROR-FIX] allow task move taskId=" + taskId
+                                                + " userId=" + userId + " (clone/non-u0)");
                                     }
                                 } catch (Throwable e) {
                                     MiflowLog.w("[MIRROR-FIX] task move check failed: " + e.getMessage());
@@ -507,5 +509,42 @@ public class HookMirrorCloneOpen {
         } catch (Throwable t) {
             MiflowLog.w("[MIRROR-FIX] hookTaskMove failed: " + t.getMessage());
         }
+    }
+
+    /** 从 moveRootTaskToDisplay(int taskId, int displayId[, boolean]) 取第一个 int = taskId */
+    private static int extractTaskId(List<Object> args) {
+        if (args == null) {
+            return -1;
+        }
+        for (Object a : args) {
+            if (a instanceof Integer) {
+                return ((Integer) a).intValue();
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 反查 taskId 属于哪个 user（0=主空间，999=分身）。
+     * mirror 是 system uid，可调 IActivityTaskManager.getTaskInfo(taskId)；
+     * TaskInfo.userId 是 @hide 字段，运行时存在，反射取。
+     */
+    private static int queryTaskUserId(int taskId) {
+        if (taskId < 0) {
+            return -1;
+        }
+        try {
+            Class<?> atm = Class.forName("android.app.ActivityTaskManager");
+            Object svc = atm.getMethod("getService").invoke(null);
+            Object info = svc.getClass().getMethod("getTaskInfo", int.class).invoke(svc, taskId);
+            if (info != null) {
+                Field f = info.getClass().getDeclaredField("userId");
+                f.setAccessible(true);
+                return f.getInt(info);
+            }
+        } catch (Throwable t) {
+            MiflowLog.w("[MIRROR-FIX] queryTaskUserId(" + taskId + ") failed: " + t.getMessage());
+        }
+        return -1;
     }
 }
