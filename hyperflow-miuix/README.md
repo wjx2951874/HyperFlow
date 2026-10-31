@@ -2,13 +2,13 @@
 
 **小米澎湃 OS（HyperOS）互联通知流转增强模块** —— KernelSU / APatch / Magisk 模块 + LSPosed 插件 + Miuix(Compose) 管理 App
 
-作者：酷安@[翰德姆](https://www.coolapk.com/u/4112338) · 测试版持续迭代中（当前 **1.1.0-beta60**，versionCode 188）
+作者：酷安@[翰德姆](https://www.coolapk.com/u/4112338) · **正式版 1.1.0**（versionCode 201，2026-11-01 发布）
 
-> **⚠️ 版本状态：当前所有版本均为测试版（Beta）**。v0.4.x ~ v1.1.0-beta 全部属于测试迭代，
-> **正式版（Stable）尚未发布**，正式版版本号与发布时间未定，届时会在此处与
-> `docs/CHANGELOG.md` 明确标注。
+> **版本状态：稳定版。** v0.4.x ~ v1.1.0-beta 为测试迭代，自 **1.1.0（versionCode 201）** 起为正式版；
+> beta61 ~ beta72 的全部改进已收口进该版本，详见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 >
-> 最新构建：GitHub Actions `beta` 分支出包 → `HyperFlow-flashable.zip`（CI 产物）。
+> 最新构建：GitHub Actions → `HyperFlow-flashable.zip`（CI 产物）；更新通道默认走稳定版，
+> Beta 通道需在 App 设置页连点版本行 10 次解锁。
 ---
 
 ## 这是什么
@@ -22,13 +22,13 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 - **远控授权免输**：锁屏/授权盘密码自动捕获与自动填充，验证通过自动关闭授权 UI
 - 配套 **Miuix 风格管理 App**：首页环境检测、消息页、流转功能开关、主题（悬浮导航栏 + 液态玻璃）、在线更新
 
-## 功能总览（v1.1.0-beta60）
+## 功能总览（v1.1.0）
 
 | 功能 | 说明 | 代码入口 |
 |---|---|---|
 | ① 亮屏流转 | 亮屏时强制放行通知流转 | `hooks/HookForceTransfer.java` |
 | ② 分身流转 | 999 空间微信/QQ 通知也流转，标题加【分身/自定义前缀】 | `hooks/HookCloneBypass.java` |
-| ②-2 点击拉 999 | 点击分身通知 → 打开 999 空间微信/QQ/飞书/钉钉/企业微信（发送端重建 999 PendingIntent + 远程 caller 直改，三层防线） | `hooks/HookCloneBypass.java` / `hooks/HookRemoteOpen.java` / `hooks/HookMirrorObserve.java` |
+| ②-2 点击只开分身 | 点分身通知只拉 999 空间应用，不连带主应用：在 `com.xiaomi.mirror` 进程源头接管用户判定，并对自建 u0 PendingIntent 就地换成 999 | `hooks/HookMirrorCloneOpen.java`（修复） / `hooks/HookMirrorObserve.java`（只读观测） |
 | ③ 短信持久化 | 流转短信归档到 App 消息页；可选写入系统收件箱 | `hooks/HookSmsPersist.java` / `hooks/HookSmsSenderEnrich.java` |
 | ④ 来电在线接听 | 来电以全屏接听形态流转（亮屏/锁屏均可） | `hooks/HookCallRelay.java` / `hooks/HookCallVoipType.java` / `hooks/HookCallFilterPass.java` |
 | ⑤ 远控授权自动填 | 锁屏解锁时捕获凭证（system_server `checkCredential` 主通道）→ 授权盘自动填、不再弹授权盘 | `hooks/HookKeyguardCapture.java` / `hooks/HookTrustAuth*.java` / `CapturedCred.java` |
@@ -40,20 +40,22 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 
 ## 架构一句话
 
-**一个 KernelSU 模块**（刷入 `service.sh` + 管理 App）承载 App；**App 进程**负责 UI 与配置读写（su）；**`com.milink.service` 进程**被 LSPosed 注入通知流转 / 来电形态 hook；**system_server 进程**（`android` / `system` 作用域）自 beta57 起经 `onSystemServerStarting` 注入分身点击拦截（HookRemoteOpen）、镜像启动观察（HookMirrorObserve）与锁屏凭证捕获（HookKeyguardCapture）；**`com.xiaomi.trustservice`** 注入授权盘自动填与自动关闭；**`com.xiaomi.mirror`** 注入镜像启动全路径观察。完整 hook 装配见 [`XposedEntry.java`](app/src/main/java/com/hyperflowplus/XposedEntry.java)。
+**一个 KernelSU 模块**（刷入 `service.sh` + 管理 App）承载 App；**App 进程**负责 UI 与配置读写（su）；**`com.milink.service` 进程**被注入通知流转 / 来电形态 / 短信持久化 hook；**`com.xiaomi.trustservice`** 注入授权盘自动填充与自动关闭；**`com.xiaomi.mirror`** 注入分身点击的源头修复；**`com.android.incallui`** 注入亮屏来电 Voip 通知；**system_server**（`android` / `system` 作用域）经 `onSystemServerStarting` 注入锁屏凭证捕获（`HookKeyguardCapture`，自 beta66 起是该进程唯一保留的 hook）。完整装配见 [`XposedEntry.java`](app/src/main/java/com/hyperflowplus/XposedEntry.java)。
 
 详见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)（进程图、数据流、设计决策）。
 
 ## 安装
 
 1. **刷入模块**：KernelSU/APatch 管理器 → 安装 `HyperFlow-flashable.zip`（自动把 App 装为系统应用）
-2. **启用 LSPosed 模块**：LSPosed 中启用 **HyperFlow**，作用域建议勾选（模块自带预勾选）：
-   - `com.milink.service`（小米互联服务：通知流转/来电形态，核心）
-   - `com.hyperflowplus`（本 App，用于运行态标记）
-   - `android` / `system`（system_server：分身点击拦截、镜像启动观察、锁屏凭证捕获）
-   - `com.xiaomi.trustservice`（授权盘自动填与自动关闭）
-   - `com.xiaomi.mirror`（镜像/远控进程：启动观察）
-   - `com.android.incallui`（来电形态辅助）
+2. **启用 Xposed 模块**：在管理器中启用 **HyperFlow**，作用域勾选这 6 项（模块自带预勾选，也可用 App 内「一键启用」自动写）：
+   - `com.milink.service`（小米互联服务：通知流转/来电形态/短信，核心）
+   - `com.xiaomi.trustservice`（妙享直通授权盘：远控免密）
+   - `com.xiaomi.mirror`（**点击只开分身**的修复所在进程，漏勾会串号）
+   - `com.android.incallui`（亮屏来电流转，漏勾则只有锁屏来电会流转）
+   - `android` / `system`（系统框架：锁屏凭证捕获。这两个是同一件事的两种框架标识，
+     经典 LSPosed 勾 `android`，Vector/JingMatrix 勾 `system`，不确定就两个都勾）
+
+   > 本 App（`com.hyperflowplus`）无需勾选——它自己不需要被 hook。
 3. **授权 Root**：KernelSU 授权 `com.milink.service` 与 `com.hyperflowplus` Root 权限（`service.sh` 会自动写入白名单）
 4. **重启设备**，打开 App 完成首次引导
 
@@ -76,11 +78,16 @@ HyperOS 的「小米互联 / 妙享桌面」通知流转**默认只在锁屏时�
 
 ## 开发状态
 
-- 当前版本：**1.1.0-beta60**（versionCode 188，commit fd2eff2，CI run 41051778338）
-- beta60 重点：分身逻辑与 beta59 一致（三层防线）；锁屏凭证捕获主通道改为 `LockSettingsService.checkCredential`（重启后首次解锁必走，不再依赖授权盘手输）；授权 UI 自动关闭（beta58 已修）随包验收
-- beta59 重点：双开根治三层防线——发送端把分身通知 contentIntent 重建为 userId=999 的 PendingIntent（点击直接开分身）、HookRemoteOpen 标记检查提前 + 远程 caller 直改 999、HookMirrorObserve 全路径观察
-- beta57 重点：恢复新式 libxposed 架构 + `onSystemServerStarting` 注入 system_server 通道（对照 HyperModifier/Vector 机制），删 `assets/xposed_init` 防 legacy 误判
-- 完整历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)（beta54 起详见 `docs/changelog-latest.md`），待办见 [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- **当前版本：1.1.0 正式版**（versionCode 201）
+- 本轮（beta61 ~ beta72）重点工作：
+  - **beta70 —— 点击分身通知不再串号**：根因是 mirror 进程里「把应用搬到投屏屏」的逻辑只按主空间用户（0）查任务，
+    于是永远查到主微信窗口并搬上来；改在该逻辑源头接管用户判定。旧的 system_server 拦截方案（`HookRemoteOpen`）已在 beta66 删除。
+  - **beta71 / beta72 —— 短信排序**：排序算法原来是两毫秒时间戳相减后强转 `Int`，相差超过约 24.86 天即溢出翻负号；
+    改为全量长整数比较，并补齐时间格式的解析、剔除畸形时间戳。
+  - **beta59 / beta60 / beta58**：亮屏来电 Voip 通知、锁屏凭证捕获修正类名路径、授权 UI 自动关闭。
+  - **beta57**：迁移新式 libxposed 架构 + `onSystemServerStarting` 注入通道。
+- 完整历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)（1.1.0 详版日志见 `docs/changelog-latest.md`），
+  待办与验证结论见 [`docs/ROADMAP.md`](docs/ROADMAP.md)，技术实现见 [`docs/FEATURES.md`](docs/FEATURES.md)。
 
 ## AI 辅助生成声明
 
