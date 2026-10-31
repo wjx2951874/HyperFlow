@@ -12,9 +12,12 @@ HyperFlow 不是单一 App，而是**一个可刷入的 KernelSU 模块**，内�
 │    进程：独立 App 进程                                       │
 │    职责：UI（首页/流转/消息/设置）+ 配置读写（su）+ 环境检测  │
 ├─────────────────────────────────────────────────────────────┤
-│ ② Xposed hooks（libxposed API，注入两个目标进程）           │
-│    ├─ com.milink.service 进程：5 个通知流转 hook             │
-│    └─ system_server 进程（android 作用域）：1 个点击拉 999   │
+│ ② Xposed hooks（libxposed API 102，注入 5 个目标进程，共 17 个 hook）│
+│    ├─ com.milink*        通知流转主链路（9 个）              │
+│    ├─ com.xiaomi.trustservice  妙享直通授权盘（4 个）        │
+│    ├─ com.xiaomi.mirror  分身通知点击的源头（2 个）          │
+│    ├─ com.android.incallui     亮屏来电 Voip 通知（1 个）    │
+│    └─ system_server（android / system）锁屏凭证捕获（1 个）  │
 ├─────────────────────────────────────────────────────────────┤
 │ ③ KernelSU 模块（ksu-module/）                              │
 │    service.sh：KSU 白名单 + 自动安装/升级管理 App            │
@@ -34,23 +37,47 @@ HyperFlow 不是单一 App，而是**一个可刷入的 KernelSU 模块**，内�
 入口类：`java/com/hyperflowplus/XposedEntry.java`（libxposed API，`META-INF/xposed/java_init.list` 注册）。
 
 ```
+onSystemServerStarting(param)                 ← 新式注入入口，与 CPU 无关，最可靠
+└─ installSystemHooks(cl)
+     └─ HookKeyguardCapture        # ⑤ 锁屏凭证捕获（system_server 唯一保留的 hook）
+
 onPackageLoaded(param)
 ├─ 无条件 markLoaded()          # 写运行态时间戳（供首页检测判断"模块是否真被加载"）
-├─ package == "android"        → 注入 system_server
-│    └─ HookRemoteOpen.installSystem(cl)
-│       # 拦截"跨设备打开应用"的 startActivity 请求，分身通知点击 → 999 空间
-├─ package == "com.milink.service" → 注入小米互联服务
-│    ├─ HookForceTransfer      # ① 亮屏强制流转（模拟锁屏）
-│    ├─ HookCallRelay          # ④ 来电在线接听
-│    ├─ HookCloneBypass        # ② 分身通知流转（999 放行 + 【分身】前缀 + 去重）
-│    ├─ HookSmsPersist         # ③ 接收端短信持久化（App 归档 + 写系统收件箱）
-│    ├─ HookSmsSenderEnrich    # ③ 发送端补号（把原始号码写进流转协议）
-│    └─ HookAutoUnlock         # ⑤ 自动输密码（占位，P1）
+│                               # 四路径分别对应 android / milink / trustservice 作用域生效与否
+├─ package ∈ {"android", "system"} → 走同一套 installSystemHooks（幂等，重复调用跳过）
+│                                    # HookRemoteOpen 已于 beta66 删除：分身双开改在 mirror 源头解决
+├─ package == "com.xiaomi.trustservice" → 妙享直通授权盘
+│    ├─ HookTrustAuth            # ⑤ 授权主体：自动填入留存的锁屏凭证走真实校验
+│    ├─ HookTrustAuthAuto        # ⑤ 自动确认
+│    ├─ HookTrustAuthAutoFill    # ⑤ 凭证自动填充
+│    └─ HookTrustAuthUiClose     # ⑤ 验证通过后自动 finish 授权界面
+├─ package == "com.xiaomi.mirror" → 分身通知点击的源头进程（beta70 起，根治点）
+│    ├─ HookMirrorCloneOpen      # ②-2 在源头条处置 guard：自建 u0 PendingIntent 就地换成 999
+│    └─ HookMirrorObserve        # ②-2 只读观测（验证与机型适配用，不改行为）
+├─ package == "com.android.incallui" → 亮屏来电
+│    └─ HookCallVoipNotify       # ④ 亮屏来电补发 Voip 形态通知（此前仅锁屏来电会流转）
+├─ package startsWith "com.milink" → 通知流转主链路
+│    ├─ HookForceTransfer        # ① 亮屏强制流转（模拟锁屏）
+│    ├─ HookCloneBypass          # ② 分身通知流转（999 放行 + 【分身】前缀 + 去重）
+│    ├─ HookSmsPersist           # ③ 接收端短信持久化（App 归档 + 写系统收件箱）
+│    ├─ HookSmsSenderEnrich      # ③ 发送端补号（把原始号码写进流转协议）
+│    ├─ HookCallRelay            # ④ 来电在线接听（锁屏通道）
+│    ├─ HookCallVoip             # ④ 来电 Voip 形态
+│    ├─ HookCallFilterPass       # ④ 来电过滤放行
+│    ├─ HookCallVoipType         # ④ Voip 类型判定（beta45 起不再强制，按原生 isVoipSupported）
+│    └─ HookAutoUnlock           # ⑤ 自动解锁（辅助）
 └─ 其他包名 → return（不注入）
 ```
 
-**作用域（LSPosed）**：`app/src/main/res/values/arrays.xml` 预勾选三个——
-`com.milink.service`（核心）、`com.hyperflowplus`（运行态标记）、`android`（点击拉 999 必须）。
+**作用域（LSPosed）**：`app/src/main/res/values/arrays.xml` 预勾选六项——
+`com.milink.service`（核心流转/来电/短信）、`com.xiaomi.trustservice`（授权盘免密）、
+`com.xiaomi.mirror`（点击只开分身）、`com.android.incallui`（亮屏来电）、
+`android` / `system`（同一件事的两种框架标识：经典 LSPosed 认 `android`，Vector/JingMatrix 认 `system`，
+两者都写保证两边都认）。
+本 App（`com.hyperflowplus`）自身无需被 hook，自 beta57 起已移出推荐作用域。
+
+> 改作用域要同步两处：`res/values/arrays.xml` 的 `xposedscope`，以及 `GuideScreen.kt` 里
+> `fixLspScript()` 的写入列表（引导页 / 首页「修复」/ 设置页三处共用同一个函数）。
 
 **为什么 hook 用 Java 而 UI 用 Kotlin？** 历史原因：hook 从 V0.2 起就是 Java（libxposed API 直接反射），
 迁移成本高且已稳定；UI 在 V0.4.0 从手写 View 全面迁移到 Kotlin + Compose + Miuix。
@@ -85,15 +112,22 @@ onPackageLoaded(param)
     └─ HookSmsPersist：写入 flow provider（消息页数据源）+ 可选注入系统收件箱
 ```
 
-**点击分身通知（接收端）→ 打开 999 应用**：
+**点击分身通知（接收端）→ 只开 999 应用（beta70 方案）**：
 
 ```
 接收端点击分身通知
-  → 系统"跨设备镜像打开应用"把 Intent 发回发送端
-  → milink 在 system_server 执行 startActivity（目标包=微信/QQ，userId=0）
-  → HookRemoteOpen：检测到"调用者=milink && 目标包 ∈ {微信,QQ} && 该包存在 999 空间"
-       → 改写 userId=999 重发 → 直接打开多开微信/QQ
+  → 跨设备镜像打开请求回到发送端，落到 com.xiaomi.mirror 进程
+  → mirror 内「把应用搬到投屏屏」的那段逻辑按主空间用户（0）查任务
+       └─ 它只会查到主微信的窗口并搬上来  ← 主微信是被「搬」来的，不是被「启动」的
+  → HookMirrorCloneOpen 在该源头条处置 guard：识别出本次流程确实是为打开分身而来时
+       ├─ 让它按 999 用户去查任务
+       └─ 对本进程自建的 u0 PendingIntent 就地替换为 999 版本
+  → 结果：主应用从头到尾不动，分身正常上屏
 ```
+
+> 排查结论：日志里重建 PendingIntent 的用户一直是 999，Intent 层从头到尾是对的；
+> 真正串号的是更下游那句不带用户概念的 `moveRootTaskToDisplayCompat`。
+> 详见 [`docs/FEATURES.md`](FEATURES.md) 功能 ②-2 与 `docs/dev/mirror-clone-open-runtime-evidence.md`。
 
 ## 4. 关键设计决策（为什么这么写）
 
@@ -102,7 +136,7 @@ onPackageLoaded(param)
 | D1 | 亮屏流转 = hook `isDeviceSupported` 返回 true（等效模拟锁屏） | 反编译确认官方逻辑"锁屏才流转"；返回 true 是最小侵入方案。副作用：互联侧显示设备"已锁屏"，用户接受 |
 | D2 | 分身流转 = **只放行不改 user**（不做归一、不做镜像） | V0.2.4 做"user 归一"→ 发送端 systemui 也显示一条（重复 bug）；V0.4.43 镜像方案复杂度高 → 放弃。只放行 + 标题【分身】前缀最稳 |
 | D3 | 分身去重 = 内容指纹 key + 跨进程共享文件表（20s 窗口） | 同一条 999 消息会走小米互联两条流转链路（一条过 hook、一条原样），且可能在不同进程；单进程静态表拦不住第二条 |
-| D4 | 点击拉 999 = hook system_server 的 startActivity（而非镜像通知） | 系统"跨设备打开"请求发到 system_server；在此改写 userId 最接近系统原逻辑，其余调用一律放行不误伤 |
+| D4 | 点击只开分身 = **在 `com.xiaomi.mirror` 进程源头接管用户判定**（beta70 定稿） | 曾走过 system_server 改 userId（旧 `HookRemoteOpen`，beta66 删除）与三层拦截，均只能覆盖 Intent 层；日志显示真正串号的是更下游按「主空间用户（0）」查任务的搬屏逻辑。根治点必须在它的源头，见上文流程。弯路代价：beta61~beta70 共 10 个版本 |
 | D5 | 短信持久化两层（flow 归档 + 写系统收件箱，默认只归档） | OS4 短信 App 不展示"流转消息"界面 → App 内归档兜底；写系统收件箱有回环/重复风险（测试多次复现）→ 默认关 + 10 秒倒计时确认弹窗 |
 | D6 | 弹窗一律用 Compose `Popup`（Anchor 定位）而非系统 `Dialog` | 系统 Dialog 在悬浮窗/部分机型上闪退（用户实测）；Popup 不闪退、可精确控制位置与深浅色 |
 | D7 | 弹窗智能移位（开悬浮/玻璃上移 88dp，否则 40dp） | 底部导航栏会遮挡弹窗下半部分；上移量按是否开启悬浮/玻璃动态调整 |
@@ -111,6 +145,10 @@ onPackageLoaded(param)
 | D10 | 更新检测多通道并行 + 取 versionCode 最大 | GitHub 国内直连超时；jsDelivr 对 update.json 有 12h+ 陈旧缓存且 ?v= 无效 → 已弃用，改用 ghproxy 系镜像 + raw 兜底，多通道取最大版本防误判"已是最新" |
 | D11 | 更新下载走系统浏览器（`ACTION_VIEW`） | App 内下载进度不可见、用户无感知；浏览器下载有进度且可断点 |
 | D12 | 配置只读 `/data/adb/hyperflowplus/config.json`，不启用 HTTP WebUI | V0.2.6 起放弃 WebUI：App 是唯一入口，su 读写秒级生效，攻击面更小 |
+| D13 | 系统框架作用域两个标识都写（`android` + `system`） | 经典 LSPosed 认 `android`，Vector/JingMatrix 认 `system`；只写一个会导致另一类框架注入不进去。同理 `onSystemServerStarting` 与 `onPackageLoaded` 两条都保留并做幂等 |
+| D14 | 时间排序一律用 `Long.compare`，禁止两时间戳相减转 `Int` | 毫秒差超过 `2^31`（约 24.86 天）就会溢出翻负号，比较符号反转。本地历史与实时消息混排必然跨这个阈值。修复见 beta71 / beta72 |
+| D15 | 时间戳必须过合理性闸门再参与排序 | 秒被误当毫秒会解析成 1970 年，旧归档格式可能解析失败——这些畸形值若直接参与排序会插在正常消息中间。闸门剔除后归 0 沉底，去重 key 同步降级为按正文匹配 |
+| D16 | 稳定性相关的高风险改动背后保留"观测型"hook | `HookMirrorObserve` 不改任何行为，只打全路径日志。真章 surgical 修复 + 观测留证据，下一次机型适配不必重新踩 beta61~beta70 的排查路径 |
 
 ## 5. 目录速览
 
@@ -129,7 +167,7 @@ hyperflow-miuix/
 │       │   ├── Config.java          # 全局配置 key + updateJsonUrls + 计数器
 │       │   ├── RootExec.java        # su 执行封装（App 侧）
 │       │   ├── MiflowLog.java       # 日志
-│       │   └── hooks/               # 7 个 hook（见第 2 节）
+│       │   └── hooks/               # 17 个 hook + CapturedCred（见第 2 节）
 │       ├── resources/META-INF/xposed/  # LSPosed 识别元数据（作用域/API 版本）
 │       └── res/values/arrays.xml    # LSPosed 预勾选作用域
 ├── ksu-module/                      # module.prop + service.sh + README.txt（模块载体）
