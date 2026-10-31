@@ -257,33 +257,60 @@ public class HookMirrorCloneOpen {
     }
 
     private static void redirectPendingIntent(Chain chain) throws Throwable {
-        if (!Config.isCloneTransferEnabled()) {
-            return;
-        }
-        long guard = sGuardSend;
-        if (guard == 0 || System.currentTimeMillis() - guard > GUARD_MS) {
-            return; // 无分身点击上下文，原样放行
-        }
         List<Object> args = chain.getArgs();
         if (args == null || args.isEmpty() || !(args.get(0) instanceof PendingIntent)) {
             return;
         }
         PendingIntent pi = (PendingIntent) args.get(0);
-        String pkg = readPiPackage(pi);
-        MiflowLog.i("[MIRROR-FIX] sendPendingIntentCompat pkg=" + pkg
-                + " pi=" + (pi == null ? "null" : "self-built?"));
-        if (pkg == null || !TARGET_PKGS.contains(pkg)) {
-            return; // 读不到 = 外部跨 uid PI（999 自带 contentIntent），本来开分身，放行
+
+        // 无条件观测：creator 包名/user 是公开 API（跨进程/跨设备可读），intent 内容在
+        // system uid（mirror）下通常可读。三者叠加可一锤定音判断「这次 send 的 PI 是主还是分身」。
+        String creatorPkg = null;
+        int userId = -1;
+        String intentPkg = null;
+        boolean cloneFlag = false;
+        try {
+            creatorPkg = pi.getCreatorPackage();
+            android.os.UserHandle uh = pi.getCreatorUserHandle();
+            userId = (uh == null) ? -1 : uh.getIdentifier();
+        } catch (Throwable t) {
+            MiflowLog.w("[MIRROR-FIX] read creator failed: " + t.getMessage());
+        }
+        try {
+            Intent it = pi.getIntent();
+            if (it != null) {
+                cloneFlag = it.getBooleanExtra(HF_IS_CLONE, false);
+                if (it.getPackage() != null) {
+                    intentPkg = it.getPackage();
+                } else if (it.getComponent() != null) {
+                    intentPkg = it.getComponent().getPackageName();
+                }
+            }
+        } catch (Throwable t) {
+            // 跨 uid 读不到（非 system）→ 忽略，靠 creator 字段兜底
+        }
+        String pkg = intentPkg != null ? intentPkg : creatorPkg;
+        MiflowLog.i("[MIRROR-FIX] h() creator=" + creatorPkg + " user=" + userId
+                + " intentPkg=" + intentPkg + " clone=" + cloneFlag);
+
+        // 精确拦截：目标是分身支持应用，且携带分身信号（hf_is_clone 标记 / creator user 999），
+        // 但 PI 实际落点是 u0（user 在跨设备链路里丢了）→ 就地重建为 999，避免主微信被拉起。
+        // 不带分身信号的 u0 PI（真·主微信通知）原样放行，不误伤。
+        boolean isCloneSignal = cloneFlag || userId == USER_CLONE;
+        if (pkg == null || !TARGET_PKGS.contains(pkg) || !isCloneSignal || userId == USER_CLONE) {
+            return;
+        }
+        if (!Config.isCloneTransferEnabled()) {
+            return;
         }
         if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
-            return; // 未开双开的应用，原逻辑
+            return; // 未开双开的应用
         }
         PendingIntent newPi = rebuildAsClone(pkg);
         if (newPi != null) {
             args.set(0, newPi);
-            sGuardSend = 0; // 一次性
             Config.bump(Config.CNT_CLONE);
-            MiflowLog.i("[MIRROR-FIX] self-built u0 PI redirected: " + pkg + " -> user 999");
+            MiflowLog.i("[MIRROR-FIX] clone PI user lost(0), redirected to 999: " + pkg);
         }
     }
 
