@@ -444,7 +444,13 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
         val title = field(line, "content_title")
         // V0.6.16.4：去掉小米验证码聚合标记前缀（"[2条]...xxx"），flow 表原文保留不覆盖
         val body = HFState.sanitizeFlowBody(field(line, "content_description"))
-        val time = field(line, "content_time")
+        // V1.1.0-beta72：content_time 解不出有效时间时，回退 flow 表另一时间列 time_stamp
+        // （小米 flow provider 每行形如 ... content_time=20260930T155344, time_stamp=.., ...）
+        val timeRaw = field(line, "content_time")
+        val time = if (timeToEpoch(timeRaw) > 0L) timeRaw else {
+            val ts = field(line, "time_stamp")
+            if (timeToEpoch(ts) > 0L) ts else timeRaw
+        }
         // 机型：只取 provider 的 content_device_name 原样显示（英文机型名），
         // 截断到第一个逗号并清除不可见/替换字符，避免解析把后续字段拼进来
         val device = field(line, "content_device_name")
@@ -466,8 +472,13 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
     // 可能相差几十秒/几分钟，原 1 分钟键会导致同一消息不去重而重复显示）。
     // 先收集全部 live 键再过滤 local，顺序无关（原实现 local 先出现、live 后到时两者都会保留）。
     for ((_, rows) in groups) {
-        fun keyOf(r: Array<String>): String =
-            (timeToEpoch(r[0]) / 120000).toString() + "|" + r[2]
+        fun keyOf(r: Array<String>): String {
+            val t = timeToEpoch(r[0])
+            // V1.1.0-beta72：时间戳不可信时退化成「纯正文」键。
+            // 旧实现用 (0/120000)+正文 做键，本地归档那条的时间一旦解析失败就永远匹配不上
+            // 云端那条 → 同一条短信被显示两遍，且多出来那条钉在列表一端，看着就是"排序乱了"
+            return if (t <= 0L) "t0|" + r[2] else (t / 120000).toString() + "|" + r[2]
+        }
         val liveKeys = HashSet<String>()
         val prefer = HashSet<String>()
         for (r in rows) {
@@ -533,23 +544,36 @@ private fun timeToEpoch(raw: String): Long {
 
 private fun parseTimeToEpoch(raw: String): Long {
     val s = raw.trim()
-    // 纯数字：10 位=秒级时间戳、13 位=毫秒时间戳
+    val v: Long
     if (s.isNotEmpty() && s.all { it.isDigit() }) {
-        val v = s.toLongOrNull() ?: return 0L
-        return if (v < 100_000_000_000L) v * 1000L else v
+        // 纯数字：10 位=秒级时间戳、13 位=毫秒时间戳
+        val x = s.toLongOrNull() ?: return 0L
+        v = if (x < 100_000_000_000L) x * 1000L else x
+    } else {
+        var out = 0L
+        for (p in arrayOf(
+            "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
+            "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
+        )) {
+            val t = runCatching {
+                val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
+                f.isLenient = false
+                f.parse(s)?.time
+            }.getOrNull()
+            if (t != null && t > 0L) {
+                out = t
+                break
+            }
+        }
+        v = out
     }
-    for (p in arrayOf(
-        "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
-        "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
-    )) {
-        val t = runCatching {
-            val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
-            f.isLenient = false
-            f.parse(s)?.time
-        }.getOrNull()
-        if (t != null && t > 0L) return t
-    }
-    return 0L
+    // V1.1.0-beta72 合理性闸门：明显不可能的时间一律判为无效（返回 0），
+    // 让它们统一归到列表一端，而不是凭一个错误时间插在正常消息中间。
+    //  - 早于 2000-01-01：典型是秒级时间戳被当成毫秒（1970 年）
+    //  - 晚于「现在 +1 天」：设备时钟错乱 / 字段语义不符
+    if (v <= 0L) return 0L
+    if (v < 946_684_800_000L || v > System.currentTimeMillis() + 86_400_000L) return 0L
+    return v
 }
 
 /** 取键值对中某字段值；结束边界 = 下一个已知字段（含 ", " 前缀），避免正文内逗号干扰 */
