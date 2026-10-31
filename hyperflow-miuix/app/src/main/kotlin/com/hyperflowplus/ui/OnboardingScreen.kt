@@ -160,9 +160,10 @@ private fun StageAgreement(
     ) {
         SectionTitle("使用前需要")
         Text(
-            "· Root 权限（在 KernelSU 中允许本应用获取超级用户权限）\n" +
-                    "· LSPosed 2.2+ 框架（KernelSU 内嵌 LSPosed 亦可）\n" +
-                    "· 在 LSPosed 中启用本模块（模块已自动刷入，本应用会自动勾选推荐作用域）",
+            "· 已 Root 的设备（KernelSU / APatch / Magisk，并在管理器中授予本应用超级用户权限）\n" +
+                    "· Xposed 框架：LSPosed 2.2+，或 Vector / JingMatrix 分支\n" +
+                    "· 小米澎湃 OS（HyperOS），并在系统设置中开启「互联互通 / 小米互联」\n" +
+                    "· 在 Xposed 管理器中启用 HyperFlow，并勾选全部 6 项推荐作用域（本应用会一键自动勾选）",
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
         )
@@ -170,9 +171,13 @@ private fun StageAgreement(
 
         SectionTitle("当前功能")
         Text(
-            "· 亮屏流转——能够将本设备在亮屏时被系统拦截的跨设备通知流转至其他设备（部分系统版本来电亮屏流转可能不可用）\n" +
-                    "· 双开流转——能够将本设备微信、QQ、钉钉等双开应用的通知流转至其他设备，并可在其他设备点击打开双开应用回复（需蓝牙或局域网）。\n" +
-                    "· 短信持久化——能够将其他设备流转至本设备的通知写入App 内消息页，或写入系统短信收件箱（另一台设备需Root并安装本模块才能完整显示但会存在重复互联问题）",
+            "· 亮屏流转——亮屏状态下被系统拦截的跨设备通知，强制放行流转到其他设备\n" +
+                    "· 双开流转——微信、QQ、钉钉等分身应用的通知独立流转，标题带【双开】前缀\n" +
+                    "· 点击只开分身——在其他设备点击分身通知时只拉起分身，不会连带把主应用一起拽起来\n" +
+                    "· 来电流转——来电以 VoIP 形态流转到其他设备，锁屏与亮屏均可\n" +
+                    "· 妙享直通免密——自动捕获锁屏凭证并填入授权盘，验证通过后自动关闭授权界面\n" +
+                    "· 短信归档——流转短信存入 App 消息页，支持排序、搜索、删除；可选写入系统短信收件箱（默认关闭）\n" +
+                    "· 消息搜索——全屏搜索，结果按「会话 / 信息」分组并高亮命中词",
             style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
         )
