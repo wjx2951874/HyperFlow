@@ -68,6 +68,23 @@ public class HookMirrorCloneOpen {
     private static volatile long sGuardRelay = 0;
     private static final long GUARD_MS = 15000;
 
+    /**
+     * beta68（真·根因）：「这次打开的是 999 分身」的确认窗口。
+     *
+     * 反编译 + 双份日志实锤的真实机制：
+     *   ① SystemOsHelper.h send 通知自带的 user 999 分身 PI → 分身被打开（正确）
+     *   ② 同时 ShareNotificationHelper 按【包名】找 task（它不知道有 999 这回事），
+     *      找到 u0 主微信的 task → SystemUtils.moveRootTaskToDisplayCompat
+     *      → IActivityTaskManager.moveRootTaskToDisplay → 主微信 task 被搬到投屏屏显示
+     *   ①+② 并发 = 双开。主微信不是被「拉起」，是被「搬过来」的
+     *   （这也解释了「时好时坏」：取决于主微信 task 是否还在后台）。
+     *
+     * 所以修复不在 send 层（PI 本来就是对的 999），而在搬运层：
+     * 确认本次是分身点击后，禁止把 u0 主应用 task 搬到投屏屏。
+     */
+    private static volatile long sCloneOpening = 0;
+    private static final long CLONE_WINDOW_MS = 6000;
+
     private static final Set<String> TARGET_PKGS = new HashSet<String>() {{
         add("com.tencent.mm");
         add("com.tencent.mobileqq");
@@ -81,6 +98,7 @@ public class HookMirrorCloneOpen {
         hookDispatch(cl);
         hookSendPendingIntentCompat(cl);
         hookCompletionCallback(cl);
+        hookTaskMove(cl);
     }
 
     // ------------------------------------------------------------------
@@ -304,14 +322,23 @@ public class HookMirrorCloneOpen {
         MiflowLog.i("[MIRROR-FIX] h() creator=" + creatorPkg + " user=" + userId
                 + " intentPkg=" + intentPkg + " clone=" + cloneFlag);
 
-        // 精确拦截：目标是分身支持应用，且携带分身信号（hf_is_clone 标记 / creator user 999），
-        // 但 PI 实际落点是 u0（user 在跨设备链路里丢了）→ 就地重建为 999，避免主微信被拉起。
-        // 不带分身信号的 u0 PI（真·主微信通知）原样放行，不误伤。
-        boolean isCloneSignal = cloneFlag || userId == USER_CLONE;
-        if (pkg == null || !TARGET_PKGS.contains(pkg) || !isCloneSignal || userId == USER_CLONE) {
+        if (!Config.isCloneTransferEnabled()) {
             return;
         }
-        if (!Config.isCloneTransferEnabled()) {
+
+        // beta68 真·根因：PI 的 creator user 已是 999（分身自带 PI，日志实锤），
+        // send 层无需改动 —— 但要置标记，禁止随后把 u0 主应用 task 搬到投屏屏，
+        // 那才是主微信冒出来的真正来源。点主微信通知时 user=0，不会置标记，零误伤。
+        if (pkg != null && TARGET_PKGS.contains(pkg) && userId == USER_CLONE) {
+            sCloneOpening = System.currentTimeMillis();
+            MiflowLog.i("[MIRROR-FIX] clone open confirmed user=999 (" + pkg
+                    + ") -> block u0 task move " + CLONE_WINDOW_MS + "ms");
+            return;
+        }
+
+        // 兜底：分身信号存在但 user 在跨设备链路里丢了（落到 u0）→ 就地重建为 999。
+        boolean isCloneSignal = cloneFlag || userId == USER_CLONE;
+        if (pkg == null || !TARGET_PKGS.contains(pkg) || !isCloneSignal) {
             return;
         }
         if (!new File("/data/user/" + USER_CLONE + "/" + pkg).exists()) {
@@ -431,6 +458,54 @@ public class HookMirrorCloneOpen {
             MiflowLog.i("[MIRROR-FIX] HookC completion callback hooked " + hooked + " methods");
         } catch (Throwable t) {
             MiflowLog.w("[MIRROR-FIX] hookCompletionCallback failed: " + t.getMessage());
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Hook D（beta68 真·根因）：分身点击期间，禁止把 u0 主应用 task 搬到投屏屏
+    // ------------------------------------------------------------------
+    private static void hookTaskMove(ClassLoader cl) {
+        try {
+            // 框架 Binder 代理类，永不混淆、跨版本稳定
+            //（HookMirrorObserve 已实锤 hook 成功：ATM proxy hooked 6 methods）
+            Class<?> proxy = Class.forName("android.app.IActivityTaskManager$Stub$Proxy", false, cl);
+            int hooked = 0;
+            for (Method m : proxy.getDeclaredMethods()) {
+                if (!m.getName().contains("moveRootTaskToDisplay")) {
+                    continue;
+                }
+                m.setAccessible(true);
+                final Method mm = m;
+                XposedEntry.get().hook(m)
+                        .setExceptionMode(ExceptionMode.PROTECTIVE)
+                        .intercept(new Hooker() {
+                            @Override
+                            public Object intercept(Chain chain) throws Throwable {
+                                try {
+                                    long t = sCloneOpening;
+                                    if (t != 0 && System.currentTimeMillis() - t <= CLONE_WINDOW_MS) {
+                                        StringBuilder sb = new StringBuilder();
+                                        List<Object> as = chain.getArgs();
+                                        if (as != null) {
+                                            for (Object a : as) {
+                                                sb.append(a == null ? "null" : String.valueOf(a)).append(",");
+                                            }
+                                        }
+                                        MiflowLog.i("[MIRROR-FIX] BLOCKED u0 task move "
+                                                + mm.getName() + "(" + sb + ") during clone open");
+                                        return null; // 吞掉：主微信 task 不许出现在投屏屏
+                                    }
+                                } catch (Throwable e) {
+                                    MiflowLog.w("[MIRROR-FIX] task move check failed: " + e.getMessage());
+                                }
+                                return chain.proceed();
+                            }
+                        });
+                hooked++;
+            }
+            MiflowLog.i("[MIRROR-FIX] HookD task-move hooked " + hooked + " methods");
+        } catch (Throwable t) {
+            MiflowLog.w("[MIRROR-FIX] hookTaskMove failed: " + t.getMessage());
         }
     }
 }
