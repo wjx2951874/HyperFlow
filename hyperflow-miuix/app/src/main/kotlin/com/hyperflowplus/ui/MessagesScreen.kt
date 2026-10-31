@@ -492,35 +492,64 @@ fun parseFlow(raw: String, sort: String): List<Pair<String, List<Array<String>>>
     val nameDesc = sort == "name_desc"
     val byName = sort.startsWith("name")
     for ((_, rows) in list) {
-        // 时间排序：统一解析成时间戳再比较（content_time 有 yyyyMMddTHHmmss 和 yyyy-MM-dd HH:mm 两种格式，字符串比较会错乱）
-        rows.sortWith { a, b ->
-            if (timeDesc) (timeToEpoch(b[0]) - timeToEpoch(a[0])).toInt()
-            else (timeToEpoch(a[0]) - timeToEpoch(b[0])).toInt()
+        // 时间排序：统一解析成时间戳再比较。
+        // V1.1.0-beta71 排序乱序根因修复：旧实现 (timeToEpoch(a) - timeToEpoch(b)).toInt()，
+        // 两个毫秒时间戳只要相隔超过 Int.MAX_VALUE（2^31 ms ≈ 24.86 天）就会 Int 溢出翻成负数，
+        // 「本地历史（几个月累积）+ 实时（刚收到）」混排时必然触发 → 顺序整个乱掉。
+        // 改用 java.lang.Long.compare 全量比较，永不溢出。
+        if (timeDesc) {
+            rows.sortWith { a, b -> java.lang.Long.compare(timeToEpoch(b[0]), timeToEpoch(a[0])) }
+        } else {
+            rows.sortWith { a, b -> java.lang.Long.compare(timeToEpoch(a[0]), timeToEpoch(b[0])) }
         }
     }
     list.sortWith { a, b ->
         if (byName) {
             if (nameDesc) b.first.compareTo(a.first) else a.first.compareTo(b.first)
         } else {
-            val ta = a.second.firstOrNull()?.get(0) ?: ""
-            val tb = b.second.firstOrNull()?.get(0) ?: ""
-            if (timeDesc) (timeToEpoch(tb) - timeToEpoch(ta)).toInt()
-            else (timeToEpoch(ta) - timeToEpoch(tb)).toInt()
+            val ta = timeToEpoch(a.second.firstOrNull()?.get(0) ?: "")
+            val tb = timeToEpoch(b.second.firstOrNull()?.get(0) ?: "")
+            if (timeDesc) java.lang.Long.compare(tb, ta) else java.lang.Long.compare(ta, tb)
         }
     }
     return list
 }
 
-/** 解析两种时间格式为时间戳（排序用）：20260930T155344 / 2026-09-30 15:53 */
+/** 时间解析结果缓存：排序比较会调用 O(n log n) 次，避免反复创建 SimpleDateFormat */
+private val TIME_EPOCH_CACHE = java.util.concurrent.ConcurrentHashMap<String, Long>(512)
+
+/** flow 时间字符串 → 时间戳（排序与显示统一走这里，口径一致）。
+ *  支持：20260930T155344（小米流转）/ 2026-09-30 15:53 / 10-30 15:53（旧归档）/ 秒或毫秒时间戳。
+ *  V1.1.0-beta71：旧实现只认前两种，其余一律返回 0（1970 年），这些短信在列表里被乱排
+ *  （用户反馈"其他时候也有点儿乱"）。解析失败仍返回 0，但下游用 Long 比较不会拖垮整体顺序。 */
 private fun timeToEpoch(raw: String): Long {
     if (raw.isBlank()) return 0L
-    return runCatching {
-        if (raw.contains("T")) {
-            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw).time
-        } else {
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).parse(raw).time
-        }
-    }.getOrDefault(0L)
+    val cached = TIME_EPOCH_CACHE[raw]
+    if (cached != null) return cached
+    val v = parseTimeToEpoch(raw)
+    TIME_EPOCH_CACHE[raw] = v
+    return v
+}
+
+private fun parseTimeToEpoch(raw: String): Long {
+    val s = raw.trim()
+    // 纯数字：10 位=秒级时间戳、13 位=毫秒时间戳
+    if (s.isNotEmpty() && s.all { it.isDigit() }) {
+        val v = s.toLongOrNull() ?: return 0L
+        return if (v < 100_000_000_000L) v * 1000L else v
+    }
+    for (p in arrayOf(
+        "yyyyMMdd'T'HHmmss", "yyyy-MM-dd HH:mm", "M-d HH:mm",
+        "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm"
+    )) {
+        val t = runCatching {
+            val f = java.text.SimpleDateFormat(p, java.util.Locale.CHINA)
+            f.isLenient = false
+            f.parse(s)?.time
+        }.getOrNull()
+        if (t != null && t > 0L) return t
+    }
+    return 0L
 }
 
 /** 取键值对中某字段值；结束边界 = 下一个已知字段（含 ", " 前缀），避免正文内逗号干扰 */
@@ -545,16 +574,11 @@ private fun field(line: String, key: String): String {
  */
 fun fmtTime(raw: String): String {
     if (raw.isBlank()) return ""
-    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
-    val t: java.util.Date? = if (raw.contains("T")) {
-        runCatching {
-            java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss", java.util.Locale.CHINA).parse(raw)
-        }.getOrNull()
-    } else {
-        runCatching { sdf.parse(raw) }.getOrNull()
-    }
-    if (t == null) return raw
-    val hm = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(t)
+    // V1.1.0-beta71：与排序共用 timeToEpoch，显示与排序口径一致（旧实现单独解析，
+    // 旧归档格式解析失败时直接把原始字符串显示出来，看着就像"日期不准"）
+    val ms = timeToEpoch(raw)
+    if (ms <= 0L) return raw
+    val hm = java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
     fun startOfDay(c: java.util.Calendar): Long {
         val x = c.clone() as java.util.Calendar
         x.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -564,7 +588,7 @@ fun fmtTime(raw: String): String {
         return x.timeInMillis
     }
     val now = java.util.Calendar.getInstance()
-    val tc = java.util.Calendar.getInstance().apply { timeInMillis = t.time }
+    val tc = java.util.Calendar.getInstance().apply { timeInMillis = ms }
     val days = ((startOfDay(now) - startOfDay(tc)) / 86400000L).toInt()
     return when {
         days == 0 -> hm
@@ -574,8 +598,8 @@ fun fmtTime(raw: String): String {
             "周${week[tc.get(java.util.Calendar.DAY_OF_WEEK) - 1]} $hm"
         }
         tc.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR) ->
-            java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(t)
-        else -> java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(t)
+            java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
+        else -> java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
     }
 }
 
