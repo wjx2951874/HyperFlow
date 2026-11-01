@@ -55,6 +55,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextFieldDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
  * 消息页：短信 App 风格的会话列表。
@@ -169,7 +170,8 @@ fun MessagesScreen(state: HFState, modifier: Modifier = Modifier) {
             .collect { MainHolder.scrollTick++ }
     }
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        // 01 手册 §11.9：MIUI 拉伸回弹挂在可滚动容器上（消息页此前缺失）
+        modifier = modifier.fillMaxSize().overScrollVertical(),
         state = mList,
         // v0.5.12：悬浮胶囊避让 —— 列表滚到底最后一行停在胶囊上沿（不遮挡）
         contentPadding = androidx.compose.foundation.layout.PaddingValues(

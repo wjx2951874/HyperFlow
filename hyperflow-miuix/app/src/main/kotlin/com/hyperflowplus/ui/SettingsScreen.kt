@@ -3,8 +3,6 @@ package com.hyperflowplus.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,10 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -30,12 +25,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyperflowplus.BuildConfig
@@ -44,15 +37,13 @@ import com.hyperflowplus.HFState
 import com.hyperflowplus.RootExec
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.BasicComponentColors
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
-import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.hyperflowplus.ui.fixLspScript
 
 /** 设置页：主题（悬浮导航栏/液态玻璃）→ 调试（调试模式/分享日志）→ 关于（作者/源码/许可/获取更新） */
@@ -82,49 +73,46 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
+            // 01 手册 §11.2：列表不加水平 padding，12dp 由每张 Card 自己带；
+            // MIUI 弹性回弹（§12.6）挂在滚动容器上
+            .overScrollVertical()
             .verticalScroll(sScroll)
-            .padding(horizontal = 12.dp)
     ) {
         // ===== 主题 =====
         GroupTitle("主题")
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 // 外观：跟随系统 / 浅色 / 深色（页内 Overlay 气泡，Scaffold 默认宿主托管，KSU 下不闪退；
                 // WindowSpinnerPreference 另开独立 window 在 KSU 环境弹不出/闪退，已弃用）
                 val themeOptions = listOf("跟随系统", "浅色", "深色")
                 val themeValues = listOf("system", "light", "dark")
                 val themeIndex = themeValues.indexOf(state.themeMode).coerceAtLeast(0)
-                OverlaySpinnerPreference(
+                // 01 手册 §5：枚举选择用 OverlayDropdownPreference（0.9.x 新名，
+                // 旧 OverlaySpinnerPreference 已弃用），行尾显示当前值 + 点击弹层
+                OverlayDropdownPreference(
                     title = "界面外观",
                     summary = "可单独设置App的界面外观",
-                    items = themeOptions.mapIndexed { i, label ->
-                        DropdownItem(
-                            text = label,
-                            selected = i == themeIndex,
-                            onClick = { state.setString("theme_mode", themeValues[i]) }
-                        )
-                    },
+                    items = themeOptions,
                     selectedIndex = themeIndex,
                     onSelectedIndexChange = { i ->
                         state.setString("theme_mode", themeValues[i])
                     }
                 )
 
-                // 底栏形态：默认 / 悬浮 / 液态玻璃（外观同款 OverlaySpinnerPreference 勾选式）
+                // 底栏形态：默认 / 悬浮 / 液态玻璃
                 val barOptions = listOf("默认", "悬浮", "液态玻璃")
                 val barValues = listOf("standard", "floating", "liquid")
                 val barIndex = barValues.indexOf(state.bottomBarStyle).coerceAtLeast(0)
-                OverlaySpinnerPreference(
+                OverlayDropdownPreference(
                     title = "底栏形态",
                     summary = "悬浮导航栏为胶囊样式，液态玻璃带模糊背景",
-                    items = barOptions.mapIndexed { i, label ->
-                        DropdownItem(
-                            text = label,
-                            selected = i == barIndex,
-                            onClick = { state.setBottomBarStyle(barValues[i]) }
-                        )
-                    },
+                    items = barOptions,
                     selectedIndex = barIndex,
                     onSelectedIndexChange = { i ->
                         state.setBottomBarStyle(barValues[i])
@@ -136,7 +124,12 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         // ===== 调试 =====
         GroupTitle("调试")
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 // v0.6.2：软重启框架条目暂时移除（用户：放调试区仍易误触，先去掉）
                 // v0.5.15：重装引导（原"版本连点 3 次"机关移除，改调试区独立入口，防误触）
@@ -148,20 +141,19 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     summary = "重新显示首次使用引导页",
                     onClick = { showReGuide = true }
                 )
-                if (showReGuide) {
-                    ConfirmDialog(
-                        show = showReGuide,
-                        title = "重新引导",
-                        content = "重新引导会重新显示第一次使用引导，为避免误操作，请等待10秒后点击确定继续操作（该操作不会清空本地数据）",
-                        countdownSec = 10,
-                        confirmText = "确定",
-                        onConfirm = {
-                            showReGuide = false
-                            MainHolder.onReopenOnboarding()
-                        },
-                        onDismiss = { showReGuide = false }
-                    )
-                }
+                // 常驻组合、show 驱动（01 手册 §11.8）：关闭时完整播放滑出动画
+                ConfirmDialog(
+                    show = showReGuide,
+                    title = "重新引导",
+                    content = "重新引导会重新显示第一次使用引导，为避免误操作，请等待10秒后点击确定继续操作（该操作不会清空本地数据）",
+                    countdownSec = 10,
+                    confirmText = "确定",
+                    onConfirm = {
+                        showReGuide = false
+                        MainHolder.onReopenOnboarding()
+                    },
+                    onDismiss = { showReGuide = false }
+                )
                 // v0.5.11：原"调试模式"开关移除 → 改为机关：首页"系统"行连点 5 次，
                 // 或应用连续闪退 3 次，自动捕获日志存到 App 目录（filesDir/hf_logs）
                 // v0.5.13：仅当存在已捕获的日志文件时才显示该条目（没有就不显示，
@@ -195,7 +187,12 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
         var betaUnlocked by remember { mutableStateOf(sp.getBoolean("beta_channel", false)) }
         var checkUpdateJob by remember { mutableStateOf<Job?>(null) }
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 // V0.6.15：版本行 —— 常驻醒目色状态提示（有新版=橙 / 已是最新=绿 / 检查中=灰），
                 // 点击不再弹检查结果窗：有新版时直接进入更新方式，其余静默检查。
@@ -214,58 +211,39 @@ fun SettingsScreen(state: HFState, modifier: Modifier = Modifier) {
                     "error" -> Color(0xFFD13636)
                     else -> MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)   // idle/none：普通灰
                 }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (MainHolder.updState == "new") {
-                                MainHolder.onOpenUpdater()
+                // 01 手册 §5/§11.4：可点击动作行走 ArrowPreference（行高 56dp、17sp Medium 标题、
+                // 右侧自带灰色箭头、按下 10% 遮罩），不再手搓 Row + Material 箭头；
+                // 状态文案用 summary（14sp / 60% 黑），主次层级由组件保证
+                ArrowPreference(
+                    title = "版本",
+                    summary = updTxt,
+                    summaryColor = BasicComponentColors(color = updColor, disabledColor = updColor),
+                    onClick = {
+                        if (MainHolder.updState == "new") {
+                            MainHolder.onOpenUpdater()
+                        } else {
+                            // v1.1.0-beta3：连点计数——已激活时再点正常检查更新，连点 10 次关闭
+                            betaTapCount++
+                            checkUpdateJob?.cancel()
+                            if (betaUnlocked && betaTapCount >= 12) {
+                                betaUnlocked = false
+                                sp.edit().putBoolean("beta_channel", false).apply()
+                                betaTapCount = 0
+                                Toast.makeText(context, "已切回稳定版更新通道", Toast.LENGTH_SHORT).show()
+                            } else if (!betaUnlocked && betaTapCount >= 10) {
+                                betaUnlocked = true
+                                sp.edit().putBoolean("beta_channel", true).apply()
+                                betaTapCount = 0
+                                Toast.makeText(context, "已切到 Beta 更新通道（测试版，可能不稳定）", Toast.LENGTH_LONG).show()
                             } else {
-                                // v1.1.0-beta3：连点计数——已激活时再点正常检查更新，连点 10 次关闭
-                                betaTapCount++
-                                checkUpdateJob?.cancel()
-                                if (betaUnlocked && betaTapCount >= 12) {
-                                    betaUnlocked = false
-                                    sp.edit().putBoolean("beta_channel", false).apply()
-                                    betaTapCount = 0
-                                    Toast.makeText(context, "已切回稳定版更新通道", Toast.LENGTH_SHORT).show()
-                                } else if (!betaUnlocked && betaTapCount >= 10) {
-                                    betaUnlocked = true
-                                    sp.edit().putBoolean("beta_channel", true).apply()
-                                    betaTapCount = 0
-                                    Toast.makeText(context, "已切到 Beta 更新通道（测试版，可能不稳定）", Toast.LENGTH_LONG).show()
-                                } else {
-                                    checkUpdateJob = scope.launch {
-                                        delay(600)
-                                        MainHolder.onCheckUpdate()
-                                    }
+                                checkUpdateJob = scope.launch {
+                                    delay(600)
+                                    MainHolder.onCheckUpdate()
                                 }
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "版本",
-                            style = MiuixTheme.textStyles.body1,
-                            fontWeight = FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            updTxt,
-                            style = MiuixTheme.textStyles.body2,
-                            fontWeight = FontWeight.Normal,
-                            color = updColor
-                        )
                     }
-                    top.yukonga.miuix.kmp.basic.Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-                    )
-                }
+                )
                 ArrowPreference(
                     title = "作者",
                     summary = "酷安 @翰德姆",

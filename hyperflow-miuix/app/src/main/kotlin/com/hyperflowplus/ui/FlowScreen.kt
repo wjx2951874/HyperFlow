@@ -1,5 +1,6 @@
 package com.hyperflowplus.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 
@@ -54,12 +56,18 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
+            // 01 手册 §11.3：列表不加水平 padding，12dp 由 Card 自带（12 + 16 = 28 基线）
+            .overScrollVertical()
             .verticalScroll(fScroll)
-            .padding(horizontal = 12.dp)
     ) {
         GroupTitle("通知流转")
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 SwitchPreference(
                     title = "解锁时流转",
@@ -80,7 +88,8 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                     }
                 )
                 // 双开开启后才出现：自定义标题标识前缀（自动包进【】）
-                if (state.cloneTransfer) {
+                // 01 手册 §11.2 ⑳：条件行用 AnimatedVisibility（淡入 + 高度展开），裸 if 会"啪"地跳变
+                AnimatedVisibility(visible = state.cloneTransfer) {
                     ArrowPreference(
                         title = "双开标识前缀",
                         summary = "现在为【${state.clonePrefix}】，点击可修改",
@@ -106,7 +115,12 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             }
         })
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 SwitchPreference(
                     title = "妙享直通",
@@ -122,7 +136,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
                 )
                 // 仅在「妙享直通」开启后显示：直通关闭时连接不会要求验证，预设置无从生效，
                 // 提前摆出来只会让人误以为需要先录密码。开启后自动出现。
-                if (state.cfg.optBoolean("silent_auth", false)) {
+                AnimatedVisibility(visible = state.cfg.optBoolean("silent_auth", false)) {
                     ArrowPreference(
                         title = "锁屏密码预设置",
                         summary = "手动录入锁屏密码，连接时自动完成验证（免每次输入）",
@@ -134,7 +148,12 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
 
         GroupTitle("短信持久化")
 
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column {
                 SwitchPreference(
                     title = "App 内消息",
@@ -166,84 +185,77 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
     }
 
     // ===== 开启/关闭确认弹窗（HyperDialog 系统覆盖层实现，稳定不闪退；开启确认后才更新状态） =====
-    when (pendingToggle) {
-        "force" -> ConfirmDialog(
-            show = true,
-            
-            title = "你确定要开启解锁时流转嘛？",
-            content = "开启后，解锁时会模拟为锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转至其他设备。OS4 设备能够智能转为 VoIP 来电并可被接听。",
-            onConfirm = { state.set("force_transfer", true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        "clone" -> ConfirmDialog(
-            show = true,
-            
-            title = "你确定要开启应用双开流转嘛？",
-            content = "开启后，在小米互联中已开启通知流转的应用（微信、QQ、钉钉 等）的双开应用通知也会被流转至其他设备，在同一局域网内还可以镜像回复。标题前还可自定义前缀用于区分通知来源。",
-            onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        "archive" -> ConfirmDialog(
-            show = true,
-            
-            title = "你确定要开启 App 内消息嘛？",
-            content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
-            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        "sms" -> ConfirmDialog(
-            show = true,
-            
-            title = "你确定要开启写入系统短信嘛？",
-            content = "开启后，流转短信会写入系统收件箱。在另一台设备获得Root权限并安装本模块后可尝试打开，否则不建议打开，存在重复互联，写入成功但不显示等问题。（遇到问题请第一时间关闭该功能）",
-            countdownSec = 5,
-            onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        "silent_auth" -> ConfirmDialog(
-            show = true,
-            
-            title = "你确定要开启妙享直通嘛？",
-            content = "开启后，其他设备通过小米妙享桌面连接该设备被要求输入密码完成验证或授权时，会自动填入此前在该设备解锁或授权时读取到的密码完成验证。\n\n相关数据均存储在本地，若担心安全问题，请勿开启此功能。",
-            countdownSec = 5,
-            onConfirm = { state.set("silent_auth", true); pendingToggle = null },
-            onDismiss = { pendingToggle = null }
-        )
-        // 关闭 App 内消息：第一层=勾选框（勾选才清空本地数据）+ 蓝色"继续"；
-        // 勾选后点继续 → 第二层"确定删除/保留数据"二次确认
-        "archive_off" -> ConfirmDialog(
-            show = true,
-            
-            title = "关闭 App 内消息？",
-            content = "关闭后消息页不再显示流转短信。本地保存的历史记录默认保留，重新开启后仍可查看。",
-            checkboxText = "同时清除本地保存的历史记录（删除后不可恢复）",
-            singleConfirmText = "继续",
-            onCheckedConfirm = { del ->
-                if (del) pendingToggle = "archive_del"
-                else {
-                    state.set(Config.KEY_ARCHIVE_APP, false)
-                    pendingToggle = null
-                }
-            },
-            onDismiss = { pendingToggle = null }
-        )
-        // 第二层：左白"确定删除"（关闭+清空）/ 右蓝"保留数据"（只关闭，保留本地）
-        "archive_del" -> ConfirmDialog(
-            show = true,
-            
-            title = "确定要删除本地数据？",
-            content = "删除后本地保存的历史短信记录将无法恢复（不影响小米互联端的数据）。",
-            cancelText = "确定删除",
-            confirmText = "保留数据",
-            onConfirm = { state.set(Config.KEY_ARCHIVE_APP, false); pendingToggle = null },   // 蓝：只关闭
-            onCancel = {
+    // 01 手册 §11.8 / miuix docs：弹窗常驻组合、由 show 驱动显隐 ——
+    // 关闭时 HyperDialog 才能完整播放滑出 + 遮罩淡出动画（裸 if/when 会直接切断）。
+    ConfirmDialog(
+        show = pendingToggle == "force",
+        title = "你确定要开启解锁时流转嘛？",
+        content = "开启后，解锁时会模拟为锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转至其他设备。OS4 设备能够智能转为 VoIP 来电并可被接听。",
+        onConfirm = { state.set("force_transfer", true); pendingToggle = null },
+        onDismiss = { pendingToggle = null }
+    )
+    ConfirmDialog(
+        show = pendingToggle == "clone",
+        title = "你确定要开启应用双开流转嘛？",
+        content = "开启后，在小米互联中已开启通知流转的应用（微信、QQ、钉钉 等）的双开应用通知也会被流转至其他设备，在同一局域网内还可以镜像回复。标题前还可自定义前缀用于区分通知来源。",
+        onConfirm = { state.set("clone_transfer", true); pendingToggle = null },
+        onDismiss = { pendingToggle = null }
+    )
+    ConfirmDialog(
+        show = pendingToggle == "archive",
+        title = "你确定要开启 App 内消息嘛？",
+        content = "开启后，其他设备通过小米互联流转到本设备的短信会显示在本 App 的消息页面。开启期间会实时读取短信并保存到本机，历史短信可长久查看。关闭本功能时，可自由选择是否保留已存储在本地的短信记录。",
+        onConfirm = { state.set(Config.KEY_ARCHIVE_APP, true); pendingToggle = null },
+        onDismiss = { pendingToggle = null }
+    )
+    ConfirmDialog(
+        show = pendingToggle == "sms",
+        title = "你确定要开启写入系统短信嘛？",
+        content = "开启后，流转短信会写入系统收件箱。在另一台设备获得Root权限并安装本模块后可尝试打开，否则不建议打开，存在重复互联，写入成功但不显示等问题。（遇到问题请第一时间关闭该功能）",
+        countdownSec = 5,
+        onConfirm = { state.set(Config.KEY_SMS_PERSIST, true); pendingToggle = null },
+        onDismiss = { pendingToggle = null }
+    )
+    ConfirmDialog(
+        show = pendingToggle == "silent_auth",
+        title = "你确定要开启妙享直通嘛？",
+        content = "开启后，其他设备通过小米妙享桌面连接该设备被要求输入密码完成验证或授权时，会自动填入此前在该设备解锁或授权时读取到的密码完成验证。\n\n相关数据均存储在本地，若担心安全问题，请勿开启此功能。",
+        countdownSec = 5,
+        onConfirm = { state.set("silent_auth", true); pendingToggle = null },
+        onDismiss = { pendingToggle = null }
+    )
+    // 关闭 App 内消息：第一层=勾选框（勾选才清空本地数据）+ 蓝色"继续"；
+    // 勾选后点继续 → 第二层"确定删除/保留数据"二次确认
+    ConfirmDialog(
+        show = pendingToggle == "archive_off",
+        title = "关闭 App 内消息？",
+        content = "关闭后消息页不再显示流转短信。本地保存的历史记录默认保留，重新开启后仍可查看。",
+        checkboxText = "同时清除本地保存的历史记录（删除后不可恢复）",
+        singleConfirmText = "继续",
+        onCheckedConfirm = { del ->
+            if (del) pendingToggle = "archive_del"
+            else {
                 state.set(Config.KEY_ARCHIVE_APP, false)
-                state.clearHistory()   // 白：关闭 + 清空本地
                 pendingToggle = null
-            },
-            onDismiss = { pendingToggle = null }
-        )
-    }
+            }
+        },
+        onDismiss = { pendingToggle = null }
+    )
+    // 第二层：左白"确定删除"（关闭+清空）/ 右蓝"保留数据"（只关闭，保留本地）
+    ConfirmDialog(
+        show = pendingToggle == "archive_del",
+        title = "确定要删除本地数据？",
+        content = "删除后本地保存的历史短信记录将无法恢复（不影响小米互联端的数据）。",
+        cancelText = "确定删除",
+        confirmText = "保留数据",
+        onConfirm = { state.set(Config.KEY_ARCHIVE_APP, false); pendingToggle = null },   // 蓝：只关闭
+        onCancel = {
+            state.set(Config.KEY_ARCHIVE_APP, false)
+            state.clearHistory()   // 白：关闭 + 清空本地
+            pendingToggle = null
+        },
+        onDismiss = { pendingToggle = null }
+    )
 
         // beta46：双开标识前缀编辑弹窗已提升到 MainActivity 根层渲染（Scaffold 之后，
         // 绘制顺序在悬浮胶囊之后 → 弹窗盖住胶囊；inApp 保留键盘跟随）。此处不再渲染。

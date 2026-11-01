@@ -44,13 +44,14 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /**
- * 妙享直通 · 锁屏密码预设置录入页（对齐 App 内二级页：TopAppBar + 白卡片列表）。
+ * 妙享直通 · 锁屏密码预设置录入页（对齐 App 内二级页：SmallTopAppBar + 白卡片列表）。
  *
  * 两步流程（外观只改壳，逻辑不变）：
  *  - root 识别到本机锁屏类型 → 直接进「输入」步。
@@ -114,7 +115,8 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
         modifier = Modifier
             .fillMaxSize()
     ) {
-        TopAppBar(
+        // 01 手册 §11.7：二级页顶栏用钉住的小顶栏（无大标题），左返回与手势同一入口
+        SmallTopAppBar(
             title = "锁屏密码预设置",
             color = MiuixTheme.colorScheme.surface,
             titleColor = MiuixTheme.colorScheme.onSurface,
@@ -124,15 +126,20 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
                 .verticalScroll(scroll)
-                .padding(horizontal = 12.dp)
         ) {
             // 免预填调试入口（默认隐藏）：连点标题「锁屏密码预设置」10 下才显示。
             // 免预填排查用——点一下就知道"解锁时模块有没有读到密码"：
             // 公共文件有值 → 捕获成功可直连；无值 → 先解锁输一次密码再回来点。
             if (showDiag) {
                 GroupTitle("免预填调试")
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
                     Column {
                         ArrowPreference(
                             title = "检测捕获状态",
@@ -149,7 +156,12 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
             // 已保存态：显示当前类型 + 更改 + 清除（首次进入已有凭证，或本次保存成功）
             if (saved) {
                 GroupTitle("已保存")
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("已保存：${typeName(type.ifBlank { state.authType })}", color = MiuixTheme.colorScheme.onSurface)
                         Spacer(Modifier.height(16.dp))
@@ -177,7 +189,12 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                 // 本页只是"选一个去录入"、无已存限制态，不用单选圆圈占位，
                 // 直接左对齐列表行（ArrowPreference），点击即进输入页。
                 GroupTitle("选择密码类型")
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
                     Column {
                         ArrowPreference(
                             title = "数字密码",
@@ -213,7 +230,12 @@ fun AuthSetupScreen(state: HFState, onBack: () -> Unit, modifier: Modifier = Mod
                         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
                     )
                 }
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp)
+                ) {
                     Column(Modifier.padding(16.dp)) {
                         if (type == "pattern") {
                             val cur = if (step == 0) first else second

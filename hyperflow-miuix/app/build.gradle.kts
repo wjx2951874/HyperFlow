@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -19,14 +21,28 @@ android {
         // zygote 期 LSPosed 才能加载 XposedEntry → system_server 注入恢复（分身跳转/密码捕获）。
     }
 
-    val hfKeystore = File("${rootProject.projectDir}/keystore.jks")
+    // 签名（全局规范优先）：读取 ~/.gradle/keystore.properties 的
+    // storeFile / storePassword / keyAlias / keyPassword；不存在时回退工程根目录 keystore.jks
+    // + 环境变量（HF_KEY_PASS / HF_KEY_ALIAS）。两者都没有才回落到 debug 签名。
+    val globalKeystoreProps = File(System.getProperty("user.home"), ".gradle/keystore.properties")
+        .takeIf { it.isFile }
+        ?.let { f ->
+            Properties().apply { f.inputStream().use { load(it) } }
+        }
+    val hfKeystore = globalKeystoreProps?.getProperty("storeFile")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { File(it) }
+        ?: File("${rootProject.projectDir}/keystore.jks")
     signingConfigs {
-        if (hfKeystore.exists()) {
+        if (hfKeystore.isFile) {
             create("release") {
                 storeFile = hfKeystore
-                storePassword = System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
-                keyAlias = System.getenv("HF_KEY_ALIAS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
-                keyPassword = System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
+                storePassword = globalKeystoreProps?.getProperty("storePassword")
+                    ?: System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
+                keyAlias = globalKeystoreProps?.getProperty("keyAlias")
+                    ?: System.getenv("HF_KEY_ALIAS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
+                keyPassword = globalKeystoreProps?.getProperty("keyPassword")
+                    ?: System.getenv("HF_KEY_PASS")?.takeIf { it.isNotEmpty() } ?: "hyperflowplus"
             }
         }
     }

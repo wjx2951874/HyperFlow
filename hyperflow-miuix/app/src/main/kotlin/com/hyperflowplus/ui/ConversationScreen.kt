@@ -57,6 +57,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import com.hyperflowplus.ui.HyperDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /** 时间解析结果缓存（排序比较会调用 O(n log n) 次） */
 private val CONV_TIME_CACHE = java.util.concurrent.ConcurrentHashMap<String, Long>(256)
@@ -237,8 +238,10 @@ fun ConversationScreen(
             }
         }
         LazyColumn(
+            // 01 手册 §11.9：会话详情同样保留 MIUI 越界回弹
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
                 .padding(horizontal = 16.dp),
             state = cList,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(

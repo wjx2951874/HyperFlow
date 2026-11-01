@@ -1,6 +1,5 @@
 package com.hyperflowplus.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -20,7 +19,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -33,8 +31,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 通用确认弹窗（HyperOS 弹窗样式，基于 [HyperDialog] 系统 Dialog 实现——稳定不闪退）。
- * - 左侧白色按钮（cancelText），右侧蓝色按钮（confirmText，倒计时内不可点）
- * - countdownSec > 0：确定按钮倒计时（期间点击 Toast 提示还剩 X 秒）
+ * - 左侧白色按钮（cancelText），右侧蓝色按钮（confirmText）
+ * - countdownSec > 0：倒计时期间确认按钮处于禁用态，按钮文字实时显示剩余秒数
  * - checkboxText 非空：内容下方显示 Miuix Checkbox 勾选框（默认不勾），点确认时经 onCheckedConfirm 回调勾选状态
  * - singleConfirmText 非空：只显示一个右侧蓝色按钮（如"继续"），无左侧白按钮
  * - onCancel：点左侧按钮时执行（默认只关闭弹窗）
@@ -71,11 +69,11 @@ fun ConfirmDialog(
             }
         }
     }
-    val ctx = LocalContext.current
+    // 倒计时期间的按钮文案：剩余秒数直接写在确认按钮上（不再靠 Toast 提示）
+    val confirmLabel = if (count > 0) "$confirmText（${count}s）" else confirmText
+    val confirmEnabled = count <= 0
     val fire: () -> Unit = {
-        if (count > 0) {
-            Toast.makeText(ctx, "还剩 $count 秒，请先阅读风险说明", Toast.LENGTH_SHORT).show()
-        } else {
+        if (confirmEnabled) {
             if (onCheckedConfirm != null) onCheckedConfirm(checked) else onConfirm()
         }
     }
@@ -124,9 +122,10 @@ fun ConfirmDialog(
                 Button(
                     onClick = { fire() },
                     colors = confirmColors,
+                    enabled = confirmEnabled,
                     modifier = Modifier.width(112.dp)
                 ) {
-                    Text(singleConfirmText)
+                    Text(if (count > 0) "$singleConfirmText（${count}s）" else singleConfirmText)
                 }
             }
         } else {
@@ -142,9 +141,10 @@ fun ConfirmDialog(
                 Button(
                     onClick = { fire() },
                     colors = confirmColors,
+                    enabled = confirmEnabled,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(confirmText)
+                    Text(confirmLabel)
                 }
             }
         }

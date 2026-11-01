@@ -28,10 +28,11 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /** 开源库条目 */
 private data class Lib(
@@ -116,7 +117,8 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         // V0.6.15.1：KSU 同款单行标题顶栏（无 largeTitle）——顶栏矮、箭头贴左上、
         // 标题紧随箭头同一行（字号即 Miuix 普通标题字号，与二级页一致）
-        TopAppBar(
+        // 01 手册 §11.7：二级页用钉住的小顶栏（无大标题）
+        SmallTopAppBar(
             title = "开放源代码许可",
             color = MiuixTheme.colorScheme.surface,
             titleColor = MiuixTheme.colorScheme.onSurface,
@@ -126,14 +128,20 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
         ) {
+            // 01 手册 §11.3：列表不加水平 padding，12dp 由卡片自带
+            Spacer(Modifier.height(12.dp))
             LIBS.forEach { lib ->
+                // 01 手册 §6：Card 自带 onClick + 下沉反馈（不用 Modifier.clickable 的水波纹）
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { selected = lib }
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                    onClick = { selected = lib },
+                    pressFeedbackType = top.yukonga.miuix.kmp.utils.PressFeedbackType.Sink,
                 ) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +174,6 @@ fun LicensesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
