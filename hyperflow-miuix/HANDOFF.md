@@ -146,7 +146,7 @@ hyperflow-miuix/app/src/main/java/com/hyperflowplus/
     ├── HookCloneBypass.java      # 分身通知放行+标题前缀+【关键】contentIntent 重建 999 PendingIntent
     ├── HookRemoteOpen.java       # 【关键】system_server 拦截 startActivity*，重定向到 999
     ├── HookMirrorObserve.java    # 【关键】ATM Proxy startActivity* 全路径观察
-    ├── HookForceTransfer.java    # 亮屏流转
+    ├── HookForceTransfer.java    # 解锁时流转
     ├── HookSmsPersist.java / HookSmsSenderEnrich.java  # 短信持久化
     ├── HookCallRelay.java / HookCallVoipType.java / HookCallFilterPass.java  # 来电流转
     ├── HookKeyguardCapture.java  # 【锁屏】凭证捕获（beta60 主通道 LockSettingsService.checkCredential）
