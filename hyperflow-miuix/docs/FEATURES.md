@@ -5,7 +5,7 @@
 
 ---
 
-## 功能① 亮屏流转（✅）
+## 功能① 解锁时流转（✅）
 
 **原理**：反编译 `com.milink.service` 的 `NotificationHandler` 确认——官方流转判定
 `isDeviceSupported(StatusBarNotification, DeviceSubInfo)` 中有：
@@ -17,7 +17,7 @@ if (keyguardManager.isKeyguardLocked() || !powerManager.isInteractive()) return 
 兜底：拦截 `KeyguardManager#isKeyguardLocked`，仅当调用栈含 `NotificationHandler` 时放行。
 
 **代码位置**：`java/com/hyperflowplus/hooks/HookForceTransfer.java`
-**开关**：`force_transfer`（流转页"亮屏流转"）
+**开关**：`force_transfer`（流转页"解锁时流转"）
 
 **为什么这么写**：返回 true 是最小侵入；副作用（互联侧看到设备"已锁屏/可流转"）用户已接受。
 **限制**：只影响 milink 的流转判定；部分机型亮屏时互联面板状态可能显示异常。
