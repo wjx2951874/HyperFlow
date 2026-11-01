@@ -1,6 +1,13 @@
 package com.hyperflowplus
 
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,14 +34,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +60,10 @@ import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Messages
+import top.yukonga.miuix.kmp.icon.extended.Send
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.basic.Icon
@@ -280,10 +283,10 @@ fun HyperFlowApp() {
             // 1.1.0：主题设置页同款处理（自带折叠 TopAppBar + 返回箭头）
 
             val tabs = listOf(
-                Tab("首页", Icons.Filled.Home),
-                Tab("功能", Icons.Filled.Send),
-                Tab("消息", Icons.Filled.Notifications),
-                Tab("设置", Icons.Filled.Settings)
+                Tab("首页", MiuixIcons.Home),
+                Tab("功能", MiuixIcons.Send),
+                Tab("消息", MiuixIcons.Messages),
+                Tab("设置", MiuixIcons.Settings)
             )
             // 四个页面各显示页面名（软件名移到设置页关于区）
             val title = when (tab) { 0 -> "首页"; 1 -> "功能"; 2 -> "消息"; 3 -> "设置"; else -> "" }
@@ -313,6 +316,11 @@ fun HyperFlowApp() {
             // v0.6.8：Miuix 大标题 TopAppBar（学 KSU/HyperModifier）——largeTitle 随内容滚动收起，
             // 收起后回到顶栏居中；切 tab/进出会话时重置为展开态。
             val topBarScroll = MiuixScrollBehavior()
+            // 01 手册 §2/§11.2：切 tab、进出会话时把折叠区复位为展开态，
+            // 否则上一个页面折叠到一半的状态会带到新页面（大标题"半截"）
+            LaunchedEffect(tab, conversation != null) {
+                topBarScroll.state.heightOffset = 0f
+            }
             Scaffold(
                 containerColor = MiuixTheme.colorScheme.surface,
                 // 不显式传 popupHost：回落 Scaffold 默认 popup/overlay 宿主（InstallerX 同款），
@@ -499,11 +507,30 @@ fun HyperFlowApp() {
                                 // 会话详情在内容区渲染（底栏保留）；padding 由 Scaffold 提供
                                 ConversationScreen(state, conversation.first, conversation.second, contentMod)
                             } else {
-                                when (tab) {
-                                    0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
-                                    1 -> FlowScreen(state, contentMod)
-                                    2 -> MessagesScreen(state, contentMod)
-                                    3 -> SettingsScreen(state, contentMod)
+                                // 01 手册 §12.2 / §11.5：tab 切换要有页面转场，不是硬切。
+                                // 方向跟随 tab 序号：向右切 → 新页从右侧入、旧页向左退，反之相反。
+                                // 底栏高亮仍是"点击即选中"（tab 状态先改，动画随后）。
+                                AnimatedContent(
+                                    targetState = tab,
+                                    modifier = Modifier.fillMaxSize(),
+                                    transitionSpec = {
+                                        val dir = if (targetState > initialState) 1 else -1
+                                        (
+                                            slideInHorizontally(tween(300)) { it / 5 * dir } +
+                                                fadeIn(tween(220))
+                                            ) togetherWith (
+                                            slideOutHorizontally(tween(300)) { -it / 5 * dir } +
+                                                fadeOut(tween(180))
+                                            )
+                                    },
+                                    label = "tabSwitch"
+                                ) { currentTab ->
+                                    when (currentTab) {
+                                        0 -> HomeScreen(state, contentMod, onOpenGuide = { guideType = it })
+                                        1 -> FlowScreen(state, contentMod)
+                                        2 -> MessagesScreen(state, contentMod)
+                                        3 -> SettingsScreen(state, contentMod)
+                                    }
                                 }
                             }
                         }

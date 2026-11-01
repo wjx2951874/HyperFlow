@@ -44,8 +44,9 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -134,7 +135,8 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         // V0.6.15.1：顶部栏改用 Miuix TopAppBar（KSU 单行样式，与开源许可页完全一致：
         // 箭头贴左上 32dp、标题同行、右侧 actions 放数量+一键删除）
-        TopAppBar(
+        // 01 手册 §11.7：二级页用钉住的小顶栏（无大标题）
+        SmallTopAppBar(
             title = "日志列表",
             color = MiuixTheme.colorScheme.surface,
             titleColor = MiuixTheme.colorScheme.onSurface,
@@ -152,8 +154,6 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
         )
-        Spacer(Modifier.height(2.dp))
-
         if (logs.isEmpty()) {
             // 空态
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -168,14 +168,26 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             return@Column
         }
 
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            // 01 手册 §11.2：contentPadding 而非 Modifier.padding；顶部 12dp 与卡片间距一致
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                top = 12.dp,
+                bottom = if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified)
+                    0.dp else MainHolder.bottomPad
+            )
+        ) {
             items(logs, key = { it.absolutePath }) { f ->
                 val sizeKb = if (f.length() > 0) (f.length() / 1024).toString() else "0"
+                // 01 手册 §6：可点卡片用 Card 自带 onClick + PressFeedbackType.Sink（整体下沉），
+                // 不再外包 Modifier.clickable（那是水波纹，不是 MIUI 手感）
                 Card(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .clickable { viewing = f }
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                    onClick = { viewing = f },
+                    pressFeedbackType = top.yukonga.miuix.kmp.utils.PressFeedbackType.Sink,
                 ) {
                     Row(
                         Modifier
@@ -214,14 +226,6 @@ fun LogListScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         }
                     }
                 }
-            }
-            item {
-                Spacer(
-                    Modifier.height(
-                        if (MainHolder.bottomPad == androidx.compose.ui.unit.Dp.Unspecified) 0.dp
-                        else MainHolder.bottomPad
-                    )
-                )
             }
         }
     }

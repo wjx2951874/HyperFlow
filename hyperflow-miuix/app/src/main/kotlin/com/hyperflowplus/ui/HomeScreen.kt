@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 // 环境检测三态色：绿=通过 黄=部分 红=关键缺失
 private val CGreen = Color(0xFF34C759)
@@ -261,9 +262,11 @@ echo ==END""") }.getOrNull()
     Column(
         modifier = modifier
             .fillMaxSize()
+            // 01 手册 §11.3：列表不加水平 padding，12dp 由每张 Card 自带；
+            // 首卡与顶栏之间保留 12dp 顶部留白
+            .overScrollVertical()
             .verticalScroll(hScroll)
-            // v0.6.14：顶部留白 12dp，对齐 KSU HomeMiuix（内容区水平 12dp + 首卡顶 12dp）
-            .padding(top = 12.dp, bottom = 0.dp, start = 12.dp, end = 12.dp)
+            .padding(top = 12.dp)
     ) {
         // ===== 环境状态汇总行（轻量条，状态一目了然；v0.6.8 起 3 项合一） =====
         val allOk = rootEnvOk && milinkOk && lspModuleOk
@@ -664,7 +667,12 @@ echo ==END""") }.getOrNull()
 
         // v0.5.13：按用户要求精简 —— 只留 机型 / 系统（OS 版本）/ Android / 内核 / 应用版本，
         // 纯文字左对齐（无图标）；OS 版本与 Android 版本拆成独立两行
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column(Modifier.padding(16.dp)) {
                 DevInfoRow("机型",
                     if (modelCode.isNotEmpty()) "$modelName（$modelCode）" else modelName)
@@ -896,7 +904,11 @@ private fun HomeStatusCard(
 ) {
     val textContentColor = if (containerColor.luminance() < 0.5f) Color(0xFFFAFAFA) else Color(0xFF1A1A1A)
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        // 01 手册 §11.3：卡片自带水平 12dp + 与下一张卡 12dp 间距
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 12.dp),
         colors = CardDefaults.defaultColors(color = containerColor),
         onClick = onClick,
         pressFeedbackType = PressFeedbackType.Tilt,

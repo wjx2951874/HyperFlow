@@ -1,48 +1,38 @@
 package com.hyperflowplus.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * HyperFlow 通用弹窗容器（MIUI/HyperOS 风格卡片，App 内 Box 覆盖层实现）。
+ * HyperFlow 通用弹窗容器。
  *
- * 实现说明：全屏 Box 遮罩 + 圆角卡片，不创建独立 Window，不依赖系统 Dialog
- * （部分 KernelSU 环境会闪退，用户多轮实测：仅 App 内覆盖层稳定）。
- * 显隐由 AnimatedVisibility(visible = show) 正确驱动 enter/exit，多弹窗切换不再卡死。
+ * 按 miuix 文档 `docs/components/overlaydialog.md` 使用 [OverlayDialog]：
+ * - 渲染在根 Scaffold 的 MiuixPopupHost（App 内浮层，不是系统 Dialog，KernelSU 环境不闪退）；
+ * - 底部滑入弹簧 + 遮罩淡入淡出，关闭时完整播放退场；
+ * - 遮罩铺满整个窗口（含状态栏/导航条区域），不再出现"上下两条没被压暗"的色带；
+ * - 键盘弹窗由 DialogContentLayout 的 IME inset 处理，输入框贴输入法上方。
  *
- * 视觉：框体从屏幕底部往上弹出，标题/正文居中；遮罩轻黑 0.35；
- * 黑色模式卡片浅黑（0xFF262626，非纯黑）。
- * 交互：点击卡片外遮罩区 = onDismiss；卡片内点击不冒泡。
+ * 保留原有调用方式（title / summary / titleAction / centered / inApp）；
+ * inApp 仅为兼容历史调用 —— 浮层本身就在 App 内渲染，键盘跟随不再分叉。
  */
 @Composable
 fun HyperDialog(
@@ -53,132 +43,44 @@ fun HyperDialog(
     titleAction: (@Composable () -> Unit)? = null,
     onDismiss: () -> Unit,
     bottomInset: Dp = smartInset,
-    /** true=屏幕正中央对齐（输入类弹窗，避免底部随键盘上下飘）；false=底部弹出（默认） */
+    /** true=屏幕正中央对齐（缩放淡入），false=底部弹出（自下而上滑入） */
     centered: Boolean = false,
-    /**
-     * 渲染载体（双开标识输入框等带键盘的弹窗必须用 inApp=true）：
-     *   - false（默认）= Popup 独立窗口：能盖住悬浮导航栏，但键盘弹出时 PopupWindow 默认
-     *     ADJUST_PAN 会把整个窗口顶上去（卡片"飞上边"），且 Popup 内读不到真实 IME inset
-     *     （imePadding 无效/乱蹦）。只适合无键盘的确认类弹窗。
-     *   - true = App 内 Box 覆盖层（不建窗口）：在 MainActivity 内容树里渲染，
-     *     imePadding 直接响应键盘 inset、跟随动画平滑，输入框紧贴输入法上方不蹦跳。
-     *     代价：层级低于系统悬浮导航栏（键盘弹出时悬浮栏通常被系统顶走，影响可忽略）。
-     */
-    inApp: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") inApp: Boolean = false,
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    // beta51 修复：show 参数此前完全未被使用（缺少 if(show) 包裹）——
-    // 只要 ConfirmDialog 被组合（无论 show 真假）弹窗就无条件渲染 →
-    // 切消息 tab 未开启页"强制出现"弹窗、点取消后 showStartDialog=false 但弹窗不关（取消没反应）。
-    // 现在 show=false 直接不渲染，所有调用方（含未自己包 if 的 MessagesScreen）显隐恢复正常。
-    if (show) {
-        if (inApp) {
-        // App 内覆盖层：不建独立窗口，imePadding 在 MainActivity 内容树内真实响应键盘。
-        // 键盘弹出时遮罩区域收窄到键盘上方，卡片贴键盘顶；键盘动画平滑跟随，不蹦跳。
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .background(Color.Black.copy(alpha = 0.35f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onDismiss() },
-            contentAlignment = if (centered) Alignment.Center else Alignment.BottomCenter
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = if (centered) 0.dp else bottomInset)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
-                            Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
-                        else MiuixTheme.colorScheme.surface
-                    )
-                    // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {}
-                    .padding(horizontal = 26.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (title != null) {
-                    Box(Modifier.fillMaxWidth()) {
-                        Text(
-                            title,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MiuixTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        titleAction?.let {
-                            Box(Modifier.align(Alignment.CenterEnd)) { it() }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
-                if (summary != null) {
-                    Text(
-                        summary,
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(20.dp))
-                }
-                content()
-            }
-        }
-        return
+    // 弹窗打开时接管返回键：先关弹窗，不让系统返回穿透到页面/退出 App
+    BackHandler(enabled = show) { onDismiss() }
+
+    val cardColor = if (MiuixTheme.colorScheme.background.luminance() < 0.5f) {
+        Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
+    } else {
+        MiuixTheme.colorScheme.surface
     }
-    // 窗口层 Popup 渲染：全屏遮罩盖住包括悬浮导航栏在内的一切（引导页同款层级），
-    // 不受 Scaffold/悬浮栏遮挡；非系统 Dialog，KernelSU 环境不闪退
-    Popup(
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(
-            focusable = true,
-            excludeFromSystemGesture = true
-        )
+    // titleAction 需要把动作按钮叠在标题行右侧，OverlayDialog 的 string 标题槽放不下，
+    // 此时自绘标题区；其余情况用组件标准标题样式。
+    val customHeader = titleAction != null
+
+    OverlayDialog(
+        show = show,
+        title = if (customHeader) null else title,
+        summary = if (customHeader) null else summary,
+        backgroundColor = cardColor,
+        // 01 手册 §6：28dp 圆角卡片；底部弹层保留 20dp 外边距 + 悬浮胶囊避让
+        outsideMargin = DpSize(20.dp, if (centered) 20.dp else bottomInset),
+        insideMargin = DpSize(26.dp, 28.dp),
+        cornerRadius = 28.dp,
+        // 输入类弹窗走居中缩放；普通确认/说明走底部滑入
+        largeScreen = if (centered) true else null,
+        enableWindowDim = true,
+        onDismissRequest = { onDismiss() },
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.35f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onDismiss() },
-            contentAlignment = if (centered) Alignment.Center else Alignment.BottomCenter
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    // Popup 是独立窗口，层级高于悬浮导航栏（能盖住它），不需要为悬浮栏预留避让 —— 这里固定 20.dp 底距。
-                    // 此前沿用 smartInset（悬浮开启时 88.dp），等于凭空把弹窗顶高 68dp，
-                    // 表现就是「更新日志弹窗偏上」。88.dp 只该用在 inApp 模式（层级低于悬浮栏）。
-                    .padding(bottom = if (centered) 0.dp else POPUP_BOTTOM_INSET)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
-                            Color(0xFF262626)  // 黑色模式：浅黑卡片（非纯黑）
-                        else MiuixTheme.colorScheme.surface
-                    )
-                    // 空 clickable 消费卡片内点击，防止冒泡到遮罩层误关
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {}
-                    .padding(horizontal = 26.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (title != null) {
-                    Box(Modifier.fillMaxWidth()) {
+            if (customHeader) {
+                Box(Modifier.fillMaxWidth()) {
+                    if (title != null) {
                         Text(
                             title,
                             fontSize = 18.sp,
@@ -187,12 +89,12 @@ fun HyperDialog(
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        titleAction?.let {
-                            Box(Modifier.align(Alignment.CenterEnd)) { it() }
-                        }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    titleAction?.let {
+                        Box(Modifier.align(Alignment.CenterEnd)) { it() }
+                    }
                 }
+                Spacer(Modifier.height(10.dp))
                 if (summary != null) {
                     Text(
                         summary,
@@ -203,16 +105,11 @@ fun HyperDialog(
                     )
                     Spacer(Modifier.height(20.dp))
                 }
-                content()
             }
+            content()
         }
-    }
     }
 }
 
-/** 智能底部间距：悬浮/液态玻璃开启时弹窗自动上移更多（MainActivity 每次重组时设置）。
- *  仅用于 inApp=true 的弹窗（层级低于悬浮导航栏，必须避让）。 */
+/** 智能底部间距：悬浮/液态玻璃开启时弹窗自动上移更多（MainActivity 每次重组时设置）。 */
 var smartInset: Dp = 40.dp
-
-/** Popup 模式（inApp=false）的底距：独立窗口本就盖住悬浮栏，无需避让，固定 20.dp。 */
-private val POPUP_BOTTOM_INSET = 20.dp

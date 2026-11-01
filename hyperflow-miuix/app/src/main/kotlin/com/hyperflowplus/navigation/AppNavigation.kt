@@ -5,10 +5,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -22,6 +25,7 @@ import com.hyperflowplus.ui.AuthSetupScreen
 import com.hyperflowplus.ui.LicensesScreen
 import com.hyperflowplus.ui.LogListScreen
 import com.hyperflowplus.ui.ThemeSettingsScreen
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.rememberNavBackStack
@@ -99,29 +103,38 @@ fun AppNavigation() {
             BackHandler(enabled = backStack.size > 1) {
                 navigator.pop()
             }
-            NavDisplay(
-                backStack = backStack,
-                onBack = { navigator.pop() },                    // ← 系统返回/全面屏手势走这里弹栈
-                transition = NavTransitions.MiuixDefault,        // ★ 滑动+视差转场（显式写出）
-                effects = NavDisplayEffects(                     // ★ 转场圆角裁切 + 压暗
-                    cornerClipRadius = rememberNavSystemCornerRadius(),
-                ),
+            // 根级浮层宿主（01 手册 §3 / miuix docs）：所有页面共用同一个 MiuixPopupHost，
+            // OverlayDialog / 下拉浮层才能全屏渲染 —— 遮罩能盖住状态栏与导航条区域，
+            // 也不会出现"上下两条没被压暗"的色带。不占 insets、不刷底色，不影响页面布局。
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
             ) {
-                entry<Route.Main> { HyperFlowApp() }  // 根页不给滑动关闭
-                entry<Route.Logs>(swipeDismiss = swipeBackDirection) {
-                    LogListScreen(onBack = { navigator.pop() })
-                }
-                entry<Route.Licenses>(swipeDismiss = swipeBackDirection) {
-                    LicensesScreen(onBack = { navigator.pop() })
-                }
-                entry<Route.Theme>(swipeDismiss = swipeBackDirection) {
-                    ThemeSettingsScreen(HFState, onBack = { navigator.pop() })
-                }
-                // AuthSetup（锁屏密码预设置）不注册横滑返回：图案绘制中右滑会误退丢失路径，
-                // BackHandler 拦不住 NavDisplay 的手势级 swipeDismiss，只能整页禁用横滑，
-                // 返回统一走系统返回键（图案输入时 AuthSetupScreen 内 BackHandler 已拦截）。
-                entry<Route.AuthSetup> {
-                    AuthSetupScreen(HFState, onBack = { navigator.pop() })
+                NavDisplay(
+                    backStack = backStack,
+                    onBack = { navigator.pop() },                    // ← 系统返回/全面屏手势走这里弹栈
+                    transition = NavTransitions.MiuixDefault,        // ★ 滑动+视差转场（显式写出）
+                    effects = NavDisplayEffects(                     // ★ 转场圆角裁切 + 压暗
+                        cornerClipRadius = rememberNavSystemCornerRadius(),
+                    ),
+                ) {
+                    entry<Route.Main> { HyperFlowApp() }  // 根页不给滑动关闭
+                    entry<Route.Logs>(swipeDismiss = swipeBackDirection) {
+                        LogListScreen(onBack = { navigator.pop() })
+                    }
+                    entry<Route.Licenses>(swipeDismiss = swipeBackDirection) {
+                        LicensesScreen(onBack = { navigator.pop() })
+                    }
+                    entry<Route.Theme>(swipeDismiss = swipeBackDirection) {
+                        ThemeSettingsScreen(HFState, onBack = { navigator.pop() })
+                    }
+                    // AuthSetup（锁屏密码预设置）不注册横滑返回：图案绘制中右滑会误退丢失路径，
+                    // BackHandler 拦不住 NavDisplay 的手势级 swipeDismiss，只能整页禁用横滑，
+                    // 返回统一走系统返回键（图案输入时 AuthSetupScreen 内 BackHandler 已拦截）。
+                    entry<Route.AuthSetup> {
+                        AuthSetupScreen(HFState, onBack = { navigator.pop() })
+                    }
                 }
             }
         }

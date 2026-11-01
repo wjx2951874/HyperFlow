@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -74,7 +75,11 @@ private fun PlainBar(
                 onClick = { onTabSelected(i) },
                 icon = icon,
                 label = label,
-                badge = null
+                // 01 手册 §4：角标用组件自带 Badge（无 content = 6dp 圆点），
+                // 不再由调用方传入后被丢弃（此前标准底栏永不出红点）
+                badge = if (badgeIndex == i) {
+                    { Badge() }
+                } else null
             )
         }
     }
