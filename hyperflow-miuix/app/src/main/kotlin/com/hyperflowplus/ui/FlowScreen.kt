@@ -167,7 +167,7 @@ fun FlowScreen(state: HFState, modifier: Modifier = Modifier) {
             show = true,
             
             title = "你确定要开启解锁时流转嘛？",
-            content = "开启后，解锁时会模拟为锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转至其他设备。但 OS4 的跨设备电话流转仍需进一步完善。",
+            content = "开启后，解锁时会模拟为锁屏状态，让小米互联中已开启应用（电话、短信、微信、QQ 等）的通知流转至其他设备。OS4 设备能够智能转为 VoIP 来电并可被接听。",
             onConfirm = { state.set("force_transfer", true); pendingToggle = null },
             onDismiss = { pendingToggle = null }
         )
