@@ -17,10 +17,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -128,6 +135,104 @@ fun OnboardingScreen(state: HFState) {
     }
 }
 
+/**
+ * 引导页功能卡片数据。
+ * **新增功能只需往 OB_FEATURES 加一项**，卡片、图标、排版全部自动渲染，
+ * 不必再改任何布局代码（旧版是硬拼的整段字符串，加一项就要手动调顺序与换行）。
+ */
+private data class ObFeature(
+    val icon: ImageVector,
+    val tint: Color,
+    val title: String,
+    val desc: String
+)
+
+private val OB_FEATURES = listOf(
+    ObFeature(
+        Icons.Filled.Notifications, Color(0xFF3A7BD5),
+        "解锁时流转",
+        "解锁状态下被系统拦截的通知与来电，强制流转到其他设备"
+    ),
+    ObFeature(
+        Icons.Filled.ContentCopy, Color(0xFF7C5CFF),
+        "双开流转",
+        "分身应用通知独立流转，标题前缀可自定义"
+    ),
+    ObFeature(
+        Icons.Filled.TouchApp, Color(0xFFE0564D),
+        "点击只开分身",
+        "点分身通知只拉起分身，不会连带把主应用拽起来"
+    ),
+    ObFeature(
+        Icons.Filled.LockOpen, Color(0xFFD9A441),
+        "妙享直通免密",
+        "自动填入锁屏凭证完成验证，通过后自动关闭授权界面"
+    ),
+    ObFeature(
+        Icons.Filled.Sms, Color(0xFF26A69A),
+        "短信持久化",
+        "流转短信存入消息页，可排序、搜索、删除；可选写入系统短信"
+    ),
+)
+
+/** 使用前需要（环境要求，4 项） */
+private val OB_REQUIREMENTS = listOf(
+    "已 Root 的设备（KernelSU / APatch / Magisk），并授予本应用超级用户权限",
+    "Xposed 框架：LSPosed 2.2+，或 Vector / JingMatrix 分支",
+    "小米澎湃 OS（HyperOS），并在系统设置中开启「互联互通 / 小米互联」",
+    "在 Xposed 管理器中启用 HyperFlow 并勾选 6 项作用域（App 内可一键勾选）",
+)
+
+/** 法律与责任声明（精简为 3 条最关键项） */
+private val OB_LEGAL = listOf(
+    "仅供个人设备学习调试使用，禁止商业用途与二次分发",
+    "本模块会修改系统行为，可能不符合设备厂商服务条款，由此产生的后果由使用者自行承担",
+    "流转数据仅在同一小米账号的设备间传输，仅在本机处理与保存，不会上传至任何服务器",
+)
+
+/** 单张功能卡片：色块图标 + 标题 + 一句说明 */
+@Composable
+private fun FeatureCard(f: ObFeature) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MiuixTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(f.tint),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                f.icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                f.title,
+                style = MiuixTheme.textStyles.body2,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.9f)
+            )
+            Text(
+                f.desc,
+                style = MiuixTheme.textStyles.body2,
+                fontSize = 11.sp,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+            )
+        }
+    }
+}
+
 /** 阶段1：协议说明（说明弹窗 + Miuix Checkbox 勾选 + 退出/继续） */
 @Composable
 private fun StageAgreement(
@@ -158,43 +263,31 @@ private fun StageAgreement(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        SectionTitle("使用前需要")
-        Text(
-            "· 已 Root 的设备（KernelSU / APatch / Magisk，并在管理器中授予本应用超级用户权限）\n" +
-                    "· Xposed 框架：LSPosed 2.2+，或 Vector / JingMatrix 分支\n" +
-                    "· 小米澎湃 OS（HyperOS），并在系统设置中开启「互联互通 / 小米互联」\n" +
-                    "· 在 Xposed 管理器中启用 HyperFlow，并勾选全部 6 项推荐作用域（本应用会一键自动勾选）",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-        )
+        SectionTitle("它能做什么")
+        OB_FEATURES.forEach { f ->
+            FeatureCard(f)
+            Spacer(Modifier.height(6.dp))
+        }
         Spacer(Modifier.height(14.dp))
 
-        SectionTitle("当前功能")
-        Text(
-            "· 亮屏流转——亮屏状态下被系统拦截的跨设备通知，强制放行流转到其他设备\n" +
-                    "· 双开流转——微信、QQ、钉钉等分身应用的通知独立流转，标题带【双开】前缀\n" +
-                    "· 点击只开分身——在其他设备点击分身通知时只拉起分身，不会连带把主应用一起拽起来\n" +
-                    "· 来电流转——来电以 VoIP 形态流转到其他设备，锁屏与亮屏均可\n" +
-                    "· 妙享直通免密——自动捕获锁屏凭证并填入授权盘，验证通过后自动关闭授权界面\n" +
-                    "· 短信归档——流转短信存入 App 消息页，支持排序、搜索、删除；可选写入系统短信收件箱（默认关闭）\n" +
-                    "· 消息搜索——全屏搜索，结果按「会话 / 信息」分组并高亮命中词",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-        )
+        SectionTitle("使用前需要")
+        OB_REQUIREMENTS.forEach { r ->
+            Text(
+                "· $r",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+            )
+        }
         Spacer(Modifier.height(14.dp))
 
         SectionTitle("法律与责任声明")
-        Text(
-            "· 本模块仅供个人设备学习与调试使用，禁止用于商业用途或再次分发\n" +
-                    "· 本模块会修改系统行为，可能不符合设备厂商的服务条款与预期，由此产生的任何后果（包括但不限于保修失效、账号限制、系统异常）由使用者自行承担\n" +
-                    "· 本模块为独立实现，不包含、不转载任何厂商专有代码、资源或商标，不侵犯小米及其他第三方的知识产权\n" +
-                    "· 流转数据仅在同一小米账号的设备间传输，仅在本机处理与保存，不会上传至任何服务器\n" +
-                    "· 请遵守所在地区法律法规，禁止将本模块用于窃取、监控他人设备信息等任何非法用途\n" +
-                    "· 本项目由 AI 辅助开发与调试，并经人工验证，并非完全由 AI 生成\n" +
-                    "· 使用中有任何问题，点击跳转酷安向作者反馈",
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-        )
+        OB_LEGAL.forEach { l ->
+            Text(
+                "· $l",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+            )
+        }
         Spacer(Modifier.height(16.dp))
 
         // 更新渠道（酷安）
