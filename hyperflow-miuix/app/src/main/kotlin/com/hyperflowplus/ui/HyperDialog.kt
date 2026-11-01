@@ -159,7 +159,10 @@ fun HyperDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = if (centered) 0.dp else bottomInset)
+                    // Popup 是独立窗口，层级高于悬浮导航栏（能盖住它），不需要为悬浮栏预留避让 —— 这里固定 20.dp 底距。
+                    // 此前沿用 smartInset（悬浮开启时 88.dp），等于凭空把弹窗顶高 68dp，
+                    // 表现就是「更新日志弹窗偏上」。88.dp 只该用在 inApp 模式（层级低于悬浮栏）。
+                    .padding(bottom = if (centered) 0.dp else POPUP_BOTTOM_INSET)
                     .clip(RoundedCornerShape(28.dp))
                     .background(
                         if (MiuixTheme.colorScheme.background.luminance() < 0.5f)
@@ -207,5 +210,9 @@ fun HyperDialog(
     }
 }
 
-/** 智能底部间距：悬浮/液态玻璃开启时弹窗自动上移更多（MainActivity 每次重组时设置） */
+/** 智能底部间距：悬浮/液态玻璃开启时弹窗自动上移更多（MainActivity 每次重组时设置）。
+ *  仅用于 inApp=true 的弹窗（层级低于悬浮导航栏，必须避让）。 */
 var smartInset: Dp = 40.dp
+
+/** Popup 模式（inApp=false）的底距：独立窗口本就盖住悬浮栏，无需避让，固定 20.dp。 */
+private val POPUP_BOTTOM_INSET = 20.dp
